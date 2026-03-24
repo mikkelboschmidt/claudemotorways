@@ -84,7 +84,7 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
     // Convert screen coords to world coords for all game-area interactions
     const [px, py] = screenToWorld(sx, sy);
 
-    if (activeTool === 'addRoad' || activeTool === 'addNarrowRoad') {
+    if (activeTool === 'addRoad' || activeTool === 'addNarrow') {
       dragStartGx = snapToGrid(px);
       dragStartGy = snapToGrid(py);
       currentGx = dragStartGx;
@@ -170,7 +170,7 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
       if (activeTool === 'addBuilding') {
         hoverGx = Math.floor(px / GRID);
         hoverGy = Math.floor(py / GRID);
-      } else if (activeTool === 'addRoad' || activeTool === 'addNarrowRoad') {
+      } else if (activeTool === 'addRoad' || activeTool === 'addNarrow') {
         hoverGx = snapToGrid(px);
         hoverGy = snapToGrid(py);
       } else {
@@ -196,7 +196,7 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
     }
 
     // Road drag preview
-    if (dragging && (activeTool === 'addRoad' || activeTool === 'addNarrowRoad')) {
+    if (dragging && (activeTool === 'addRoad' || activeTool === 'addNarrow')) {
       const rawGx = snapToGrid(px);
       const rawGy = snapToGrid(py);
 
@@ -249,8 +249,8 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
     if (!dragging) return;
     dragging = false;
 
-    if ((activeTool === 'addRoad' || activeTool === 'addNarrowRoad') && (currentGx !== dragStartGx || currentGy !== dragStartGy)) {
-      createRoadSegments(dragStartGx, dragStartGy, currentGx, currentGy, activeTool === 'addNarrowRoad');
+    if ((activeTool === 'addRoad' || activeTool === 'addNarrow') && (currentGx !== dragStartGx || currentGy !== dragStartGy)) {
+      createRoadSegments(dragStartGx, dragStartGy, currentGx, currentGy, activeTool === 'addNarrow');
       playSfx('road');
       saveGame();
     }
@@ -286,7 +286,7 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
   });
 }
 
-function createRoadSegments(gx1: number, gy1: number, gx2: number, gy2: number, oneWay: boolean = false) {
+function createRoadSegments(gx1: number, gy1: number, gx2: number, gy2: number, narrow: boolean = false) {
   const dx = gx2 - gx1;
   const dy = gy2 - gy1;
   const steps = Math.max(Math.abs(dx), Math.abs(dy));
@@ -312,7 +312,7 @@ function createRoadSegments(gx1: number, gy1: number, gx2: number, gy2: number, 
     // Skip if segment cuts through a building interior
     if (segmentCutsBuilding(x1, y1, x2, y2)) continue;
 
-    if (addEdge(x1, y1, x2, y2, oneWay ? 1 : undefined)) added = true;
+    if (addEdge(x1, y1, x2, y2, narrow || undefined)) added = true;
   }
 
   if (added) {

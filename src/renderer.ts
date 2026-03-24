@@ -1,4 +1,4 @@
-import { GRID, HALF, ROAD_W, DASH_LEN, DASH_GAP, CAR_LEN, CAR_WID, BG_COLOR, ROAD_COLOR, TOOLBAR_HEIGHT, HIGHWAY_COLOR, HIGHWAY_ROAD_W, NARROW_ROAD_W, NARROW_ARROW_SPACING } from './constants.ts';
+import { GRID, HALF, ROAD_W, DASH_LEN, DASH_GAP, CAR_LEN, CAR_WID, BG_COLOR, ROAD_COLOR, TOOLBAR_HEIGHT, HIGHWAY_COLOR, HIGHWAY_ROAD_W, NARROW_ROAD_W } from './constants.ts';
 import { camX, camY, zoom } from './camera.ts';
 import { edges, nodes, parseKey } from './graph.ts';
 import { buildings, getBuildingPixelPos, getConnectionPixelPos, getConnectionPoint, HOUSE_W, HOUSE_H, FACTORY_W, FACTORY_H } from './buildings.ts';
@@ -70,16 +70,31 @@ export function render(ctx: CanvasRenderingContext2D, width: number, height: num
 }
 
 function drawRoads(ctx: CanvasRenderingContext2D) {
-  // Draw road segments as thick lines with round caps
+  // Draw regular (bidirectional) road segments
   ctx.strokeStyle = ROAD_COLOR;
   ctx.lineWidth = ROAD_W;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
-  // Batch all road segments into one path (skip highway sub-edges)
   ctx.beginPath();
   for (const [, edge] of edges) {
     if (highwayEdgeSet.has(edge.id)) continue;
+    if (edge.narrow) continue; // narrow drawn separately
+    ctx.moveTo(edge.fx, edge.fy);
+    ctx.lineTo(edge.tx, edge.ty);
+  }
+  ctx.stroke();
+
+  // Draw one-way (narrow) road segments
+  ctx.strokeStyle = ROAD_COLOR;
+  ctx.lineWidth = NARROW_ROAD_W;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  ctx.beginPath();
+  for (const [, edge] of edges) {
+    if (highwayEdgeSet.has(edge.id)) continue;
+    if (!edge.narrow) continue;
     ctx.moveTo(edge.fx, edge.fy);
     ctx.lineTo(edge.tx, edge.ty);
   }
@@ -89,8 +104,15 @@ function drawRoads(ctx: CanvasRenderingContext2D) {
   ctx.fillStyle = ROAD_COLOR;
   for (const [key, node] of nodes) {
     if (key.startsWith('hw')) continue;
+    // Use narrow radius if ALL edges on this node are narrow
+    let hasWide = false;
+    for (const eid of node.edges) {
+      const e = edges.get(eid);
+      if (e && !e.narrow && !highwayEdgeSet.has(eid)) { hasWide = true; break; }
+    }
+    const r = hasWide ? ROAD_W / 2 : NARROW_ROAD_W / 2;
     ctx.beginPath();
-    ctx.arc(node.gx * GRID + HALF, node.gy * GRID + HALF, ROAD_W / 2, 0, Math.PI * 2);
+    ctx.arc(node.gx * GRID + HALF, node.gy * GRID + HALF, r, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -109,7 +131,7 @@ function drawRoads(ctx: CanvasRenderingContext2D) {
     ctx.stroke();
   }
 
-  // Dashed center lines — batch into one path
+  // Dashed center lines for regular roads only
   ctx.strokeStyle = '#fff';
   ctx.lineWidth = 2;
   ctx.lineCap = 'butt';
@@ -117,12 +139,14 @@ function drawRoads(ctx: CanvasRenderingContext2D) {
 
   ctx.beginPath();
   for (const [, edge] of edges) {
+    if (edge.narrow) continue; // no center dashes on narrow roads
     ctx.moveTo(edge.fx, edge.fy);
     ctx.lineTo(edge.tx, edge.ty);
   }
   ctx.stroke();
 
   ctx.setLineDash([]);
+
 
   // Red tile overlay for tiles pending removal
   if (pendingRemoveTiles.size > 0) {
@@ -244,25 +268,29 @@ function drawRoadPreview(ctx: CanvasRenderingContext2D, preview: RoadPreview) {
   const py1 = preview.startGy * GRID + HALF;
   const px2 = preview.endGx * GRID + HALF;
   const py2 = preview.endGy * GRID + HALF;
+  const isNarrow = activeTool === 'addNarrow';
+  const roadW = isNarrow ? NARROW_ROAD_W : ROAD_W;
 
   ctx.strokeStyle = 'rgba(100,100,100,0.5)';
-  ctx.lineWidth = ROAD_W;
+  ctx.lineWidth = roadW;
   ctx.lineCap = 'round';
   ctx.beginPath();
   ctx.moveTo(px1, py1);
   ctx.lineTo(px2, py2);
   ctx.stroke();
 
-  // Preview dashed center line
-  ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-  ctx.lineWidth = 2;
-  ctx.lineCap = 'butt';
-  ctx.setLineDash([DASH_LEN, DASH_GAP]);
-  ctx.beginPath();
-  ctx.moveTo(px1, py1);
-  ctx.lineTo(px2, py2);
-  ctx.stroke();
-  ctx.setLineDash([]);
+  if (!isNarrow) {
+    // Preview dashed center line
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'butt';
+    ctx.setLineDash([DASH_LEN, DASH_GAP]);
+    ctx.beginPath();
+    ctx.moveTo(px1, py1);
+    ctx.lineTo(px2, py2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
 }
 
 function drawHoverGhost(ctx: CanvasRenderingContext2D) {
@@ -480,6 +508,7 @@ function drawToolbar(ctx: CanvasRenderingContext2D, width: number, height: numbe
 
   const tools: { type: ToolType; label: string }[] = [
     { type: 'addRoad', label: 'Road' },
+    { type: 'addNarrow', label: 'Narrow' },
     { type: 'addHighway', label: 'Highway' },
     { type: 'removeRoad', label: 'Remove' },
     { type: 'addBuilding', label: 'Building' },
@@ -636,6 +665,7 @@ export function getToolbarLayout(ctx: CanvasRenderingContext2D, width: number, h
   const y = height - TOOLBAR_HEIGHT;
   const tools: { type: ToolType; label: string }[] = [
     { type: 'addRoad', label: 'Road' },
+    { type: 'addNarrow', label: 'Narrow' },
     { type: 'addHighway', label: 'Highway' },
     { type: 'removeRoad', label: 'Remove' },
     { type: 'addBuilding', label: 'Building' },

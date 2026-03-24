@@ -8,19 +8,23 @@ const SAVE_KEY = 'claudemotorways_save';
 
 interface SaveData {
   buildings: Building[];
-  edges: [number, number, number, number][]; // [gx1, gy1, gx2, gy2]
+  edges: [number, number, number, number, boolean?][]; // [gx1, gy1, gx2, gy2, narrow?]
   highways?: { startGx: number; startGy: number; endGx: number; endGy: number; midX?: number; midY?: number }[];
   score: number;
   nextBuildingId: number;
 }
 
 export function saveGame() {
-  const edgeList: [number, number, number, number][] = [];
+  const edgeList: [number, number, number, number, boolean?][] = [];
   for (const [, edge] of edges) {
     if (highwayEdgeSet.has(edge.id)) continue; // highway edges are recreated from highway data
     const [gx1, gy1] = parseKey(edge.fromKey);
     const [gx2, gy2] = parseKey(edge.toKey);
-    edgeList.push([gx1, gy1, gx2, gy2]);
+    if (edge.narrow) {
+      edgeList.push([gx1, gy1, gx2, gy2, true]);
+    } else {
+      edgeList.push([gx1, gy1, gx2, gy2]);
+    }
   }
 
   const hwList = highways.map(hw => ({
@@ -66,8 +70,9 @@ export function loadGame(): boolean {
     }
 
     // Restore edges (also creates nodes)
-    for (const [gx1, gy1, gx2, gy2] of data.edges) {
-      addEdge(gx1, gy1, gx2, gy2);
+    for (const edgeTuple of data.edges) {
+      const [gx1, gy1, gx2, gy2] = edgeTuple;
+      addEdge(gx1, gy1, gx2, gy2, edgeTuple[4] || undefined);
     }
 
     // Restore highways (creates nodes + edges from saved endpoints)

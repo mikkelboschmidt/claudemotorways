@@ -27,7 +27,6 @@ export const PIN_COOLDOWN = 60; // frames (~1s at 60fps) before a new pin can be
 export const FACTORY_MAX_PINS = 6;
 export const FACTORY_MAX_PARKED = 3;
 export const NARROW_ROAD_W = 18;
-export const NARROW_ARROW_SPACING = 50;
 export const HIGHWAY_SPEED = CAR_SPEED * 1.5;
 export const HIGHWAY_COLOR = '#666';
 export const HIGHWAY_ROAD_W = ROAD_W + 6;

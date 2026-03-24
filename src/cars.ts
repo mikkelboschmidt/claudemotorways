@@ -391,15 +391,35 @@ export function spawnCars() {
   }
 }
 
+// Direction lock for narrow edges — rebuilt each frame, updated on entry
+const narrowLock = new Map<string, 1 | -1>();
+
+function rebuildNarrowLocks() {
+  narrowLock.clear();
+  for (const c of cars) {
+    if (c.state !== 'toWork' && c.state !== 'toHome') continue;
+    const edge = edges.get(c.edgeId);
+    if (!edge || !edge.narrow) continue;
+    narrowLock.set(c.edgeId, c.edgeDir);
+  }
+}
+
 function isEdgeEntryClear(edgeId: string, fromKey: string, _toKey: string): boolean {
   const edge = edges.get(edgeId)!;
   const dir: 1 | -1 = edge.fromKey === fromKey ? 1 : -1;
   const startT = dir === 1 ? 0 : 1;
   const clearance = MIN_GAP + CAR_LEN;
 
+  // Narrow roads: check direction lock
+  if (edge.narrow) {
+    const locked = narrowLock.get(edgeId);
+    if (locked !== undefined && locked !== dir) return false;
+  }
+
   for (const c of cars) {
-    if (c.edgeId !== edgeId || c.edgeDir !== dir) continue;
+    if (c.edgeId !== edgeId) continue;
     if (c.state !== 'toWork' && c.state !== 'toHome') continue;
+    if (c.edgeDir !== dir) continue;
     const dist = Math.abs(c.t - startT) * edge.length;
     if (dist < clearance) return false;
   }
@@ -527,7 +547,7 @@ function updateCarPosition(car: Car) {
   if (car.edgeDir === -1) { tdx = -tdx; tdy = -tdy; }
   const len = Math.hypot(tdx, tdy);
   if (len > 0) { tdx /= len; tdy /= len; }
-  const laneHalf = edge.allowedDir !== undefined ? 0 : LANE_W / 2;
+  const laneHalf = edge.narrow ? 0 : LANE_W / 2;
   const offsetX = -tdy * laneHalf;
   const offsetY = tdx * laneHalf;
 
@@ -567,6 +587,7 @@ function cubicBezierTangent(t: number, p0: number, p1: number, p2: number, p3: n
 
 export function updateCars() {
   frameCount++;
+  rebuildNarrowLocks();
 
   // Remove cars whose edge was deleted
   if (graphVersion !== lastGraphVersion) {
@@ -717,6 +738,27 @@ export function updateCars() {
         const slowSpeed = front.speed * (0.3 + 0.7 * (1 - closeness));
         targetSpeeds.set(behind.id, Math.min(targetSpeeds.get(behind.id)!, slowSpeed));
       }
+    }
+  }
+
+  // 1b. Narrow road face-to-face: if cars ended up on the same narrow edge
+  //     going opposite directions, both crawl at ~1/5 speed to squeeze past.
+  const NARROW_CRAWL_SPEED = CAR_SPEED * 0.15;
+  for (const car of cars) {
+    if (car.state !== 'toWork' && car.state !== 'toHome') continue;
+    const edge = edges.get(car.edgeId);
+    if (!edge || !edge.narrow) continue;
+    let hasOncoming = false;
+    for (const other of cars) {
+      if (other.id === car.id || other.edgeId !== car.edgeId) continue;
+      if (other.edgeDir === car.edgeDir) continue;
+      if (other.state !== 'toWork' && other.state !== 'toHome') continue;
+      hasOncoming = true;
+      break;
+    }
+    if (hasOncoming) {
+      const cur = targetSpeeds.get(car.id) ?? NARROW_CRAWL_SPEED;
+      targetSpeeds.set(car.id, Math.min(cur, NARROW_CRAWL_SPEED));
     }
   }
 
@@ -952,6 +994,7 @@ export function updateCars() {
               car.edgeId = nextEdge.id;
               car.edgeDir = nd;
               car.t = nd === 1 ? 0 : 1;
+              if (nextEdge.narrow) narrowLock.set(nextEdge.id, nd);
             }
           }
         } else {
@@ -1058,6 +1101,7 @@ function rerouteCar(car: Car) {
   car.edgeDir = nextEdge.fromKey === newPath[0] ? 1 : -1;
   car.t = car.edgeDir === 1 ? 0 : 1;
   car.speed = 0;
+  if (nextEdge.narrow) narrowLock.set(nextEdge.id, car.edgeDir);
   updateCarPosition(car);
 }
 
@@ -1103,5 +1147,6 @@ function startDriving(car: Car, carIndex: number) {
   car.t = car.edgeDir === 1 ? 0 : 1;
   car.speed = CAR_SPEED;
   car.targetAngle = computeEdgeAngle(edge, car.edgeDir);
+  if (edge.narrow) narrowLock.set(edge.id, car.edgeDir);
   updateCarPosition(car);
 }

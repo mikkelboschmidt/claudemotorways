@@ -31,7 +31,7 @@ export interface Edge {
   // Precomputed pixel coordinates for hot-path rendering/physics
   fx: number; fy: number; // from pixel center
   tx: number; ty: number; // to pixel center
-  allowedDir?: 1 | -1; // one-way: 1 = fromKey→toKey only, -1 = toKey→fromKey only
+  narrow?: boolean; // narrow single-lane road
 }
 
 export interface Car {
@@ -75,6 +75,6 @@ export interface RoadPreview {
   endGy: number;
 }
 
-export type ToolType = 'addRoad' | 'addNarrowRoad' | 'removeRoad' | 'addBuilding' | 'removeBuilding' | 'addHighway';
+export type ToolType = 'addRoad' | 'addNarrow' | 'removeRoad' | 'addBuilding' | 'removeBuilding' | 'addHighway';
 
 export const BUILDING_COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6'];
