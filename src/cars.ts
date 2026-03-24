@@ -527,8 +527,9 @@ function updateCarPosition(car: Car) {
   if (car.edgeDir === -1) { tdx = -tdx; tdy = -tdy; }
   const len = Math.hypot(tdx, tdy);
   if (len > 0) { tdx /= len; tdy /= len; }
-  const offsetX = -tdy * (LANE_W / 2);
-  const offsetY = tdx * (LANE_W / 2);
+  const laneHalf = edge.allowedDir !== undefined ? 0 : LANE_W / 2;
+  const offsetX = -tdy * laneHalf;
+  const offsetY = tdx * laneHalf;
 
   car.x = rearCenterX + offsetX;
   car.y = rearCenterY + offsetY;

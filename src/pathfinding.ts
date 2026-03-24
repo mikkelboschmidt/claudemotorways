@@ -1,4 +1,4 @@
-import { nodes, edges, getNeighbors, getEdgeBetween } from './graph.ts';
+import { nodes, edges, getDirectedNeighbors, getEdgeBetween } from './graph.ts';
 import { cars } from './cars.ts';
 import { highwayEdgeSet } from './highway.ts';
 
@@ -88,7 +88,7 @@ export function findPath(startKey: string, endKey: string): string[] | null {
     const currentDist = dist.get(current.key)!;
     if (current.cost > currentDist) continue;
 
-    for (const neighbor of getNeighbors(current.key)) {
+    for (const neighbor of getDirectedNeighbors(current.key)) {
       const edge = getEdgeBetween(current.key, neighbor);
       if (!edge) continue;
 

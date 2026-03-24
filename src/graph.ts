@@ -51,21 +51,26 @@ export function edgeLength(gx1: number, gy1: number, gx2: number, gy2: number): 
   return GRID_DIAG; // diagonal
 }
 
-export function addEdge(gx1: number, gy1: number, gx2: number, gy2: number): boolean {
+export function addEdge(gx1: number, gy1: number, gx2: number, gy2: number, allowedDir?: 1 | -1): boolean {
   const ek = edgeKey(gx1, gy1, gx2, gy2);
   if (edges.has(ek)) return false;
 
   const n1 = ensureNode(gx1, gy1);
   const n2 = ensureNode(gx2, gy2);
 
+  // Canonical ordering: smaller key = fromKey
+  const flipped = !(gx1 < gx2 || (gx1 === gx2 && gy1 < gy2));
   let fromKey: string, toKey: string;
-  if (gx1 < gx2 || (gx1 === gx2 && gy1 < gy2)) {
+  if (!flipped) {
     fromKey = nodeKey(gx1, gy1);
     toKey = nodeKey(gx2, gy2);
   } else {
     fromKey = nodeKey(gx2, gy2);
     toKey = nodeKey(gx1, gy1);
   }
+
+  // If canonical ordering flipped the endpoints, flip allowedDir too
+  const finalDir = (allowedDir !== undefined && flipped) ? (-allowedDir as 1 | -1) : allowedDir;
 
   const len = edgeLength(gx1, gy1, gx2, gy2);
   const [fgx, fgy] = parseKey(fromKey);
@@ -74,6 +79,7 @@ export function addEdge(gx1: number, gy1: number, gx2: number, gy2: number): boo
     id: ek, fromKey, toKey, length: len,
     fx: fgx * GRID + HALF, fy: fgy * GRID + HALF,
     tx: tgx * GRID + HALF, ty: tgy * GRID + HALF,
+    allowedDir: finalDir,
   };
   edges.set(ek, edge);
   n1.edges.add(ek);
@@ -149,6 +155,25 @@ export function getNeighbors(key: string): string[] {
   for (const eid of node.edges) {
     const edge = edges.get(eid)!;
     neighbors.push(edge.fromKey === key ? edge.toKey : edge.fromKey);
+  }
+  return neighbors;
+}
+
+// Like getNeighbors but respects one-way edges
+export function getDirectedNeighbors(key: string): string[] {
+  const node = nodes.get(key);
+  if (!node) return [];
+  const neighbors: string[] = [];
+  for (const eid of node.edges) {
+    const edge = edges.get(eid)!;
+    const neighbor = edge.fromKey === key ? edge.toKey : edge.fromKey;
+    if (edge.allowedDir !== undefined) {
+      // allowedDir 1 = fromKey→toKey, -1 = toKey→fromKey
+      // We're at `key` going to `neighbor`
+      if (edge.allowedDir === 1 && edge.fromKey !== key) continue;  // can only go from→to, but we're at to
+      if (edge.allowedDir === -1 && edge.toKey !== key) continue;   // can only go to→from, but we're at from
+    }
+    neighbors.push(neighbor);
   }
   return neighbors;
 }

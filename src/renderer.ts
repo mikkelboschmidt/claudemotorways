@@ -1,4 +1,5 @@
-import { GRID, HALF, ROAD_W, DASH_LEN, DASH_GAP, CAR_LEN, CAR_WID, BG_COLOR, ROAD_COLOR, TOOLBAR_HEIGHT, HIGHWAY_COLOR, HIGHWAY_ROAD_W } from './constants.ts';
+import { GRID, HALF, ROAD_W, DASH_LEN, DASH_GAP, CAR_LEN, CAR_WID, BG_COLOR, ROAD_COLOR, TOOLBAR_HEIGHT, HIGHWAY_COLOR, HIGHWAY_ROAD_W, NARROW_ROAD_W, NARROW_ARROW_SPACING } from './constants.ts';
+import { camX, camY, zoom } from './camera.ts';
 import { edges, nodes, parseKey } from './graph.ts';
 import { buildings, getBuildingPixelPos, getConnectionPixelPos, getConnectionPoint, HOUSE_W, HOUSE_H, FACTORY_W, FACTORY_H } from './buildings.ts';
 import { hoverGx, hoverGy, pendingRemoveTiles } from './roads.ts';
@@ -8,28 +9,45 @@ import { activeTool, selectedColor, selectedBuildingType } from './toolbar.ts';
 import { score } from './score.ts';
 import { gameSpeed, SPEED_OPTIONS, SPEED_LABELS } from './speed.ts';
 import { highways, highwayEdgeSet, highwayPhase, highwayStartGx, highwayStartGy, highwayPreviewEndPx, highwayPreviewEndPy, computeBezierControls, draggingHighwayId } from './highway.ts';
+import { musicEnabled } from './music.ts';
 
 export function render(ctx: CanvasRenderingContext2D, width: number, height: number, preview: RoadPreview | null, fps: number = 0) {
   const gameHeight = height - TOOLBAR_HEIGHT;
 
+  // Clear entire canvas
   ctx.fillStyle = BG_COLOR;
   ctx.fillRect(0, 0, width, gameHeight);
 
-  // Faint grid
+  // Clip game area so nothing draws over toolbar
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, width, gameHeight);
+  ctx.clip();
+
+  // Apply camera transform: scale then translate
+  ctx.scale(zoom, zoom);
+  ctx.translate(-camX, -camY);
+
+  // Faint grid — only draw visible lines
+  const worldLeft = camX;
+  const worldTop = camY;
+  const worldRight = camX + width / zoom;
+  const worldBottom = camY + gameHeight / zoom;
+
   ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-  ctx.lineWidth = 1;
-  for (let x = 0; x <= width; x += GRID) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, gameHeight);
-    ctx.stroke();
+  ctx.lineWidth = 1 / zoom; // keep 1px on screen
+  const gridStartX = Math.floor(worldLeft / GRID) * GRID;
+  const gridStartY = Math.floor(worldTop / GRID) * GRID;
+  ctx.beginPath();
+  for (let x = gridStartX; x <= worldRight; x += GRID) {
+    ctx.moveTo(x, worldTop);
+    ctx.lineTo(x, worldBottom);
   }
-  for (let y = 0; y <= gameHeight; y += GRID) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(width, y);
-    ctx.stroke();
+  for (let y = gridStartY; y <= worldBottom; y += GRID) {
+    ctx.moveTo(worldLeft, y);
+    ctx.lineTo(worldRight, y);
   }
+  ctx.stroke();
 
   drawRoads(ctx);
   drawHighways(ctx);
@@ -42,6 +60,11 @@ export function render(ctx: CanvasRenderingContext2D, width: number, height: num
   drawHoverGhost(ctx);
   drawBuildings(ctx);
   drawCars(ctx);
+
+  // Restore from camera transform + clip
+  ctx.restore();
+
+  // Score and toolbar drawn in screen space
   drawScore(ctx, width);
   drawToolbar(ctx, width, height, fps);
 }
@@ -554,7 +577,20 @@ function drawToolbar(ctx: CanvasRenderingContext2D, width: number, height: numbe
   ctx.textBaseline = 'middle';
   ctx.fillText(resetLabel, resetX + resetW / 2, btnY + btnH / 2);
 
-  // Speed buttons + FPS — left of reset
+  // Music toggle — left of Reset
+  const musicLabel = musicEnabled ? '♫ On' : '♫ Off';
+  const musicW = ctx.measureText(musicLabel).width + 24;
+  const musicX = resetX - musicW - 10;
+  ctx.fillStyle = musicEnabled ? '#27ae60' : '#34495e';
+  ctx.beginPath();
+  ctx.roundRect(musicX, btnY, musicW, btnH, 6);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(musicLabel, musicX + musicW / 2, btnY + btnH / 2);
+
+  // Speed buttons + FPS — left of music
   const speedBtnW = 32;
   const speedGap = 4;
   const speedGroupW = SPEED_OPTIONS.length * speedBtnW + (SPEED_OPTIONS.length - 1) * speedGap;
@@ -563,7 +599,7 @@ function drawToolbar(ctx: CanvasRenderingContext2D, width: number, height: numbe
   ctx.font = 'bold 12px monospace';
   const fpsW = ctx.measureText(fpsText).width;
   const fpsGap = 12;
-  let sx = resetX - speedGroupW - fpsW - fpsGap - 20;
+  let sx = musicX - speedGroupW - fpsW - fpsGap - 20;
   // Draw FPS
   const fpsColor = fps >= 50 ? '#2ecc71' : fps >= 30 ? '#f1c40f' : '#e74c3c';
   ctx.fillStyle = fpsColor;
@@ -643,16 +679,22 @@ export function getToolbarLayout(ctx: CanvasRenderingContext2D, width: number, h
   const resetX = width - resetW - 15;
   const resetButton = { x: resetX, y: btnY, w: resetW, h: btnH };
 
+  // Music toggle button
+  const musicLabel = musicEnabled ? '♫ On' : '♫ Off';
+  const musicW = ctx.measureText(musicLabel).width + 24;
+  const musicX = resetX - musicW - 10;
+  const musicButton = { x: musicX, y: btnY, w: musicW, h: btnH };
+
   // Speed buttons
   const speedBtnW = 32;
   const speedGap = 4;
   const speedGroupW = SPEED_OPTIONS.length * speedBtnW + (SPEED_OPTIONS.length - 1) * speedGap;
-  let sx = resetX - speedGroupW - 20;
+  let sx = musicX - speedGroupW - 20;
   const speedButtons: { speed: number; x: number; y: number; w: number; h: number }[] = [];
   for (let i = 0; i < SPEED_OPTIONS.length; i++) {
     speedButtons.push({ speed: SPEED_OPTIONS[i], x: sx, y: btnY, w: speedBtnW, h: btnH });
     sx += speedBtnW + speedGap;
   }
 
-  return { buttons, buildingTypeButtons, colorButtons, resetButton, speedButtons };
+  return { buttons, buildingTypeButtons, colorButtons, resetButton, musicButton, speedButtons };
 }

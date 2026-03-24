@@ -1,10 +1,12 @@
 import { GRID, ROAD_W, TOOLBAR_HEIGHT } from './constants.ts';
+import { screenToWorld } from './camera.ts';
 import { addEdge, bumpGraphVersion, removeEdge, nodeKey, nodes, getNodeEdges } from './graph.ts';
 import { segmentCutsBuilding, findBuildingAtPixel, addBuilding, removeBuilding, getBuildingEdgeAt, connectBuildingOnSide } from './buildings.ts';
 import { RoadPreview } from './types.ts';
 import { activeTool, selectedColor, selectedBuildingType } from './toolbar.ts';
 import { removeCarsForEdge, removeCarsForBuilding } from './cars.ts';
 import { saveGame } from './save.ts';
+import { playSfx } from './sfx.ts';
 import { highwayPhase, highwayStartGx, highwayStartGy, draggingHighwayId, setHighwayPhase, setHighwayStart, setHighwayPreviewEnd, setDraggingHighwayId, createHighway, findHighwayAtPixel, findHighwayHandleAtPixel, removeHighway, updateHighwayMid, rebuildHighway, highways } from './highway.ts';
 
 let dragging = false;
@@ -74,12 +76,15 @@ function snapTo8Dir(startGx: number, startGy: number, rawGx: number, rawGy: numb
 export function initRoadInput(canvas: HTMLCanvasElement) {
   canvas.addEventListener('mousedown', (e) => {
     const rect = canvas.getBoundingClientRect();
-    const px = e.clientX - rect.left;
-    const py = e.clientY - rect.top;
+    const sx = e.clientX - rect.left;
+    const sy = e.clientY - rect.top;
 
-    if (py >= canvas.height - TOOLBAR_HEIGHT) return;
+    if (sy >= canvas.height - TOOLBAR_HEIGHT) return;
 
-    if (activeTool === 'addRoad') {
+    // Convert screen coords to world coords for all game-area interactions
+    const [px, py] = screenToWorld(sx, sy);
+
+    if (activeTool === 'addRoad' || activeTool === 'addNarrowRoad') {
       dragStartGx = snapToGrid(px);
       dragStartGy = snapToGrid(py);
       currentGx = dragStartGx;
@@ -104,6 +109,7 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
       const gridX = Math.floor(px / GRID);
       const gridY = Math.floor(py / GRID);
       if (addBuilding(gridX, gridY, selectedBuildingType, selectedColor)) {
+        playSfx('build');
         saveGame();
       }
     } else if (activeTool === 'removeBuilding') {
@@ -111,6 +117,7 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
       if (building) {
         removeCarsForBuilding(building.id);
         removeBuilding(building.id);
+        playSfx('demolish');
         saveGame();
       }
     } else if (activeTool === 'addHighway') {
@@ -136,6 +143,7 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
           const dist = Math.hypot(gx - highwayStartGx, gy - highwayStartGy);
           if (dist >= 3) {
             createHighway(highwayStartGx, highwayStartGy, gx, gy);
+            playSfx('road');
             saveGame();
           }
           setHighwayPhase('idle');
@@ -146,10 +154,11 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
 
   canvas.addEventListener('mousemove', (e) => {
     const rect = canvas.getBoundingClientRect();
-    const px = e.clientX - rect.left;
-    const py = e.clientY - rect.top;
+    const sx = e.clientX - rect.left;
+    const sy = e.clientY - rect.top;
+    const [px, py] = screenToWorld(sx, sy);
 
-    // Highway handle drag — update midpoint visually
+    // Highway handle drag — update midpoint visually (world coords)
     if (draggingHighwayId >= 0) {
       const hw = highways.find(h => h.id === draggingHighwayId);
       if (hw) updateHighwayMid(hw, px, py);
@@ -157,11 +166,11 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
     }
 
     // Update hover position for ghost previews
-    if (py < canvas.height - TOOLBAR_HEIGHT) {
+    if (sy < canvas.height - TOOLBAR_HEIGHT) {
       if (activeTool === 'addBuilding') {
         hoverGx = Math.floor(px / GRID);
         hoverGy = Math.floor(py / GRID);
-      } else if (activeTool === 'addRoad') {
+      } else if (activeTool === 'addRoad' || activeTool === 'addNarrowRoad') {
         hoverGx = snapToGrid(px);
         hoverGy = snapToGrid(py);
       } else {
@@ -169,7 +178,7 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
         hoverGy = null;
       }
 
-      // Highway preview
+      // Highway preview (world coords)
       if (activeTool === 'addHighway' && highwayPhase === 'pickEnd') {
         setHighwayPreviewEnd(px, py);
       }
@@ -179,7 +188,7 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
     }
 
     // Recompute tiles for remove-road drag
-    if (removeRoadDragging && activeTool === 'removeRoad' && py < canvas.height - TOOLBAR_HEIGHT) {
+    if (removeRoadDragging && activeTool === 'removeRoad' && sy < canvas.height - TOOLBAR_HEIGHT) {
       const rawGx = snapToGrid(px);
       const rawGy = snapToGrid(py);
       const [endGx, endGy] = snapTo8Dir(removeStartGx, removeStartGy, rawGx, rawGy);
@@ -187,7 +196,7 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
     }
 
     // Road drag preview
-    if (dragging && activeTool === 'addRoad') {
+    if (dragging && (activeTool === 'addRoad' || activeTool === 'addNarrowRoad')) {
       const rawGx = snapToGrid(px);
       const rawGy = snapToGrid(py);
 
@@ -240,8 +249,9 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
     if (!dragging) return;
     dragging = false;
 
-    if (activeTool === 'addRoad' && (currentGx !== dragStartGx || currentGy !== dragStartGy)) {
-      createRoadSegments(dragStartGx, dragStartGy, currentGx, currentGy);
+    if ((activeTool === 'addRoad' || activeTool === 'addNarrowRoad') && (currentGx !== dragStartGx || currentGy !== dragStartGy)) {
+      createRoadSegments(dragStartGx, dragStartGy, currentGx, currentGy, activeTool === 'addNarrowRoad');
+      playSfx('road');
       saveGame();
     }
     roadPreview = null;
@@ -276,7 +286,7 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
   });
 }
 
-function createRoadSegments(gx1: number, gy1: number, gx2: number, gy2: number) {
+function createRoadSegments(gx1: number, gy1: number, gx2: number, gy2: number, oneWay: boolean = false) {
   const dx = gx2 - gx1;
   const dy = gy2 - gy1;
   const steps = Math.max(Math.abs(dx), Math.abs(dy));
@@ -302,7 +312,7 @@ function createRoadSegments(gx1: number, gy1: number, gx2: number, gy2: number) 
     // Skip if segment cuts through a building interior
     if (segmentCutsBuilding(x1, y1, x2, y2)) continue;
 
-    if (addEdge(x1, y1, x2, y2)) added = true;
+    if (addEdge(x1, y1, x2, y2, oneWay ? 1 : undefined)) added = true;
   }
 
   if (added) {
