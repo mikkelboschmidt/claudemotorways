@@ -1,0 +1,18 @@
+<svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="House-Top">
+<g id="Ground">
+<rect id="Fill" x="40" y="40" width="40" height="40" rx="2" fill="#259454"/>
+<rect id="Entrance" x="47" y="47" width="7" height="26" transform="rotate(-90 47 47)" fill="#555555"/>
+</g>
+<g id="Shadows">
+<g id="House">
+<path d="M97 66V97H62L42 77V48C42 46.8954 42.8954 46 44 46L77 46L97 66Z" fill="black" fill-opacity="0.1"/>
+<path d="M97 66V97H62L42 77V48C42 46.8954 42.8954 46 44 46L77 46L97 66Z" fill="black" fill-opacity="0.1"/>
+</g>
+</g>
+<g id="Building">
+<rect id="RoofMain" x="43" y="77" width="30" height="34" rx="1" transform="rotate(-90 43 77)" fill="#FF0000"/>
+<path id="RoofShadow" d="M60 77L60 47L76 47C76.5523 47 77 47.4477 77 48L77 76C77 76.5523 76.5523 77 76 77L60 77Z" fill="#CC0000"/>
+</g>
+</g>
+</svg>

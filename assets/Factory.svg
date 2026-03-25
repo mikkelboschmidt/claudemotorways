@@ -1,0 +1,19 @@
+<svg width="200" height="160" viewBox="0 0 200 160" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Factory">
+<g id="Ground">
+<rect id="Fill" x="40" y="40" width="120" height="80" fill="#414141"/>
+<rect id="Entrance" x="40" y="87" width="7" height="26" fill="#555555"/>
+<rect id="Parking" x="44" y="44" width="112" height="72" rx="1" fill="#555555"/>
+</g>
+<g id="Shadows">
+<path id="Shadow" d="M165 45V53L176 64V97H165V125H45L40 120H160V97H87L67 77V44H156L160 48V40L165 45Z" fill="black" fill-opacity="0.1"/>
+</g>
+<g id="Building">
+<rect id="RoofMain" x="67" y="44" width="89" height="33" fill="#FF0000"/>
+<path id="RoofShadow" d="M121.385 77H84.6152L77.793 70.1777L96.1777 51.793L121.385 77Z" fill="#CC0000"/>
+<rect id="RoofShadow_2" x="131" y="77" width="21" height="6" fill="#CC0000"/>
+<rect id="RoofShadow_3" x="102" y="77" width="21" height="6" fill="#CC0000"/>
+<circle id="RoofMain_2" cx="87" cy="61" r="13" fill="#FF0000"/>
+</g>
+</g>
+</svg>

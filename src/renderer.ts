@@ -10,6 +10,7 @@ import { score } from './score.ts';
 import { gameSpeed, SPEED_OPTIONS, SPEED_LABELS } from './speed.ts';
 import { highways, highwayEdgeSet, highwayPhase, highwayStartGx, highwayStartGy, highwayPreviewEndPx, highwayPreviewEndPy, computeBezierControls, draggingHighwayId } from './highway.ts';
 import { musicEnabled } from './music.ts';
+import { getHouseSprite, getFactorySprite, drawSpriteLayer } from './sprites.ts';
 
 export function render(ctx: CanvasRenderingContext2D, width: number, height: number, preview: RoadPreview | null, fps: number = 0) {
   const gameHeight = height - TOOLBAR_HEIGHT;
@@ -49,6 +50,7 @@ export function render(ctx: CanvasRenderingContext2D, width: number, height: num
   }
   ctx.stroke();
 
+  drawBuildingGrounds(ctx);
   drawRoads(ctx);
   drawHighways(ctx);
 
@@ -58,8 +60,9 @@ export function render(ctx: CanvasRenderingContext2D, width: number, height: num
 
   drawHighwayPreview(ctx);
   drawHoverGhost(ctx);
-  drawBuildings(ctx);
   drawCars(ctx);
+  drawBuildingShadows(ctx);
+  drawBuildingBodies(ctx);
 
   // Restore from camera transform + clip
   ctx.restore();
@@ -320,31 +323,52 @@ function drawHoverGhost(ctx: CanvasRenderingContext2D) {
   }
 }
 
-function drawBuildings(ctx: CanvasRenderingContext2D) {
+// Ground layer: drawn below roads so cars drive over it
+function drawBuildingGrounds(ctx: CanvasRenderingContext2D) {
   for (const b of buildings) {
     const pos = getBuildingPixelPos(b);
-    const conn = getConnectionPixelPos(b);
+    if (b.type === 'house') {
+      const sprite = getHouseSprite(b.connectionSide, b.color);
+      if (sprite) drawSpriteLayer(ctx, sprite.ground, sprite, pos.x, pos.y);
+    } else {
+      const sprite = getFactorySprite(b.connectionSide, b.color);
+      if (sprite) drawSpriteLayer(ctx, sprite.ground, sprite, pos.x, pos.y);
+    }
+  }
+}
+
+// Shadow layer: drawn above cars, below building bodies
+function drawBuildingShadows(ctx: CanvasRenderingContext2D) {
+  for (const b of buildings) {
+    const pos = getBuildingPixelPos(b);
+    if (b.type === 'house') {
+      const sprite = getHouseSprite(b.connectionSide, b.color);
+      if (sprite) drawSpriteLayer(ctx, sprite.shadow, sprite, pos.x, pos.y);
+    } else {
+      const sprite = getFactorySprite(b.connectionSide, b.color);
+      if (sprite) drawSpriteLayer(ctx, sprite.shadow, sprite, pos.x, pos.y);
+    }
+  }
+}
+
+// Building body layer: drawn on top of everything
+function drawBuildingBodies(ctx: CanvasRenderingContext2D) {
+  for (const b of buildings) {
+    const pos = getBuildingPixelPos(b);
 
     if (b.type === 'house') {
-      ctx.fillStyle = b.color;
-      ctx.fillRect(pos.x + 2, pos.y + 2, pos.w - 4, pos.h - 4);
-      ctx.strokeStyle = 'rgba(0,0,0,0.3)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(pos.x + 2, pos.y + 2, pos.w - 4, pos.h - 4);
-
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 16px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('H', pos.x + pos.w / 2, pos.y + pos.h / 2);
+      const sprite = getHouseSprite(b.connectionSide, b.color);
+      if (sprite) {
+        drawSpriteLayer(ctx, sprite.building, sprite, pos.x, pos.y);
+      }
     } else {
-      drawFactory(ctx, b, pos);
+      const sprite = getFactorySprite(b.connectionSide, b.color);
+      if (sprite) {
+        drawSpriteLayer(ctx, sprite.building, sprite, pos.x, pos.y);
+      } else {
+        drawFactory(ctx, b, pos);
+      }
     }
-
-    ctx.fillStyle = '#fff';
-    ctx.beginPath();
-    ctx.arc(conn.x, conn.y, 4, 0, Math.PI * 2);
-    ctx.fill();
   }
 }
 
