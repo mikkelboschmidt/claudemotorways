@@ -1,0 +1,224 @@
+# Claude Motorways — Product Requirements Document
+
+A logistics puzzle game where players build road networks connecting residential houses to factories and storage depots. Cars spawn from houses, drive to factories to collect pins, and return home for points. Trucks shuttle bulk pins from factories to storage buildings. If factories overflow, they burn out.
+
+---
+
+## Buildings
+
+### House (1×1 tile)
+
+- Residential building that spawns cars.
+- **Entrance**: Auto-orients toward the nearest road on placement. Can be changed by dragging a road directly to/from the house.
+- **Car limit**: Up to 2 cars per house on the map at once.
+- **Parking**: Cars return home after collecting a pin, park for ~2s (120 frames), then head out again.
+- **Connection**: The road node sits ON the house tile. Dragging a road onto the house sets the entrance side based on drag direction. Changing the entrance side preserves existing road edges.
+- **Cannot be disabled.**
+
+### Factory (3×2 tiles)
+
+- Produces pins over time. Cars and trucks visit to collect them.
+- **Entrance**: Fixed to the `left` side at creation. Cannot be changed by roads.
+- **Pin spawning**: Every ~15s (900 frames), the factory produces one pin if below capacity.
+- **Pin cooldown**: A freshly spawned pin cannot be picked up for ~1s (60 frames).
+- **Capacity**: 6 pins, 3 parking slots.
+- **Overflow / Burn-out**: If the factory is at max pins when a new pin would spawn, it **burns out** — all pins are lost, all parked cars are evicted, and the player loses 20 points. The building turns gray and stops producing. A burned-out factory can be demolished or replaced by placing a new building on top.
+- **Parking layout**: Cars enter along a driving lane on one side, then pull into parking slots via cubic bezier curves. Slot 0 is nearest the entrance, slot 2 is deepest. Departure order is FIFO (earliest parked car leaves first). Only one car may be mid-animation (parking, collecting, or departing) at a time.
+- **Truck exclusivity**: A truck can only enter a factory with a completely empty parking lot. While a truck is inside, regular cars are blocked from entering.
+
+### Storage (2×2 tiles)
+
+- Bulk pin buffer between factories and houses. Does not produce pins.
+- **Entrance**: Auto-orients toward the nearest road, same as houses. Fixed after placement.
+- **Capacity**: 18 pins, 1 parking slot (truck only for delivery; regular cars also park to collect).
+- **Receives pins from trucks**: A truck arrives, deposits all carried pins (capped at storage max).
+- **Serves regular cars**: Cars can collect pins from storage the same way they collect from factories (+1 score per pin).
+- **Cannot be disabled.**
+
+### Building Placement Rules
+
+- Buildings cannot overlap. Disabled (burned) buildings can be replaced — placing a new building on a burned-out one removes the old building but preserves its road edges.
+- Houses and storage auto-orient their entrance toward the nearest adjacent road node. If no road is nearby, they default to `right`.
+- Factories always start with entrance on `left`.
+- All building types come in 5 colors: red (`#e74c3c`), blue (`#3498db`), green (`#2ecc71`), orange (`#f39c12`), purple (`#9b59b6`). Cars, trucks, and buildings are color-matched — a red car only visits red factories/storages.
+
+---
+
+## Roads
+
+### Regular Road
+
+- **Width**: 30px visual, two lanes (15px each).
+- **Speed**: 1.5 px/frame.
+- **Placement**: Click-and-drag between grid intersections. Supports 8 directions (horizontal, vertical, 4 diagonals). The path is decomposed into tile-to-tile edge segments.
+- **Visual**: Dark gray surface with white dashed center line.
+
+### Narrow Road
+
+- **Width**: 18px visual, single lane.
+- **Speed**: ~1.05 px/frame (70% of regular).
+- **One-way chain**: Connected narrow edges form a chain. Only one direction of travel is allowed at a time across the entire chain. A car entering from one end blocks entry from the opposite end. Per-frame locking prevents race conditions.
+- **Transition**: Cars approaching a narrow road from a regular road brake smoothly and steer into the center lane over a 15px blend zone.
+
+### Highway
+
+- **Width**: 36px visual (regular + 6px).
+- **Speed**: 2.25 px/frame (150% of regular). Trucks get 1.3× their base speed on highways.
+- **Placement**: Two-click placement (start node, then end node, both must be on existing roads, ≥3 tiles apart). Creates a cubic bezier curve between them.
+- **Midpoint handle**: After placement, the highway's midpoint can be dragged to adjust the curve shape.
+- **Visual**: Elevated look with shadow, gray surface (#666), yellow dashed center line.
+- **Pathfinding bonus**: Highways are weighted at 0.65× cost, making them strongly preferred routes.
+
+### Road–Building Connections
+
+- **Houses**: The connection tile is the house tile itself. Dragging a road onto a house automatically connects it. The drag direction determines which side becomes the entrance (drag right → right entrance, etc.). Only pure horizontal/vertical drags are matched.
+- **Factories / Storage**: The connection tile is the tile **adjacent** to the building on its entrance side. The road direction must point inward (e.g., for a `left` entrance, the road must be heading left). The connection side is fixed and never changes.
+
+---
+
+## Vehicles
+
+### Car
+
+- **Size**: 16×10 px.
+- **Speed**: 1.5 px/frame base, 0.04 acceleration, 0.06 deceleration.
+- **Spawning**: One spawn check every ~3s (180 frames). Each house can have up to 2 cars on the map. Cars are created heading toward the best available pin source (factory or storage of the same color), weighted by pin need and distance.
+- **Lifecycle**:
+  1. Spawn at house → drive to factory/storage (`toWork`)
+  2. Park at factory/storage → collect 1 pin (animated fly from building to car, ~30 frames)
+  3. Depart → drive home (`toHome`)
+  4. Park at house for ~2s
+  5. Repeat
+- **Scoring**: +1 point each time a car collects a pin.
+- **Stuck reroute**: If a car is stopped for >90 frames, it recalculates its path via Dijkstra, potentially switching to a different factory.
+
+### Truck
+
+- **Size**: 22×12 px.
+- **Speed**: 1.2 px/frame base (80% of car speed). 1.56 px/frame on highways.
+- **Capacity**: 6 pins per load (one full factory).
+- **Spawning**: One spawn check every ~5s (300 frames). Each storage building has exactly 1 truck. The truck heads to the factory with the highest pin need.
+- **Lifecycle**:
+  1. Spawn at storage → drive to factory (`toFactory`)
+  2. Wait for empty parking lot, then park
+  3. Collect pins one at a time (each with fly animation), wait until carrying 6 or factory burns out
+  4. Depart → drive to storage (`toStorage`)
+  5. Park at storage → deposit all carried pins instantly
+  6. Depart → repeat
+- **Factory exclusivity**: Trucks require an empty factory parking lot. Regular cars cannot enter while a truck is inside.
+- **No scoring**: Truck pin transfers don't award points — only final car pickups score.
+- **Visual**: Darker body with a lighter cab at front. Pin count displayed on cargo bed.
+
+---
+
+## Driving Physics
+
+### Lane Tracking
+
+Cars drive on the right side of two-lane roads, offset by half a lane width (7.5px) from the road center. On narrow roads, cars drive on the center line (0 offset). When transitioning between road types, the lane offset blends smoothly over 15px, and the car's heading tilts slightly to simulate steering into the lane change.
+
+### Corner Smoothing
+
+At road junctions, cars follow a quadratic bezier arc instead of making sharp turns:
+- The smoothing zone extends 15px on each side of the junction node.
+- Three control points: P0 (on current edge, lane-offset), P1 (junction node, averaged lane offset), P2 (on next edge, lane-offset).
+- The car's heading follows the bezier tangent through the curve.
+
+### Corner Braking
+
+Cars slow down before turns proportional to the angle change:
+- 90°+ turns: brake to 0.35 px/frame.
+- 45° turns: brake to ~0.8 px/frame.
+- Braking starts 30px before the junction, blended by proximity.
+
+### Parking Animations
+
+All parking and departing uses cubic bezier curves. The car's angle follows the bezier tangent directly (no lerp lag). Factory parking slots are arranged along one side of the building with a driving lane on the other. House parking pulls the car straight into the building center on the entry lane side.
+
+---
+
+## Collision Avoidance
+
+Five checks run every frame, in order:
+
+1. **Same-edge gap following**: Cars on the same edge in the same direction maintain a minimum gap of 26px (10px gap + 16px car length). Within 42px, they gradually brake.
+2. **Intersection reservation**: At true intersections (3+ edges), the closest car claims the node. Other cars from different edges yield.
+3. **Yield braking**: Cars that don't own the intersection brake smoothly over 46px to a stop 18px before the node.
+4. **Cross-edge lookahead**: Check the next 2 edges for traffic. If the next edge entry is blocked, brake to 15% speed. If 2 edges ahead is congested, brake to 60%. Also handles narrow-road one-way blocking.
+5. **Corner braking**: Angle-based speed limit approaching turns (see above).
+
+Target speeds are applied via smooth acceleration/deceleration each frame.
+
+---
+
+## Pathfinding
+
+Weighted Dijkstra shortest path on the road graph.
+
+- **Edge weight** = `length × highwayFactor × (1 + congestionPenalty)`
+- **Highway factor**: 0.65 (strongly preferred).
+- **Congestion**: Counts stopped cars (speed ≤ 0.1) and moving cars on each edge. Density = count / (length / 40). Penalty = 1.8^density - 1 (exponential).
+- **Car routing**: Regular cars use `pickBestPinSource()` which scores all reachable factories and storages by `need × 10 - pathLength`, where need = available pins minus cars already heading there.
+- **Truck routing**: Uses `pickBestFactory()` with the same scoring formula but only considers factories.
+
+---
+
+## Scoring
+
+| Event | Points |
+|---|---|
+| Car collects a pin from factory or storage | +1 |
+| Factory burns out (pin overflow) | -20 |
+
+Truck pin transfers (factory → storage) do not score.
+
+---
+
+## Game Speed
+
+Four speed settings: Pause (0×), Normal (1×), Fast (2×), Turbo (3×). The game loop runs physics ticks N times per render frame based on the multiplier. Pause freezes simulation but allows building.
+
+---
+
+## Save / Load
+
+The game auto-saves to `localStorage` every 5 seconds and after every build action. Saved data includes:
+- All buildings (type, position, color, pins, disabled state, connection side)
+- All road edges (coordinates, narrow flag)
+- All highways (start, end, midpoint)
+- Score and next building ID
+
+Cars and trucks are not saved — they respawn naturally after load.
+
+---
+
+## Toolbar
+
+Bottom bar (60px) with left-to-right layout:
+
+| Button | Tool | Description |
+|---|---|---|
+| Road | `addRoad` | Drag to place two-lane roads |
+| Narrow | `addNarrow` | Drag to place single-lane roads |
+| Highway | `addHighway` | Two-click placement + draggable midpoint |
+| Remove | `removeRoad` | Drag across road tiles to delete edges |
+| Building | `addBuilding` | Opens sub-menu: House / Factory / Storage + color picker |
+| Demolish | `removeBuilding` | Click a building to remove it and its connected edges |
+
+Right side: FPS counter, speed controls (⏸ 1× 2× 3×), music toggle, reset button.
+
+---
+
+## Visual Layers (Render Order)
+
+1. **Background**: Green grass grid with faint lines.
+2. **Building grounds**: SVG ground layer (driveways, pads) drawn below roads.
+3. **Roads**: Regular → narrow → highway surfaces and dashes.
+4. **Road preview / hover ghost**: Shown during placement.
+5. **Cars and trucks**: All vehicles.
+6. **Building shadows**: SVG shadow layer drawn above vehicles.
+7. **Building bodies**: SVG building layer drawn on top. Pins rendered over buildings.
+8. **Collecting pin animations**: Flying pin dots from building to car.
+9. **UI**: Score display and toolbar (screen-space, not affected by camera).
+
+Buildings use an SVG sprite system with programmatic color replacement. Each SVG has three layer groups (`Ground`, `Shadows`, `Building`) filtered by hiding non-target groups. Colors are replaced by matching element IDs (`RoofMain` → building color, `RoofShadow` → darkened variant). Disabled buildings render in gray (`#555555`).

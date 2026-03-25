@@ -100,18 +100,16 @@ function lerpAngle(current: number, target: number, t: number): number {
 
 // Get the building ID a car is currently parked/parking at
 function getParkedBuildingId(c: Car): number {
-  // Trucks at storage: when their state came from 'toStorage', they parked at storageBuildingId
-  // Regular logic: cars park at workBuildingId (factory) or homeBuildingId (house)
   if (c.isTruck && c.nextState === 'toFactory') {
-    // nextState=toFactory means the truck just came from toStorage and is parked at storage
-    return c.storageBuildingId;
+    return c.storageBuildingId;  // truck at storage, heading to factory next
   }
-  if (c.nextState === 'toWork' || c.nextState === 'toStorage') {
-    // Car is at home (house) or truck is at home (storage, but handled above)
-    return c.homeBuildingId;
+  if (c.isTruck && c.nextState === 'toStorage') {
+    return c.workBuildingId;     // truck at factory, heading to storage next
   }
-  // nextState=toHome or nextState=toFactory → car/truck is at work (factory or storage)
-  return c.workBuildingId;
+  if (c.nextState === 'toWork') {
+    return c.homeBuildingId;     // car at home (house)
+  }
+  return c.workBuildingId;       // car at factory/storage (nextState=toHome)
 }
 
 function countParkedCars(buildingId: number): number {
@@ -413,15 +411,15 @@ function pickBestPinSource(fromNodeKey: string, targets: typeof buildings): { bu
       need = factoryNeed(target);
       if (need <= 0 && target.pins === 0) continue;
     } else {
-      // Storage: need = pins available minus cars heading there
+      // Storage: need = pins available minus cars heading there, with small base desire
       let carsHeading = 0;
       for (const c of cars) {
         if (!c.isTruck && c.workBuildingId === target.id && (c.state === 'toWork' || c.state === 'parking' || c.state === 'parked' || c.state === 'collecting')) {
           carsHeading++;
         }
       }
-      need = target.pins - carsHeading;
-      if (need <= 0) continue;
+      need = target.pins - carsHeading + 0.5;
+      if (need <= 0 && target.pins === 0) continue;
     }
 
     const path = findPath(fromNodeKey, target.nodeKey);
@@ -1032,22 +1030,13 @@ export function updateCars() {
           canDepart = true;
         }
       } else if (car.isTruck && car.nextState === 'toStorage') {
-        // Truck at factory — collect pins one at a time, leave when full
+        // Truck at factory — wait until factory has a full load, then grab all and leave
         if (parkedBuilding && parkedBuilding.disabled) {
-          // Factory shut down — leave with whatever we have
           canDepart = true;
-        } else if (car.pinsCarried >= TRUCK_CAPACITY) {
-          // Full — depart to storage
+        } else if (parkedBuilding && parkedBuilding.pins >= TRUCK_CAPACITY) {
+          parkedBuilding.pins -= TRUCK_CAPACITY;
+          car.pinsCarried = TRUCK_CAPACITY;
           canDepart = true;
-        } else if (parkedBuilding && parkedBuilding.pins > 0 && parkedBuilding.pinCooldown <= 0) {
-          // Collect one pin via animation
-          const pinPos = getPinPixelPos(parkedBuilding, parkedBuilding.pins - 1);
-          parkedBuilding.pins--;
-          car.pinsCarried++;
-          car.state = 'collecting';
-          car.collectProgress = 0;
-          car.pinSourceX = pinPos.x;
-          car.pinSourceY = pinPos.y;
         }
       } else if (car.nextState === 'toWork') {
         // Regular car at home (house) — timer-based departure
@@ -1080,15 +1069,9 @@ export function updateCars() {
       car.collectProgress += 0.035;
       if (car.collectProgress >= 1) {
         car.collectProgress = 1;
-        // Trucks collecting at factory: go back to parked to collect more pins
-        if (car.isTruck && car.nextState === 'toStorage' && car.pinsCarried < TRUCK_CAPACITY) {
-          car.state = 'parked';
-          car.parkedAt = frameCount;
-        } else {
-          car.state = 'departing';
-          car.parkProgress = 0;
-          setupDepartPath(car);
-        }
+        car.state = 'departing';
+        car.parkProgress = 0;
+        setupDepartPath(car);
       }
     } else if (car.state === 'departing') {
       car.parkProgress += PARK_ANIM_SPEED;
@@ -1577,9 +1560,27 @@ function startDriving(car: Car, carIndex: number) {
       path = findPath(origin.nodeKey, home.nodeKey);
     }
   } else if (car.nextState === 'toFactory') {
-    // Truck: pick best factory to collect from
-    const sameColorFactories = buildings.filter(b => b.type === 'factory' && b.color === car.color);
-    const result = pickBestFactory(origin.nodeKey, sameColorFactories);
+    // Truck: pick best factory — always allow targeting even if "need" is low
+    const sameColorFactories = buildings.filter(b => b.type === 'factory' && b.color === car.color && !b.disabled);
+    // Try scored selection first
+    let result = pickBestFactory(origin.nodeKey, sameColorFactories);
+    if (!result) {
+      // Fallback: pick nearest reachable factory regardless of need
+      let bestPath: string[] | null = null;
+      let bestLen = Infinity;
+      let bestFactory: typeof buildings[0] | null = null;
+      for (const f of sameColorFactories) {
+        const p = findPath(origin.nodeKey, f.nodeKey);
+        if (p && p.length >= 2 && p.length < bestLen) {
+          bestLen = p.length;
+          bestPath = p;
+          bestFactory = f;
+        }
+      }
+      if (bestFactory && bestPath) {
+        result = { factory: bestFactory, path: bestPath };
+      }
+    }
     if (result) {
       car.workBuildingId = result.factory.id;
       path = result.path;

@@ -386,7 +386,7 @@ function drawBuildingBodies(ctx: CanvasRenderingContext2D) {
       } else {
         drawStorage(ctx, b, pos);
       }
-      if (b.pins > 0) {
+      if (b.maxPins > 0) {
         drawFactoryPins(ctx, pos.x, pos.y, pos.w, pos.h, b.pins, b.maxPins, 0);
       }
     }
