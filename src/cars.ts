@@ -6,8 +6,13 @@ import { findPath } from './pathfinding.ts';
 import { addScore } from './score.ts';
 import { highwayEdgeSet } from './highway.ts';
 
+const NARROW_SPEED = CAR_SPEED * 0.7; // slower on narrow single-lane roads
+
 function getBaseSpeed(edgeId: string): number {
-  return highwayEdgeSet.has(edgeId) ? HIGHWAY_SPEED : CAR_SPEED;
+  if (highwayEdgeSet.has(edgeId)) return HIGHWAY_SPEED;
+  const edge = edges.get(edgeId);
+  if (edge && edge.narrow) return NARROW_SPEED;
+  return CAR_SPEED;
 }
 
 export const cars: Car[] = [];
@@ -391,30 +396,117 @@ export function spawnCars() {
   }
 }
 
-// Direction lock for narrow edges — rebuilt each frame, updated on entry
-const narrowLock = new Map<string, 1 | -1>();
+// ── Narrow chain system ──
+// Connected narrow edges form a "chain" that shares a single direction lock.
+// A car on ANY edge in the chain blocks entry from the opposite end.
 
-function rebuildNarrowLocks() {
-  narrowLock.clear();
-  for (const c of cars) {
-    if (c.state !== 'toWork' && c.state !== 'toHome') continue;
-    const edge = edges.get(c.edgeId);
-    if (!edge || !edge.narrow) continue;
-    narrowLock.set(c.edgeId, c.edgeDir);
+// Cache: edgeId → Set of all edgeIds in its narrow chain (rebuilt when graph changes)
+let narrowChainMap = new Map<string, Set<string>>();
+let narrowChainsVersion = -1;
+
+function ensureNarrowChains() {
+  if (narrowChainsVersion === graphVersion) return;
+  narrowChainsVersion = graphVersion;
+  narrowChainMap.clear();
+
+  const visited = new Set<string>();
+  for (const [eid, edge] of edges) {
+    if (!edge.narrow || visited.has(eid)) continue;
+    // BFS to find all connected narrow edges
+    const chain = new Set<string>();
+    const nodeQueue = [edge.fromKey, edge.toKey];
+    const visitedNodes = new Set<string>();
+    while (nodeQueue.length > 0) {
+      const nk = nodeQueue.shift()!;
+      if (visitedNodes.has(nk)) continue;
+      visitedNodes.add(nk);
+      const node = nodes.get(nk);
+      if (!node) continue;
+      for (const neighborEid of node.edges) {
+        const ne = edges.get(neighborEid);
+        if (!ne || !ne.narrow || chain.has(neighborEid)) continue;
+        chain.add(neighborEid);
+        visited.add(neighborEid);
+        nodeQueue.push(ne.fromKey === nk ? ne.toKey : ne.fromKey);
+      }
+    }
+    for (const ceid of chain) narrowChainMap.set(ceid, chain);
   }
 }
 
-function isEdgeEntryClear(edgeId: string, fromKey: string, _toKey: string): boolean {
+// BFS from `from` through narrow edges in `chain` (excluding `excludeEdge`)
+// to see if `target` is reachable — i.e. the car is heading towards target.
+function reachableThroughNarrow(from: string, target: string, chain: Set<string>, excludeEdge: string): boolean {
+  const visited = new Set<string>();
+  const queue = [from];
+  while (queue.length > 0) {
+    const nk = queue.shift()!;
+    if (nk === target) return true;
+    if (visited.has(nk)) continue;
+    visited.add(nk);
+    const node = nodes.get(nk);
+    if (!node) continue;
+    for (const eid of node.edges) {
+      if (eid === excludeEdge || !chain.has(eid)) continue;
+      const e = edges.get(eid)!;
+      queue.push(e.fromKey === nk ? e.toKey : e.fromKey);
+    }
+  }
+  return false;
+}
+
+// Per-frame lock: prevents two cars entering the same chain from opposite ends
+// in the same frame. Maps chain (by ref) → entry node string.
+const chainFrameLock = new Map<Set<string>, string>();
+
+// currentEdgeId: if the car is already on this edge (transitioning within the
+// chain), skip the narrow check — it's an internal move, not an external entry.
+function isNarrowBlocked(edgeId: string, dir: 1 | -1, currentEdgeId?: string): boolean {
+  ensureNarrowChains();
+  const edge = edges.get(edgeId)!;
+  const entryNode = dir === 1 ? edge.fromKey : edge.toKey;
+  const chain = narrowChainMap.get(edgeId);
+  if (!chain) return false;
+
+  // If the car is already on the chain, it's an internal transition — allow it
+  if (currentEdgeId && chain.has(currentEdgeId)) return false;
+
+  // Check per-frame lock (same-frame race prevention)
+  const frameLock = chainFrameLock.get(chain);
+  if (frameLock !== undefined && frameLock !== entryNode) return true;
+
+  // Check all cars on any edge in the chain for oncoming traffic
+  for (const c of cars) {
+    if (c.state !== 'toWork' && c.state !== 'toHome') continue;
+    if (!chain.has(c.edgeId)) continue;
+    const cEdge = edges.get(c.edgeId)!;
+    // Node the car is heading towards (exit of its current edge)
+    const carExitNode = c.edgeDir === 1 ? cEdge.toKey : cEdge.fromKey;
+    // Is the car heading towards our entry node? BFS forward from carExitNode
+    // (excluding car's own edge so we only search in its travel direction)
+    if (carExitNode === entryNode) return true;
+    if (reachableThroughNarrow(carExitNode, entryNode, chain, c.edgeId)) return true;
+  }
+  return false;
+}
+
+function lockNarrowChain(edgeId: string, dir: 1 | -1) {
+  ensureNarrowChains();
+  const edge = edges.get(edgeId);
+  if (!edge || !edge.narrow) return;
+  const entryNode = dir === 1 ? edge.fromKey : edge.toKey;
+  const chain = narrowChainMap.get(edgeId);
+  if (chain) chainFrameLock.set(chain, entryNode);
+}
+
+function isEdgeEntryClear(edgeId: string, fromKey: string, _toKey: string, currentEdgeId?: string): boolean {
   const edge = edges.get(edgeId)!;
   const dir: 1 | -1 = edge.fromKey === fromKey ? 1 : -1;
   const startT = dir === 1 ? 0 : 1;
   const clearance = MIN_GAP + CAR_LEN;
 
-  // Narrow roads: check direction lock
-  if (edge.narrow) {
-    const locked = narrowLock.get(edgeId);
-    if (locked !== undefined && locked !== dir) return false;
-  }
+  // Narrow roads: check chain-wide direction lock
+  if (edge.narrow && isNarrowBlocked(edgeId, dir, currentEdgeId)) return false;
 
   for (const c of cars) {
     if (c.edgeId !== edgeId) continue;
@@ -464,6 +556,7 @@ function createCar(homeId: number, workId: number, color: string, path: string[]
     nextState: 'toHome',
   };
 
+  if (edge.narrow) lockNarrowChain(edge.id, dir);
   updateCarPosition(car);
   return car;
 }
@@ -547,7 +640,45 @@ function updateCarPosition(car: Car) {
   if (car.edgeDir === -1) { tdx = -tdx; tdy = -tdy; }
   const len = Math.hypot(tdx, tdy);
   if (len > 0) { tdx /= len; tdy /= len; }
-  const laneHalf = edge.narrow ? 0 : LANE_W / 2;
+  // Smooth lane offset blending at narrow↔regular transitions
+  const BLEND_DIST = 15; // pixels over which to blend
+  const baseLane = edge.narrow ? 0 : LANE_W / 2;
+  let laneHalf = baseLane;
+  let lateralRate = 0; // perpendicular pixels per forward pixel (for steering angle)
+
+  const distFromStart = car.edgeDir === 1 ? car.t * edge.length : (1 - car.t) * edge.length;
+  const distToEnd = edge.length - distFromStart;
+
+  // Check previous edge (blend at entry)
+  if (distFromStart < BLEND_DIST && car.pathIndex >= 2) {
+    const prevEdge = getEdgeBetween(car.path[car.pathIndex - 2], car.path[car.pathIndex - 1]);
+    if (prevEdge) {
+      const prevLane = prevEdge.narrow ? 0 : LANE_W / 2;
+      if (prevLane !== baseLane) {
+        const blend = distFromStart / BLEND_DIST;
+        laneHalf = prevLane + (baseLane - prevLane) * blend;
+        lateralRate = (baseLane - prevLane) / BLEND_DIST;
+      }
+    }
+  }
+
+  // Check next edge (blend at exit)
+  if (distToEnd < BLEND_DIST && car.pathIndex < car.path.length && car.pathIndex + 1 <= car.path.length) {
+    const nextNodeKey = car.path[car.pathIndex];
+    const nextIdx = car.pathIndex + 1;
+    if (nextIdx < car.path.length) {
+      const nextEdge = getEdgeBetween(nextNodeKey, car.path[nextIdx]);
+      if (nextEdge) {
+        const nextLane = nextEdge.narrow ? 0 : LANE_W / 2;
+        if (nextLane !== baseLane) {
+          const blend = distToEnd / BLEND_DIST;
+          laneHalf = nextLane + (baseLane - nextLane) * blend;
+          lateralRate = (nextLane - baseLane) / BLEND_DIST;
+        }
+      }
+    }
+  }
+
   const offsetX = -tdy * laneHalf;
   const offsetY = tdx * laneHalf;
 
@@ -564,6 +695,13 @@ function updateCarPosition(car: Car) {
     if (Math.hypot(dx, dy) > 0.5) {
       desiredAngle = Math.atan2(dy, dx);
     }
+  }
+
+  // Steer into lane changes at narrow↔regular transitions
+  if (lateralRate !== 0) {
+    const vx = tdx + (-tdy) * lateralRate;
+    const vy = tdy + tdx * lateralRate;
+    desiredAngle = Math.atan2(vy, vx);
   }
 
   // When moving at speed, set the angle directly (look-ahead is smooth).
@@ -587,7 +725,7 @@ function cubicBezierTangent(t: number, p0: number, p1: number, p2: number, p3: n
 
 export function updateCars() {
   frameCount++;
-  rebuildNarrowLocks();
+  chainFrameLock.clear();
 
   // Remove cars whose edge was deleted
   if (graphVersion !== lastGraphVersion) {
@@ -741,27 +879,6 @@ export function updateCars() {
     }
   }
 
-  // 1b. Narrow road face-to-face: if cars ended up on the same narrow edge
-  //     going opposite directions, both crawl at ~1/5 speed to squeeze past.
-  const NARROW_CRAWL_SPEED = CAR_SPEED * 0.15;
-  for (const car of cars) {
-    if (car.state !== 'toWork' && car.state !== 'toHome') continue;
-    const edge = edges.get(car.edgeId);
-    if (!edge || !edge.narrow) continue;
-    let hasOncoming = false;
-    for (const other of cars) {
-      if (other.id === car.id || other.edgeId !== car.edgeId) continue;
-      if (other.edgeDir === car.edgeDir) continue;
-      if (other.state !== 'toWork' && other.state !== 'toHome') continue;
-      hasOncoming = true;
-      break;
-    }
-    if (hasOncoming) {
-      const cur = targetSpeeds.get(car.id) ?? NARROW_CRAWL_SPEED;
-      targetSpeeds.set(car.id, Math.min(cur, NARROW_CRAWL_SPEED));
-    }
-  }
-
   // 2. Intersection reservation — only for TRUE intersections (3+ edges).
   //    Simple corners (2 edges) don't need reservation since traffic only flows one way.
   //    Closest car to each intersection node wins; others yield with smooth braking.
@@ -840,6 +957,34 @@ export function updateCars() {
     if (!nextEdge) continue;
 
     const nextDir: 1 | -1 = nextEdge.fromKey === nextNodeKey ? 1 : -1;
+
+    // Narrow road locked to opposite direction — brake to stop before entering
+    if (nextEdge.narrow && isNarrowBlocked(nextEdge.id, nextDir, car.edgeId)) {
+      const stopDist = MIN_GAP;
+      if (distToEnd <= stopDist) {
+        targetSpeeds.set(car.id, 0);
+      } else {
+        const range = INTERSECTION_RANGE - stopDist;
+        const brakeFactor = (distToEnd - stopDist) / range;
+        const base = getBaseSpeed(car.edgeId);
+        const brakeSpeed = base * Math.max(0, brakeFactor);
+        const current = targetSpeeds.get(car.id) ?? base;
+        if (brakeSpeed < current) targetSpeeds.set(car.id, brakeSpeed);
+      }
+      continue; // skip normal lookahead for this car
+    }
+
+    // Approaching a narrow road from a wider road — slow down to narrow speed
+    if (nextEdge.narrow && !edge.narrow) {
+      const narrowBase = NARROW_SPEED;
+      const current = targetSpeeds.get(car.id) ?? getBaseSpeed(car.edgeId);
+      if (distToEnd < CORNER_BRAKE_DIST && current > narrowBase) {
+        const brakeFactor = distToEnd / CORNER_BRAKE_DIST;
+        const brakeSpeed = narrowBase + (current - narrowBase) * brakeFactor;
+        targetSpeeds.set(car.id, brakeSpeed);
+      }
+    }
+
     const nextStartT = nextDir === 1 ? 0 : 1;
     const nextLaneKey = `${nextEdge.id}:${nextDir}`;
     const nextGroup = laneGroups.get(nextLaneKey);
@@ -986,7 +1131,7 @@ export function updateCars() {
           if (nextEdge) {
             const nd: 1 | -1 = nextEdge.fromKey === nextNodeKey ? 1 : -1;
             // Guard: don't enter next edge if a car is too close to the entry point
-            if (!isEdgeEntryClear(nextEdge.id, nextNodeKey, nextNextKey)) {
+            if (!isEdgeEntryClear(nextEdge.id, nextNodeKey, nextNextKey, car.edgeId)) {
               // Stay at end of current edge, stopped
               car.pathIndex--;
               car.speed = 0;
@@ -994,7 +1139,7 @@ export function updateCars() {
               car.edgeId = nextEdge.id;
               car.edgeDir = nd;
               car.t = nd === 1 ? 0 : 1;
-              if (nextEdge.narrow) narrowLock.set(nextEdge.id, nd);
+              if (nextEdge.narrow) lockNarrowChain(nextEdge.id, nd);
             }
           }
         } else {
@@ -1094,6 +1239,7 @@ function rerouteCar(car: Car) {
   // Check that the first edge of new path matches where we are
   const nextEdge = getEdgeBetween(newPath[0], newPath[1]);
   if (!nextEdge) return;
+  if (!isEdgeEntryClear(nextEdge.id, newPath[0], newPath[1])) return;
 
   car.path = newPath;
   car.pathIndex = 1;
@@ -1101,7 +1247,7 @@ function rerouteCar(car: Car) {
   car.edgeDir = nextEdge.fromKey === newPath[0] ? 1 : -1;
   car.t = car.edgeDir === 1 ? 0 : 1;
   car.speed = 0;
-  if (nextEdge.narrow) narrowLock.set(nextEdge.id, car.edgeDir);
+  if (nextEdge.narrow) lockNarrowChain(nextEdge.id, car.edgeDir);
   updateCarPosition(car);
 }
 
@@ -1138,6 +1284,12 @@ function startDriving(car: Car, carIndex: number) {
 
   const edge = getEdgeBetween(path[0], path[1]);
   if (!edge) return;
+  if (!isEdgeEntryClear(edge.id, path[0], path[1])) {
+    // Can't enter — wait and retry next frame
+    car.state = 'parked';
+    car.parkTimer = 10;
+    return;
+  }
 
   car.state = car.nextState;
   car.path = path;
@@ -1147,6 +1299,6 @@ function startDriving(car: Car, carIndex: number) {
   car.t = car.edgeDir === 1 ? 0 : 1;
   car.speed = CAR_SPEED;
   car.targetAngle = computeEdgeAngle(edge, car.edgeDir);
-  if (edge.narrow) narrowLock.set(edge.id, car.edgeDir);
+  if (edge.narrow) lockNarrowChain(edge.id, car.edgeDir);
   updateCarPosition(car);
 }

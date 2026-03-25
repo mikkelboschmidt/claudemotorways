@@ -168,7 +168,8 @@ export function addBuilding(gx: number, gy: number, type: 'house' | 'factory', c
   const newW = type === 'house' ? HOUSE_W : FACTORY_W;
   const newH = type === 'house' ? HOUSE_H : FACTORY_H;
 
-  // Remove disabled (burned) buildings that overlap or touch the new placement
+  // Remove disabled (burned) buildings that overlap the new placement.
+  // Use soft removal — only delete the building entry, preserve road edges.
   for (let i = buildings.length - 1; i >= 0; i--) {
     const b = buildings[i];
     if (!b.disabled) continue;
@@ -177,7 +178,8 @@ export function addBuilding(gx: number, gy: number, type: 'house' | 'factory', c
     if (touchX && touchY) {
       evictCarsFromFactory(b.id);
       removeCarsForBuilding(b.id);
-      removeBuilding(b.id);
+      buildingById.delete(b.id);
+      buildings.splice(i, 1);
     }
   }
 
