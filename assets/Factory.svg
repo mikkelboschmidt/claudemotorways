@@ -14,6 +14,7 @@
 <rect id="RoofShadow_2" x="131" y="77" width="21" height="6" fill="#CC0000"/>
 <rect id="RoofShadow_3" x="102" y="77" width="21" height="6" fill="#CC0000"/>
 <circle id="RoofMain_2" cx="87" cy="61" r="13" fill="#FF0000"/>
+<circle id="RoofShadow_4" cx="87" cy="61" r="8" fill="#CC0000"/>
 </g>
 </g>
 </svg>

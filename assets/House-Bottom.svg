@@ -2,14 +2,14 @@
 <g id="House-Bottom">
 <g id="Ground">
 <rect id="Fill" x="40" y="40" width="40" height="40" rx="2" fill="#259454"/>
-<rect id="Entrance" x="47" y="80" width="7" height="26" transform="rotate(-90 47 80)" fill="#555555"/>
+<path id="Entrance" d="M73 71C73 74.8571 75 76.1429 75 80H45C45 76.1429 47 74.8572 47 71H73Z" fill="#555555"/>
 </g>
 <g id="Shadows">
-<path id="House" d="M97 62V93H62L42 73L42 44C42 42.8954 42.8954 42 44 42L77 42L97 62Z" fill="black" fill-opacity="0.1"/>
+<path id="House" d="M97 62V91H62L42 71L42 44C42 42.8954 42.8954 42 44 42L77 42L97 62Z" fill="black" fill-opacity="0.1"/>
 </g>
 <g id="Building">
-<rect id="RoofMain" x="43" y="73" width="30" height="34" rx="1" transform="rotate(-90 43 73)" fill="#FF0000"/>
-<path id="RoofShadow" d="M60 73L60 43L76 43C76.5523 43 77 43.4477 77 44L77 72C77 72.5523 76.5523 73 76 73L60 73Z" fill="#CC0000"/>
+<rect id="RoofMain" x="43" y="71" width="28" height="34" rx="1" transform="rotate(-90 43 71)" fill="#FF0000"/>
+<path id="RoofShadow" d="M60 71L60 43L76 43C76.5523 43 77 43.4477 77 44L77 70C77 70.5523 76.5523 71 76 71L60 71Z" fill="#CC0000"/>
 </g>
 </g>
 </svg>
