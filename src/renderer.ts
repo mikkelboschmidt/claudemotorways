@@ -1,7 +1,7 @@
-import { GRID, HALF, ROAD_W, DASH_LEN, DASH_GAP, CAR_LEN, CAR_WID, BG_COLOR, ROAD_COLOR, TOOLBAR_HEIGHT, HIGHWAY_COLOR, HIGHWAY_ROAD_W, NARROW_ROAD_W, PIN_COOLDOWN } from './constants.ts';
+import { GRID, HALF, ROAD_W, DASH_LEN, DASH_GAP, CAR_LEN, CAR_WID, BG_COLOR, ROAD_COLOR, TOOLBAR_HEIGHT, HIGHWAY_COLOR, HIGHWAY_ROAD_W, NARROW_ROAD_W, PIN_COOLDOWN, TRUCK_LEN, TRUCK_WID } from './constants.ts';
 import { camX, camY, zoom } from './camera.ts';
 import { edges, nodes, parseKey } from './graph.ts';
-import { buildings, getBuildingPixelPos, getConnectionPixelPos, getConnectionPoint, HOUSE_W, HOUSE_H, FACTORY_W, FACTORY_H } from './buildings.ts';
+import { buildings, getBuildingPixelPos, getConnectionPixelPos, getConnectionPoint, HOUSE_W, HOUSE_H, FACTORY_W, FACTORY_H, STORAGE_W_TILES, STORAGE_H_TILES } from './buildings.ts';
 import { hoverGx, hoverGy, pendingRemoveTiles } from './roads.ts';
 import { cars } from './cars.ts';
 import { RoadPreview, ToolType, BUILDING_COLORS } from './types.ts';
@@ -10,7 +10,7 @@ import { score } from './score.ts';
 import { gameSpeed, SPEED_OPTIONS, SPEED_LABELS } from './speed.ts';
 import { highways, highwayEdgeSet, highwayPhase, highwayStartGx, highwayStartGy, highwayPreviewEndPx, highwayPreviewEndPy, computeBezierControls, draggingHighwayId } from './highway.ts';
 import { musicEnabled } from './music.ts';
-import { getHouseSprite, getFactorySprite, drawSpriteLayer } from './sprites.ts';
+import { getHouseSprite, getFactorySprite, getStorageSprite, drawSpriteLayer } from './sprites.ts';
 
 export function render(ctx: CanvasRenderingContext2D, width: number, height: number, preview: RoadPreview | null, fps: number = 0) {
   const gameHeight = height - TOOLBAR_HEIGHT;
@@ -292,8 +292,8 @@ function drawHoverGhost(ctx: CanvasRenderingContext2D) {
   if (hoverGx === null || hoverGy === null) return;
 
   if (activeTool === 'addBuilding') {
-    const w = selectedBuildingType === 'house' ? HOUSE_W : FACTORY_W;
-    const h = selectedBuildingType === 'house' ? HOUSE_H : FACTORY_H;
+    const w = selectedBuildingType === 'house' ? HOUSE_W : selectedBuildingType === 'storage' ? STORAGE_W_TILES : FACTORY_W;
+    const h = selectedBuildingType === 'house' ? HOUSE_H : selectedBuildingType === 'storage' ? STORAGE_H_TILES : FACTORY_H;
     const px = hoverGx * GRID;
     const py = hoverGy * GRID;
     const pw = w * GRID;
@@ -316,14 +316,24 @@ function drawHoverGhost(ctx: CanvasRenderingContext2D) {
 }
 
 // Ground layer: drawn below roads so cars drive over it
+const DISABLED_COLOR = '#555555';
+
+function spriteColor(b: typeof buildings[0]): string {
+  return b.disabled ? DISABLED_COLOR : b.color;
+}
+
 function drawBuildingGrounds(ctx: CanvasRenderingContext2D) {
   for (const b of buildings) {
     const pos = getBuildingPixelPos(b);
+    const color = spriteColor(b);
     if (b.type === 'house') {
-      const sprite = getHouseSprite(b.connectionSide, b.color);
+      const sprite = getHouseSprite(b.connectionSide, color);
       if (sprite) drawSpriteLayer(ctx, sprite.ground, sprite, pos.x, pos.y);
-    } else {
-      const sprite = getFactorySprite(b.connectionSide, b.color);
+    } else if (b.type === 'factory') {
+      const sprite = getFactorySprite(b.connectionSide, color);
+      if (sprite) drawSpriteLayer(ctx, sprite.ground, sprite, pos.x, pos.y);
+    } else if (b.type === 'storage') {
+      const sprite = getStorageSprite(b.connectionSide, color);
       if (sprite) drawSpriteLayer(ctx, sprite.ground, sprite, pos.x, pos.y);
     }
   }
@@ -333,11 +343,15 @@ function drawBuildingGrounds(ctx: CanvasRenderingContext2D) {
 function drawBuildingShadows(ctx: CanvasRenderingContext2D) {
   for (const b of buildings) {
     const pos = getBuildingPixelPos(b);
+    const color = spriteColor(b);
     if (b.type === 'house') {
-      const sprite = getHouseSprite(b.connectionSide, b.color);
+      const sprite = getHouseSprite(b.connectionSide, color);
       if (sprite) drawSpriteLayer(ctx, sprite.shadow, sprite, pos.x, pos.y);
-    } else {
-      const sprite = getFactorySprite(b.connectionSide, b.color);
+    } else if (b.type === 'factory') {
+      const sprite = getFactorySprite(b.connectionSide, color);
+      if (sprite) drawSpriteLayer(ctx, sprite.shadow, sprite, pos.x, pos.y);
+    } else if (b.type === 'storage') {
+      const sprite = getStorageSprite(b.connectionSide, color);
       if (sprite) drawSpriteLayer(ctx, sprite.shadow, sprite, pos.x, pos.y);
     }
   }
@@ -347,14 +361,15 @@ function drawBuildingShadows(ctx: CanvasRenderingContext2D) {
 function drawBuildingBodies(ctx: CanvasRenderingContext2D) {
   for (const b of buildings) {
     const pos = getBuildingPixelPos(b);
+    const color = spriteColor(b);
 
     if (b.type === 'house') {
-      const sprite = getHouseSprite(b.connectionSide, b.color);
+      const sprite = getHouseSprite(b.connectionSide, color);
       if (sprite) {
         drawSpriteLayer(ctx, sprite.building, sprite, pos.x, pos.y);
       }
-    } else {
-      const sprite = getFactorySprite(b.connectionSide, b.color);
+    } else if (b.type === 'factory') {
+      const sprite = getFactorySprite(b.connectionSide, color);
       if (sprite) {
         drawSpriteLayer(ctx, sprite.building, sprite, pos.x, pos.y);
       } else {
@@ -363,6 +378,16 @@ function drawBuildingBodies(ctx: CanvasRenderingContext2D) {
       // Draw pins on top of building layer
       if (!b.disabled && b.maxPins > 0) {
         drawFactoryPins(ctx, pos.x, pos.y, pos.w, pos.h, b.pins, b.maxPins, b.pinCooldown);
+      }
+    } else if (b.type === 'storage') {
+      const sprite = getStorageSprite(b.connectionSide, color);
+      if (sprite) {
+        drawSpriteLayer(ctx, sprite.building, sprite, pos.x, pos.y);
+      } else {
+        drawStorage(ctx, b, pos);
+      }
+      if (b.pins > 0) {
+        drawFactoryPins(ctx, pos.x, pos.y, pos.w, pos.h, b.pins, b.maxPins, 0);
       }
     }
   }
@@ -427,6 +452,43 @@ function drawFactory(ctx: CanvasRenderingContext2D, b: typeof buildings[0], pos:
   }
 }
 
+function drawStorage(ctx: CanvasRenderingContext2D, b: typeof buildings[0], pos: { x: number; y: number; w: number; h: number }) {
+  const m = 2;
+  const color = b.color;
+
+  // Warehouse background
+  ctx.fillStyle = lightenColor(color, 0.6);
+  ctx.beginPath();
+  ctx.roundRect(pos.x + m, pos.y + m, pos.w - m * 2, pos.h - m * 2, 4);
+  ctx.fill();
+
+  // Colored border
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(pos.x + m, pos.y + m, pos.w - m * 2, pos.h - m * 2, 4);
+  ctx.stroke();
+
+  // Warehouse roof stripes
+  ctx.strokeStyle = lightenColor(color, 0.3);
+  ctx.lineWidth = 1.5;
+  const stripes = 4;
+  for (let i = 1; i < stripes; i++) {
+    const sy = pos.y + m + (pos.h - m * 2) * i / stripes;
+    ctx.beginPath();
+    ctx.moveTo(pos.x + m + 4, sy);
+    ctx.lineTo(pos.x + pos.w - m - 4, sy);
+    ctx.stroke();
+  }
+
+  // Small "S" label
+  ctx.fillStyle = color;
+  ctx.font = 'bold 11px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('S', pos.x + pos.w / 2, pos.y + pos.h / 2);
+}
+
 function lightenColor(hex: string, amount: number): string {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
@@ -435,6 +497,13 @@ function lightenColor(hex: string, amount: number): string {
   const lg = Math.round(g + (255 - g) * amount);
   const lb = Math.round(b + (255 - b) * amount);
   return `rgb(${lr},${lg},${lb})`;
+}
+
+function darkenColor(hex: string, amount: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgb(${Math.round(r * (1 - amount))},${Math.round(g * (1 - amount))},${Math.round(b * (1 - amount))})`;
 }
 
 function drawFactoryPins(ctx: CanvasRenderingContext2D, fx: number, fy: number, fw: number, fh: number, pins: number, maxPins: number, pinCooldown: number) {
@@ -490,31 +559,51 @@ function drawFactoryPins(ctx: CanvasRenderingContext2D, fx: number, fy: number, 
 
 function drawCars(ctx: CanvasRenderingContext2D) {
   for (const car of cars) {
+    const carLen = car.isTruck ? TRUCK_LEN : CAR_LEN;
+    const carWid = car.isTruck ? TRUCK_WID : CAR_WID;
+
     ctx.save();
     ctx.translate(car.x, car.y);
     ctx.rotate(car.angle);
     // Pivot is at the rear axle — offset drawing so rear is at origin
-    const rearOffset = CAR_LEN * 0.3; // rear axle ~30% from back
+    const rearOffset = carLen * 0.3; // rear axle ~30% from back
 
     ctx.globalAlpha = 1;
 
     // Car body with rounded corners, shifted so rear axle is at pivot
-    const hh = CAR_WID / 2;
-    const r = 3;
-    ctx.fillStyle = car.color;
+    const hh = carWid / 2;
+    const r = car.isTruck ? 2 : 3;
+    ctx.fillStyle = car.isTruck ? darkenColor(car.color, 0.2) : car.color;
     ctx.beginPath();
-    ctx.roundRect(-rearOffset, -hh, CAR_LEN, CAR_WID, r);
+    ctx.roundRect(-rearOffset, -hh, carLen, carWid, r);
     ctx.fill();
 
     ctx.strokeStyle = 'rgba(0,0,0,0.3)';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.roundRect(-rearOffset, -hh, CAR_LEN, CAR_WID, r);
+    ctx.roundRect(-rearOffset, -hh, carLen, carWid, r);
     ctx.stroke();
 
-    // Windshield
-    ctx.fillStyle = 'rgba(255,255,255,0.7)';
-    ctx.fillRect(CAR_LEN - rearOffset - 4, -CAR_WID / 2 + 2, 3, CAR_WID - 4);
+    if (car.isTruck) {
+      // Truck: cab at front, cargo bed behind
+      const cabLen = carLen * 0.35;
+      ctx.fillStyle = car.color;
+      ctx.beginPath();
+      ctx.roundRect(carLen - rearOffset - cabLen, -hh + 1, cabLen - 1, carWid - 2, 2);
+      ctx.fill();
+      // Cargo pin indicator
+      if (car.pinsCarried > 0) {
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.font = 'bold 7px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`${car.pinsCarried}`, -rearOffset + (carLen - cabLen) / 2, 0);
+      }
+    } else {
+      // Windshield
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.fillRect(carLen - rearOffset - 4, -carWid / 2 + 2, 3, carWid - 4);
+    }
 
     ctx.globalAlpha = 1;
     ctx.restore();
@@ -634,7 +723,16 @@ function drawToolbar(ctx: CanvasRenderingContext2D, width: number, height: numbe
     ctx.fill();
     ctx.fillStyle = '#fff';
     ctx.fillText('Factory', x + factoryW / 2, btnY + btnH / 2);
-    x += factoryW + 15;
+    x += factoryW + 6;
+
+    const storageW = 60;
+    ctx.fillStyle = selectedBuildingType === 'storage' ? '#3498db' : '#34495e';
+    ctx.beginPath();
+    ctx.roundRect(x, btnY, storageW, btnH, 6);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.fillText('Storage', x + storageW / 2, btnY + btnH / 2);
+    x += storageW + 15;
 
     const swatchSize = 28;
     for (const color of BUILDING_COLORS) {
@@ -745,17 +843,20 @@ export function getToolbarLayout(ctx: CanvasRenderingContext2D, width: number, h
     x += btnW + 10;
   }
 
-  const buildingTypeButtons: { type: 'house' | 'factory'; x: number; y: number; w: number; h: number }[] = [];
+  const buildingTypeButtons: { type: 'house' | 'factory' | 'storage'; x: number; y: number; w: number; h: number }[] = [];
   const colorButtons: { color: string; x: number; y: number; w: number; h: number }[] = [];
 
   if (activeTool === 'addBuilding') {
     x += 10 + 15;
     const houseW = 50;
     const factoryW = 60;
+    const storageW = 60;
     buildingTypeButtons.push({ type: 'house', x, y: btnY, w: houseW, h: btnH });
     x += houseW + 6;
     buildingTypeButtons.push({ type: 'factory', x, y: btnY, w: factoryW, h: btnH });
-    x += factoryW + 15;
+    x += factoryW + 6;
+    buildingTypeButtons.push({ type: 'storage', x, y: btnY, w: storageW, h: btnH });
+    x += storageW + 15;
 
     const swatchSize = 28;
     for (const color of BUILDING_COLORS) {

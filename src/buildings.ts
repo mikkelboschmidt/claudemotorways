@@ -1,6 +1,6 @@
 import { Building, ConnectionSide } from './types.ts';
 import { nodeKey, nodes, addEdge, bumpGraphVersion, removeEdge } from './graph.ts';
-import { GRID, HALF, PIN_SPAWN_INTERVAL, PIN_COOLDOWN, FACTORY_MAX_PINS, FACTORY_MAX_PARKED } from './constants.ts';
+import { GRID, HALF, PIN_SPAWN_INTERVAL, PIN_COOLDOWN, FACTORY_MAX_PINS, FACTORY_MAX_PARKED, STORAGE_W, STORAGE_H, STORAGE_MAX_PINS, STORAGE_MAX_PARKED } from './constants.ts';
 import { resetSpawnTimer, evictCarsFromFactory, removeCarsForBuilding } from './cars.ts';
 import { addScore } from './score.ts';
 
@@ -8,6 +8,8 @@ export const HOUSE_W = 1;
 export const HOUSE_H = 1;
 export const FACTORY_W = 3;
 export const FACTORY_H = 2;
+export const STORAGE_W_TILES = STORAGE_W;
+export const STORAGE_H_TILES = STORAGE_H;
 
 export const buildings: Building[] = [
   { id: 0, gx: 3,  gy: 3,  type: 'house',   color: '#e74c3c', nodeKey: '', connectionSide: 'right', w: HOUSE_W, h: HOUSE_H, pins: 0, maxPins: 0, maxParkedCars: 0, pinCooldown: 0, disabled: false },
@@ -70,8 +72,8 @@ export function getConnectionPoint(b: Building): [number, number] {
 //   The road direction determines which side becomes the entrance.
 export function getBuildingEdgeAt(gx: number, gy: number, roadDirGx: number, roadDirGy: number): { building: Building; side: ConnectionSide } | null {
   for (const b of buildings) {
-    if (b.type === 'factory') {
-      // Factory: only match the exact connection tile
+    if (b.type === 'factory' || b.type === 'storage') {
+      // Factory/Storage: only match the exact connection tile
       const [cx, cy] = getConnectionPoint(b);
       if (gx !== cx || gy !== cy) continue;
       switch (b.connectionSide) {
@@ -105,17 +107,7 @@ export function connectBuildingOnSide(b: Building, side: ConnectionSide, dragGx:
   const canChangeSide = b.type === 'house' && isDragEndpoint;
 
   if (b.connectionSide !== side && canChangeSide) {
-    // Remove old connection edges
-    const [oldCx, oldCy] = getConnectionPoint(b);
-    const oldKey = nodeKey(oldCx, oldCy);
-    const oldNode = nodes.get(oldKey);
-    if (oldNode) {
-      const edgeIds = [...oldNode.edges];
-      for (const eid of edgeIds) {
-        removeEdge(eid);
-      }
-    }
-
+    // Just change the connection side — keep existing road edges intact
     b.connectionSide = side;
     const [newCx, newCy] = getConnectionPoint(b);
     b.nodeKey = nodeKey(newCx, newCy);
@@ -164,9 +156,9 @@ export function initBuildingNodes() {
   }
 }
 
-export function addBuilding(gx: number, gy: number, type: 'house' | 'factory', color: string): Building | null {
-  const newW = type === 'house' ? HOUSE_W : FACTORY_W;
-  const newH = type === 'house' ? HOUSE_H : FACTORY_H;
+export function addBuilding(gx: number, gy: number, type: 'house' | 'factory' | 'storage', color: string): Building | null {
+  const newW = type === 'house' ? HOUSE_W : type === 'storage' ? STORAGE_W : FACTORY_W;
+  const newH = type === 'house' ? HOUSE_H : type === 'storage' ? STORAGE_H : FACTORY_H;
 
   // Remove disabled (burned) buildings that overlap the new placement.
   // Use soft removal — only delete the building entry, preserve road edges.
@@ -189,18 +181,39 @@ export function addBuilding(gx: number, gy: number, type: 'house' | 'factory', c
     if (overlapX && overlapY) return null;
   }
 
-  const defaultSide: ConnectionSide = type === 'house' ? 'right' : 'left';
+  let side: ConnectionSide = type === 'factory' ? 'left' : 'right';
+
+  // For houses and storage, detect nearby roads and orient the entrance toward one
+  if (type === 'house' || type === 'storage') {
+    const candidates: ConnectionSide[] = ['right', 'left', 'bottom', 'top'];
+    const midW = Math.floor(newW / 2);
+    const midH = Math.floor(newH / 2);
+    for (const s of candidates) {
+      let cx: number, cy: number;
+      switch (s) {
+        case 'right':  cx = gx + newW;  cy = gy + midH; break;
+        case 'left':   cx = gx - 1;     cy = gy + midH; break;
+        case 'top':    cx = gx + midW;  cy = gy - 1;    break;
+        case 'bottom': cx = gx + midW;  cy = gy + newH;  break;
+      }
+      const node = nodes.get(nodeKey(cx, cy));
+      if (node && node.edges.size > 0) {
+        side = s;
+        break;
+      }
+    }
+  }
 
   const building: Building = {
     id: nextBuildingId++,
     gx, gy, type, color,
     nodeKey: '',
-    connectionSide: defaultSide,
+    connectionSide: side,
     w: newW,
     h: newH,
     pins: 0,
-    maxPins: type === 'factory' ? FACTORY_MAX_PINS : 0,
-    maxParkedCars: type === 'factory' ? FACTORY_MAX_PARKED : 0,
+    maxPins: type === 'factory' ? FACTORY_MAX_PINS : type === 'storage' ? STORAGE_MAX_PINS : 0,
+    maxParkedCars: type === 'factory' ? FACTORY_MAX_PARKED : type === 'storage' ? STORAGE_MAX_PARKED : 0,
     pinCooldown: 0,
     disabled: false,
   };

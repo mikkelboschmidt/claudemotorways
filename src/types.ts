@@ -4,13 +4,13 @@ export interface Building {
   id: number;
   gx: number;
   gy: number;
-  type: 'house' | 'factory';
+  type: 'house' | 'factory' | 'storage';
   color: string;
   nodeKey: string;
   connectionSide: ConnectionSide;
   w: number; // grid cells wide
   h: number; // grid cells tall
-  pins: number; // only used by factories — number of waiting pins
+  pins: number; // waiting pins (factory produces, storage receives)
   maxPins: number;
   maxParkedCars: number; // max cars that can park inside (0 = unlimited)
   pinCooldown: number; // frames remaining before newest pin can be picked up
@@ -49,7 +49,7 @@ export interface Car {
   angle: number;
   targetAngle: number; // for smooth rotation
   speed: number;
-  state: 'toWork' | 'toHome' | 'parking' | 'parked' | 'collecting' | 'departing';
+  state: 'toWork' | 'toHome' | 'toStorage' | 'toFactory' | 'parking' | 'parked' | 'collecting' | 'departing';
   parkTimer: number;
   parkProgress: number;
   parkStartX: number;
@@ -65,10 +65,13 @@ export interface Car {
   parkedAt: number; // frame counter when car parked (for FIFO ordering)
   parkSlot: number; // which slot in the factory this car occupies
   stuckFrames: number; // frames spent at speed 0 (for rerouting)
-  nextState: 'toWork' | 'toHome';
+  nextState: 'toWork' | 'toHome' | 'toStorage' | 'toFactory';
   collectProgress: number; // 0→1 animation of pin flying to car
   pinSourceX: number; // factory pin origin (world px)
   pinSourceY: number;
+  isTruck: boolean; // truck: larger vehicle shuttling pins factory→storage
+  pinsCarried: number; // pins currently being transported (trucks only)
+  storageBuildingId: number; // truck's home storage building
 }
 
 export interface RoadPreview {
@@ -78,6 +81,6 @@ export interface RoadPreview {
   endGy: number;
 }
 
-export type ToolType = 'addRoad' | 'addNarrow' | 'removeRoad' | 'addBuilding' | 'removeBuilding' | 'addHighway';
+export type ToolType = 'addRoad' | 'addNarrow' | 'removeRoad' | 'addBuilding' | 'removeBuilding' | 'addHighway' | 'addStorage';
 
 export const BUILDING_COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6'];

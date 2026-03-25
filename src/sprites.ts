@@ -5,6 +5,7 @@ import houseLeftRaw from '../assets/House-Left.svg?raw';
 import houseTopRaw from '../assets/House-Top.svg?raw';
 import houseBottomRaw from '../assets/House-Bottom.svg?raw';
 import factoryRaw from '../assets/Factory.svg?raw';
+import storageRaw from '../assets/Storage.svg?raw';
 
 interface SpriteLayer {
   image: HTMLImageElement;
@@ -61,12 +62,30 @@ const FACTORY_COMMON: Omit<SpriteDef, 'raw'> = {
   buildingIds: ['Building'],
 };
 
+const STORAGE_COMMON: Omit<SpriteDef, 'raw'> = {
+  anchorTileX: 1,
+  anchorTileY: 1,
+  widthTiles: 4,
+  heightTiles: 4,
+  colorIds: [
+    { id: 'RoofMain', property: 'fill', role: 'main' },
+    { id: 'RoofShadow', property: 'fill', role: 'shadow' },
+  ],
+  groundIds: ['Ground'],
+  shadowIds: ['Shadows'],
+  buildingIds: ['Building'],
+};
+
 const SPRITE_DEFS: Record<string, SpriteDef> = {
   'house:right':  { raw: houseRightRaw, ...HOUSE_COMMON },
   'house:left':   { raw: houseLeftRaw, ...HOUSE_COMMON },
   'house:top':    { raw: houseTopRaw, ...HOUSE_COMMON },
   'house:bottom': { raw: houseBottomRaw, ...HOUSE_COMMON },
   'factory:left': { raw: factoryRaw, ...FACTORY_COMMON },
+  'storage:right': { raw: storageRaw, ...STORAGE_COMMON },
+  'storage:left':  { raw: storageRaw, ...STORAGE_COMMON },
+  'storage:top':   { raw: storageRaw, ...STORAGE_COMMON },
+  'storage:bottom':{ raw: storageRaw, ...STORAGE_COMMON },
 };
 
 function darkenColor(hex: string, factor: number): string {
@@ -150,6 +169,32 @@ export function getHouseSprite(side: ConnectionSide, color: string): LayeredSpri
 
 export function getFactorySprite(side: ConnectionSide, color: string): LayeredSprite | null {
   const defKey = `factory:${side}`;
+  const def = SPRITE_DEFS[defKey];
+  if (!def) return null;
+
+  const cacheKey = `${defKey}:${color}`;
+  const cached = spriteCache.get(cacheKey);
+  if (cached) return cached;
+
+  const svg = colorize(def.raw, def, color);
+  const allLayerIds = [...def.groundIds, ...def.shadowIds, ...def.buildingIds];
+
+  const sprite: LayeredSprite = {
+    ground: svgToImage(filterLayer(svg, allLayerIds, def.groundIds)),
+    shadow: svgToImage(filterLayer(svg, allLayerIds, def.shadowIds)),
+    building: svgToImage(filterLayer(svg, allLayerIds, def.buildingIds)),
+    anchorX: def.anchorTileX * GRID,
+    anchorY: def.anchorTileY * GRID,
+    width: def.widthTiles * GRID,
+    height: def.heightTiles * GRID,
+  };
+
+  spriteCache.set(cacheKey, sprite);
+  return sprite;
+}
+
+export function getStorageSprite(side: ConnectionSide, color: string): LayeredSprite | null {
+  const defKey = `storage:${side}`;
   const def = SPRITE_DEFS[defKey];
   if (!def) return null;
 

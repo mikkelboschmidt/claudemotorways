@@ -1,5 +1,5 @@
 import { Car } from './types.ts';
-import { CAR_SPEED, CAR_ACCEL, CAR_DECEL, CAR_LEN, CAR_WID, MIN_GAP, LANE_W, SPAWN_INTERVAL, MAX_CARS_PER_HOUSE, PARK_DURATION, PARK_ANIM_SPEED, TURN_LERP, CORNER_BRAKE_DIST, CORNER_MIN_SPEED, CORNER_MED_SPEED, HIGHWAY_SPEED } from './constants.ts';
+import { CAR_SPEED, CAR_ACCEL, CAR_DECEL, CAR_LEN, CAR_WID, MIN_GAP, LANE_W, SPAWN_INTERVAL, MAX_CARS_PER_HOUSE, PARK_DURATION, PARK_ANIM_SPEED, TURN_LERP, CORNER_BRAKE_DIST, CORNER_MIN_SPEED, CORNER_MED_SPEED, HIGHWAY_SPEED, TRUCK_SPEED, TRUCK_CAPACITY, MAX_TRUCKS_PER_STORAGE, TRUCK_SPAWN_INTERVAL } from './constants.ts';
 import { edges, getEdgeBetween, graphVersion, nodes } from './graph.ts';
 import { buildings, buildingById, getBuildingCenter, getBuildingPixelPos, getConnectionPixelPos, getPinPixelPos } from './buildings.ts';
 import { findPath } from './pathfinding.ts';
@@ -8,11 +8,33 @@ import { highwayEdgeSet } from './highway.ts';
 
 const NARROW_SPEED = CAR_SPEED * 0.7; // slower on narrow single-lane roads
 
-function getBaseSpeed(edgeId: string): number {
-  if (highwayEdgeSet.has(edgeId)) return HIGHWAY_SPEED;
+function getBaseSpeed(edgeId: string, isTruck = false): number {
+  const base = isTruck ? TRUCK_SPEED : CAR_SPEED;
+  if (highwayEdgeSet.has(edgeId)) return isTruck ? TRUCK_SPEED * 1.3 : HIGHWAY_SPEED;
   const edge = edges.get(edgeId);
-  if (edge && edge.narrow) return NARROW_SPEED;
-  return CAR_SPEED;
+  if (edge && edge.narrow) return base * 0.7;
+  return base;
+}
+
+// Helper: is this car in a driving state (on the road, not parked/parking)?
+function isDriving(state: Car['state']): boolean {
+  return state === 'toWork' || state === 'toHome' || state === 'toFactory' || state === 'toStorage';
+}
+
+// What building is the car arriving at?
+function getArrivalTarget(car: Car, state: Car['state']): number {
+  if (state === 'toWork' || state === 'toFactory') return car.workBuildingId;
+  if (state === 'toStorage') return car.storageBuildingId;
+  return car.homeBuildingId; // toHome
+}
+
+// What state should the car transition to after parking?
+function getNextState(car: Car, prevState: Car['state']): Car['nextState'] {
+  if (car.isTruck) {
+    return prevState === 'toFactory' ? 'toStorage' : 'toFactory';
+  }
+  if (prevState === 'toWork') return 'toHome';
+  return 'toWork'; // toHome → toWork
 }
 
 export const cars: Car[] = [];
@@ -27,8 +49,7 @@ export function resetSpawnTimer() {
 
 export function removeCarsForEdge(edgeId: string) {
   for (let i = cars.length - 1; i >= 0; i--) {
-    const s = cars[i].state;
-    if (cars[i].edgeId === edgeId && (s === 'toWork' || s === 'toHome')) {
+    if (cars[i].edgeId === edgeId && isDriving(cars[i].state)) {
       cars.splice(i, 1);
     }
   }
@@ -36,7 +57,8 @@ export function removeCarsForEdge(edgeId: string) {
 
 export function removeCarsForBuilding(buildingId: number) {
   for (let i = cars.length - 1; i >= 0; i--) {
-    if (cars[i].homeBuildingId === buildingId || cars[i].workBuildingId === buildingId) {
+    const c = cars[i];
+    if (c.homeBuildingId === buildingId || c.workBuildingId === buildingId || c.storageBuildingId === buildingId) {
       cars.splice(i, 1);
     }
   }
@@ -47,20 +69,19 @@ export function removeCarsForBuilding(buildingId: number) {
 export function evictCarsFromFactory(factoryId: number) {
   for (const car of cars) {
     if (car.workBuildingId !== factoryId) continue;
+    const evictState = car.isTruck ? 'toStorage' as const : 'toHome' as const;
     if (car.state === 'parked' || car.state === 'collecting') {
-      // Force immediate departure
       car.state = 'departing';
       car.parkProgress = 0;
-      car.nextState = 'toHome';
-      // Factory departure reverses entry bezier (handled by departing state)
+      car.nextState = evictState;
+      setupDepartPath(car);
     } else if (car.state === 'parking') {
-      // Snap to parked, then depart next frame
       car.parkProgress = 1;
       car.state = 'parked';
-      car.parkedAt = 0; // earliest, so FIFO lets it depart
+      car.parkedAt = 0;
       car.x = car.parkTargetX;
       car.y = car.parkTargetY;
-      car.nextState = 'toHome';
+      car.nextState = evictState;
     }
   }
 }
@@ -77,10 +98,26 @@ function lerpAngle(current: number, target: number, t: number): number {
   return current + angleDiff(current, target) * t;
 }
 
+// Get the building ID a car is currently parked/parking at
+function getParkedBuildingId(c: Car): number {
+  // Trucks at storage: when their state came from 'toStorage', they parked at storageBuildingId
+  // Regular logic: cars park at workBuildingId (factory) or homeBuildingId (house)
+  if (c.isTruck && c.nextState === 'toFactory') {
+    // nextState=toFactory means the truck just came from toStorage and is parked at storage
+    return c.storageBuildingId;
+  }
+  if (c.nextState === 'toWork' || c.nextState === 'toStorage') {
+    // Car is at home (house) or truck is at home (storage, but handled above)
+    return c.homeBuildingId;
+  }
+  // nextState=toHome or nextState=toFactory → car/truck is at work (factory or storage)
+  return c.workBuildingId;
+}
+
 function countParkedCars(buildingId: number): number {
   let count = 0;
   for (const c of cars) {
-    if (c.workBuildingId === buildingId && (c.state === 'parking' || c.state === 'parked' || c.state === 'collecting' || c.state === 'departing')) {
+    if ((c.state === 'parking' || c.state === 'parked' || c.state === 'collecting' || c.state === 'departing') && getParkedBuildingId(c) === buildingId) {
       count++;
     }
   }
@@ -94,7 +131,7 @@ function getFactoryParkSlot(buildingId: number, car: Car): number {
   const takenSlots = new Set<number>();
   for (const c of cars) {
     if (c === car) continue;
-    if (c.workBuildingId === buildingId && (c.state === 'parking' || c.state === 'parked' || c.state === 'collecting' || c.state === 'departing')) {
+    if ((c.state === 'parking' || c.state === 'parked' || c.state === 'collecting' || c.state === 'departing') && getParkedBuildingId(c) === buildingId) {
       takenSlots.add(c.parkSlot);
     }
   }
@@ -107,11 +144,11 @@ function getFactoryParkSlot(buildingId: number, car: Car): number {
 
 // FIFO: the car that parked earliest gets to depart first.
 // Also block if another car is currently parking or departing (avoid collisions).
-function canDepartFactory(buildingId: number, car: Car): boolean {
+function canDepartBuilding(buildingId: number, car: Car): boolean {
   for (const c of cars) {
     if (c === car) continue;
-    if (c.workBuildingId !== buildingId) continue;
-    // Block if any car is mid-animation in this factory
+    if (!((c.state === 'parking' || c.state === 'parked' || c.state === 'collecting' || c.state === 'departing') && getParkedBuildingId(c) === buildingId)) continue;
+    // Block if any car is mid-animation in this building
     if (c.state === 'parking' || c.state === 'collecting' || c.state === 'departing') return false;
     // Block if another parked car arrived earlier (FIFO)
     if (c.state === 'parked' && c.parkedAt < car.parkedAt) return false;
@@ -363,35 +400,111 @@ function pickBestFactory(fromNodeKey: string, factories: typeof buildings): { fa
   return best;
 }
 
+// Pick best pin source (factory or storage with pins) for a regular car
+function pickBestPinSource(fromNodeKey: string, targets: typeof buildings): { building: typeof buildings[0]; path: string[] } | null {
+  let best: { building: typeof buildings[0]; path: string[] } | null = null;
+  let bestScore = -Infinity;
+
+  for (const target of targets) {
+    if (target.disabled) continue;
+    // For factories, use factoryNeed; for storages, use pin count
+    let need: number;
+    if (target.type === 'factory') {
+      need = factoryNeed(target);
+      if (need <= 0 && target.pins === 0) continue;
+    } else {
+      // Storage: need = pins available minus cars heading there
+      let carsHeading = 0;
+      for (const c of cars) {
+        if (!c.isTruck && c.workBuildingId === target.id && (c.state === 'toWork' || c.state === 'parking' || c.state === 'parked' || c.state === 'collecting')) {
+          carsHeading++;
+        }
+      }
+      need = target.pins - carsHeading;
+      if (need <= 0) continue;
+    }
+
+    const path = findPath(fromNodeKey, target.nodeKey);
+    if (!path || path.length < 2) continue;
+
+    const score = need * 10 - path.length;
+    if (score > bestScore) {
+      bestScore = score;
+      best = { building: target, path };
+    }
+  }
+  return best;
+}
+
+let truckSpawnTimer = 0;
+
 export function spawnCars() {
   spawnTimer++;
-  if (spawnTimer < SPAWN_INTERVAL) return;
-  spawnTimer = 0;
+  const carReady = spawnTimer >= SPAWN_INTERVAL;
+  if (carReady) spawnTimer = 0;
 
-  const colorPairs = new Map<string, { houses: typeof buildings; factories: typeof buildings }>();
+  truckSpawnTimer++;
+  const truckReady = truckSpawnTimer >= TRUCK_SPAWN_INTERVAL;
+  if (truckReady) truckSpawnTimer = 0;
+
+  const colorGroups = new Map<string, { houses: typeof buildings; factories: typeof buildings; storages: typeof buildings }>();
   for (const b of buildings) {
-    if (!colorPairs.has(b.color)) {
-      colorPairs.set(b.color, { houses: [], factories: [] });
+    if (!colorGroups.has(b.color)) {
+      colorGroups.set(b.color, { houses: [], factories: [], storages: [] });
     }
-    const pair = colorPairs.get(b.color)!;
-    if (b.type === 'house') pair.houses.push(b);
-    else pair.factories.push(b);
+    const g = colorGroups.get(b.color)!;
+    if (b.type === 'house') g.houses.push(b);
+    else if (b.type === 'factory') g.factories.push(b);
+    else if (b.type === 'storage') g.storages.push(b);
   }
 
-  for (const [, { houses, factories }] of colorPairs) {
-    for (const house of houses) {
-      const houseCars = cars.filter(c => c.homeBuildingId === house.id).length;
-      if (houseCars >= MAX_CARS_PER_HOUSE) continue;
+  for (const [, { houses, factories, storages }] of colorGroups) {
+    // Spawn regular cars from houses → factories or storages
+    if (carReady) {
+      const pinSources = [...factories, ...storages];
+      for (const house of houses) {
+        const houseCars = cars.filter(c => c.homeBuildingId === house.id && !c.isTruck).length;
+        if (houseCars >= MAX_CARS_PER_HOUSE) continue;
 
-      const result = pickBestFactory(house.nodeKey, factories);
-      if (!result) continue;
+        const result = pickBestPinSource(house.nodeKey, pinSources);
+        if (!result) continue;
 
-      const firstEdge = getEdgeBetween(result.path[0], result.path[1]);
-      if (!firstEdge) continue;
-      if (!isEdgeEntryClear(firstEdge.id, result.path[0], result.path[1])) continue;
+        const firstEdge = getEdgeBetween(result.path[0], result.path[1]);
+        if (!firstEdge) continue;
+        if (!isEdgeEntryClear(firstEdge.id, result.path[0], result.path[1])) continue;
 
-      const car = createCar(house.id, result.factory.id, house.color, result.path);
-      if (car) cars.push(car);
+        const car = createCar(house.id, result.building.id, house.color, result.path);
+        if (car) cars.push(car);
+      }
+    }
+
+    // Spawn trucks from storages → factories
+    if (truckReady) {
+      for (const storage of storages) {
+        if (storage.disabled) continue;
+        // Count existing trucks for this storage
+        const truckCount = cars.filter(c => c.isTruck && c.storageBuildingId === storage.id).length;
+        if (truckCount >= MAX_TRUCKS_PER_STORAGE) continue;
+
+        // Find a factory that needs pickup (has pins)
+        const result = pickBestFactory(storage.nodeKey, factories);
+        if (!result) continue;
+
+        const firstEdge = getEdgeBetween(result.path[0], result.path[1]);
+        if (!firstEdge) continue;
+        if (!isEdgeEntryClear(firstEdge.id, result.path[0], result.path[1])) continue;
+
+        const truck = createCar(storage.id, result.factory.id, storage.color, result.path);
+        if (truck) {
+          truck.isTruck = true;
+          truck.storageBuildingId = storage.id;
+          truck.homeBuildingId = storage.id;
+          truck.state = 'toFactory';
+          truck.nextState = 'toStorage';
+          truck.speed = TRUCK_SPEED;
+          cars.push(truck);
+        }
+      }
     }
   }
 }
@@ -477,7 +590,7 @@ function isNarrowBlocked(edgeId: string, dir: 1 | -1, currentEdgeId?: string): b
 
   // Check all cars on any edge in the chain for oncoming traffic
   for (const c of cars) {
-    if (c.state !== 'toWork' && c.state !== 'toHome') continue;
+    if (!isDriving(c.state)) continue;
     if (!chain.has(c.edgeId)) continue;
     const cEdge = edges.get(c.edgeId)!;
     // Node the car is heading towards (exit of its current edge)
@@ -510,7 +623,7 @@ function isEdgeEntryClear(edgeId: string, fromKey: string, _toKey: string, curre
 
   for (const c of cars) {
     if (c.edgeId !== edgeId) continue;
-    if (c.state !== 'toWork' && c.state !== 'toHome') continue;
+    if (!isDriving(c.state)) continue;
     if (c.edgeDir !== dir) continue;
     const dist = Math.abs(c.t - startT) * edge.length;
     if (dist < clearance) return false;
@@ -557,6 +670,9 @@ function createCar(homeId: number, workId: number, color: string, path: string[]
     collectProgress: 0,
     pinSourceX: 0,
     pinSourceY: 0,
+    isTruck: false,
+    pinsCarried: 0,
+    storageBuildingId: 0,
   };
 
   if (edge.narrow) lockNarrowChain(edge.id, dir);
@@ -685,31 +801,136 @@ function updateCarPosition(car: Car) {
   const offsetX = -tdy * laneHalf;
   const offsetY = tdx * laneHalf;
 
-  car.x = rearCenterX + offsetX;
-  car.y = rearCenterY + offsetY;
+  let posX = rearCenterX + offsetX;
+  let posY = rearCenterY + offsetY;
 
-  // Look ahead along the path to derive the car's heading angle
-  const frontPos = samplePathAhead(car, FRONT_OVERHANG);
+  // ---- Corner smoothing: arc through junctions via quadratic bezier ----
+  const CORNER_R = 15; // radius of the smoothing zone on each side of the node
+  let cornerTangentX = 0, cornerTangentY = 0;
+  let inCorner = false;
 
-  let desiredAngle = Math.atan2(tdy, tdx); // fallback: edge direction
-  if (frontPos) {
-    const dx = frontPos.x - rearCenterX;
-    const dy = frontPos.y - rearCenterY;
-    if (Math.hypot(dx, dy) > 0.5) {
-      desiredAngle = Math.atan2(dy, dx);
+  // Approaching the end of this edge — smooth into next edge
+  if (distToEnd < CORNER_R && car.pathIndex < car.path.length) {
+    const nextIdx = car.pathIndex + 1;
+    if (nextIdx < car.path.length) {
+      const nextEdge = getEdgeBetween(car.path[car.pathIndex], car.path[nextIdx]);
+      if (nextEdge) {
+        const nextDir: 1 | -1 = nextEdge.fromKey === car.path[car.pathIndex] ? 1 : -1;
+        let ndx = nextEdge.tx - nextEdge.fx;
+        let ndy = nextEdge.ty - nextEdge.fy;
+        if (nextDir === -1) { ndx = -ndx; ndy = -ndy; }
+        const nLen = Math.hypot(ndx, ndy);
+        if (nLen > 0) { ndx /= nLen; ndy /= nLen; }
+
+        // Next edge lane offset
+        const nextLane = nextEdge.narrow ? 0 : LANE_W / 2;
+
+        // P0: point on current edge at CORNER_R before node
+        const p0t = car.edgeDir === 1 ? (edge.length - CORNER_R) / edge.length : CORNER_R / edge.length;
+        const p0x = edge.fx + (edge.tx - edge.fx) * p0t + (-tdy) * laneHalf;
+        const p0y = edge.fy + (edge.ty - edge.fy) * p0t + tdx * laneHalf;
+
+        // P1: node position with averaged lane offset
+        const nodeX = car.edgeDir === 1 ? edge.tx : edge.fx;
+        const nodeY = car.edgeDir === 1 ? edge.ty : edge.fy;
+        const avgLane = (laneHalf + nextLane) / 2;
+        const p1x = nodeX + (-tdy) * avgLane;
+        const p1y = nodeY + tdx * avgLane;
+
+        // P2: point on next edge at CORNER_R after node
+        const p2Base = nextDir === 1 ? CORNER_R / nextEdge.length : 1 - CORNER_R / nextEdge.length;
+        const p2x = nextEdge.fx + (nextEdge.tx - nextEdge.fx) * p2Base + (-ndy) * nextLane;
+        const p2y = nextEdge.fy + (nextEdge.ty - nextEdge.fy) * p2Base + ndx * nextLane;
+
+        // t in the bezier: 0 at P0 (CORNER_R from node), 0.5 at node, 1 at P2
+        // We're on the first half (approaching node)
+        const bezT = 0.5 * (1 - distToEnd / CORNER_R); // 0 → 0.5
+        const u = 1 - bezT;
+        posX = u * u * p0x + 2 * u * bezT * p1x + bezT * bezT * p2x;
+        posY = u * u * p0y + 2 * u * bezT * p1y + bezT * bezT * p2y;
+
+        // Bezier tangent for angle
+        cornerTangentX = 2 * (1 - bezT) * (p1x - p0x) + 2 * bezT * (p2x - p1x);
+        cornerTangentY = 2 * (1 - bezT) * (p1y - p0y) + 2 * bezT * (p2y - p1y);
+        inCorner = true;
+      }
     }
   }
 
-  // Steer into lane changes at narrow↔regular transitions
-  if (lateralRate !== 0) {
-    const vx = tdx + (-tdy) * lateralRate;
-    const vy = tdy + tdx * lateralRate;
-    desiredAngle = Math.atan2(vy, vx);
+  // Just entered this edge — smooth from previous edge
+  if (!inCorner && distFromStart < CORNER_R && car.pathIndex >= 2) {
+    const prevEdge = getEdgeBetween(car.path[car.pathIndex - 2], car.path[car.pathIndex - 1]);
+    if (prevEdge) {
+      const prevDir: 1 | -1 = prevEdge.fromKey === car.path[car.pathIndex - 2] ? 1 : -1;
+      let pdx = prevEdge.tx - prevEdge.fx;
+      let pdy = prevEdge.ty - prevEdge.fy;
+      if (prevDir === -1) { pdx = -pdx; pdy = -pdy; }
+      const pLen = Math.hypot(pdx, pdy);
+      if (pLen > 0) { pdx /= pLen; pdy /= pLen; }
+
+      const prevLane = prevEdge.narrow ? 0 : LANE_W / 2;
+
+      // P0: point on prev edge at CORNER_R before node
+      const p0t = prevDir === 1 ? (prevEdge.length - CORNER_R) / prevEdge.length : CORNER_R / prevEdge.length;
+      const p0x = prevEdge.fx + (prevEdge.tx - prevEdge.fx) * p0t + (-pdy) * prevLane;
+      const p0y = prevEdge.fy + (prevEdge.ty - prevEdge.fy) * p0t + pdx * prevLane;
+
+      // P1: node position
+      const nodeX = car.edgeDir === 1 ? edge.fx : edge.tx;
+      const nodeY = car.edgeDir === 1 ? edge.fy : edge.ty;
+      const avgLane = (prevLane + laneHalf) / 2;
+      const p1x = nodeX + (-pdy) * avgLane;
+      const p1y = nodeY + pdx * avgLane;
+
+      // P2: point on current edge at CORNER_R after node
+      const p2t = car.edgeDir === 1 ? CORNER_R / edge.length : 1 - CORNER_R / edge.length;
+      const p2x = edge.fx + (edge.tx - edge.fx) * p2t + (-tdy) * laneHalf;
+      const p2y = edge.fy + (edge.ty - edge.fy) * p2t + tdx * laneHalf;
+
+      // We're on the second half (leaving node)
+      const bezT = 0.5 + 0.5 * (distFromStart / CORNER_R); // 0.5 → 1
+      const u = 1 - bezT;
+      posX = u * u * p0x + 2 * u * bezT * p1x + bezT * bezT * p2x;
+      posY = u * u * p0y + 2 * u * bezT * p1y + bezT * bezT * p2y;
+
+      cornerTangentX = 2 * (1 - bezT) * (p1x - p0x) + 2 * bezT * (p2x - p1x);
+      cornerTangentY = 2 * (1 - bezT) * (p1y - p0y) + 2 * bezT * (p2y - p1y);
+      inCorner = true;
+    }
+  }
+
+  car.x = posX;
+  car.y = posY;
+
+  // ---- Heading angle ----
+  let desiredAngle: number;
+
+  if (inCorner && Math.hypot(cornerTangentX, cornerTangentY) > 0.01) {
+    // Use bezier tangent for smooth cornering
+    desiredAngle = Math.atan2(cornerTangentY, cornerTangentX);
+  } else {
+    // Straight section: use look-ahead
+    const frontPos = samplePathAhead(car, FRONT_OVERHANG);
+    desiredAngle = Math.atan2(tdy, tdx);
+    if (frontPos) {
+      const dx = frontPos.x - rearCenterX;
+      const dy = frontPos.y - rearCenterY;
+      if (Math.hypot(dx, dy) > 0.5) {
+        desiredAngle = Math.atan2(dy, dx);
+      }
+    }
+
+    // Steer into lane changes at narrow↔regular transitions
+    if (lateralRate !== 0) {
+      const vx = tdx + (-tdy) * lateralRate;
+      const vy = tdy + tdx * lateralRate;
+      desiredAngle = Math.atan2(vy, vx);
+    }
   }
 
   // When moving at speed, set the angle directly (look-ahead is smooth).
   // When slow or stopped, lerp so cars in queues turn gradually, not snap.
-  const speedRatio = car.speed / getBaseSpeed(car.edgeId); // 0 = stopped, 1 = full speed
+  const speedRatio = car.speed / getBaseSpeed(car.edgeId, car.isTruck); // 0 = stopped, 1 = full speed
   const lerpRate = 0.06 + 0.94 * speedRatio; // slow → 0.06, fast → 1.0
   car.angle = lerpAngle(car.angle, desiredAngle, lerpRate);
   car.targetAngle = car.angle;
@@ -726,6 +947,35 @@ function cubicBezierTangent(t: number, p0: number, p1: number, p2: number, p3: n
   return 3 * u * u * (p1 - p0) + 6 * u * t * (p2 - p1) + 3 * t * t * (p3 - p2);
 }
 
+function setupDepartPath(car: Car) {
+  const parkedAtId = getParkedBuildingId(car);
+  const parkedBuilding = buildingById.get(parkedAtId);
+
+  if (parkedBuilding && parkedBuilding.type === 'house') {
+    // Departing from house
+    const exit = getHouseExitPoint(parkedAtId);
+    car.parkStartX = car.parkTargetX;
+    car.parkStartY = car.parkTargetY;
+    car.parkTargetX = exit.x;
+    car.parkTargetY = exit.y;
+    car.parkCx1 = (car.parkStartX * 2 + exit.x) / 3;
+    car.parkCy1 = (car.parkStartY * 2 + exit.y) / 3;
+    car.parkCx2 = (car.parkStartX + exit.x * 2) / 3;
+    car.parkCy2 = (car.parkStartY + exit.y * 2) / 3;
+  } else {
+    // Departing from factory or storage
+    const ep = getFactoryExitPath(parkedAtId, car);
+    car.parkStartX = ep.p0x;
+    car.parkStartY = ep.p0y;
+    car.parkCx1 = ep.p1x;
+    car.parkCy1 = ep.p1y;
+    car.parkCx2 = ep.p2x;
+    car.parkCy2 = ep.p2y;
+    car.parkTargetX = ep.p3x;
+    car.parkTargetY = ep.p3y;
+  }
+}
+
 export function updateCars() {
   frameCount++;
   chainFrameLock.clear();
@@ -735,7 +985,7 @@ export function updateCars() {
     lastGraphVersion = graphVersion;
     for (let i = cars.length - 1; i >= 0; i--) {
       const c = cars[i];
-      if ((c.state === 'toWork' || c.state === 'toHome') && !edges.has(c.edgeId)) {
+      if ((isDriving(c.state)) && !edges.has(c.edgeId)) {
         cars.splice(i, 1);
       }
     }
@@ -768,19 +1018,50 @@ export function updateCars() {
         car.targetAngle = car.angle;
       }
     } else if (car.state === 'parked') {
-      // At a factory (nextState === 'toHome'): FIFO — earliest parked departs first
-      // At home (nextState === 'toWork'): use fixed timer
+      const parkedAtId = getParkedBuildingId(car);
+      const parkedBuilding = buildingById.get(parkedAtId);
       let canDepart = false;
-      if (car.nextState === 'toHome') {
-        const factory = buildingById.get(car.workBuildingId);
-        if (factory && factory.disabled) {
-          // Factory shut down — depart immediately, no pin
+
+      if (car.isTruck && car.nextState === 'toFactory') {
+        // Truck at storage — deposit pins then head to factory
+        if (canDepartBuilding(parkedAtId, car)) {
+          if (car.pinsCarried > 0 && parkedBuilding) {
+            parkedBuilding.pins = Math.min(parkedBuilding.pins + car.pinsCarried, parkedBuilding.maxPins);
+            car.pinsCarried = 0;
+          }
           canDepart = true;
-        } else if (canDepartFactory(car.workBuildingId, car)) {
-          if (factory && factory.pins > 0 && factory.pinCooldown <= 0) {
+        }
+      } else if (car.isTruck && car.nextState === 'toStorage') {
+        // Truck at factory — collect pins one at a time, leave when full
+        if (parkedBuilding && parkedBuilding.disabled) {
+          // Factory shut down — leave with whatever we have
+          canDepart = true;
+        } else if (car.pinsCarried >= TRUCK_CAPACITY) {
+          // Full — depart to storage
+          canDepart = true;
+        } else if (parkedBuilding && parkedBuilding.pins > 0 && parkedBuilding.pinCooldown <= 0) {
+          // Collect one pin via animation
+          const pinPos = getPinPixelPos(parkedBuilding, parkedBuilding.pins - 1);
+          parkedBuilding.pins--;
+          car.pinsCarried++;
+          car.state = 'collecting';
+          car.collectProgress = 0;
+          car.pinSourceX = pinPos.x;
+          car.pinSourceY = pinPos.y;
+        }
+      } else if (car.nextState === 'toWork') {
+        // Regular car at home (house) — timer-based departure
+        car.parkTimer--;
+        if (car.parkTimer <= 0) canDepart = true;
+      } else {
+        // Regular car at factory or storage (nextState === 'toHome')
+        if (parkedBuilding && parkedBuilding.disabled) {
+          canDepart = true;
+        } else if (canDepartBuilding(parkedAtId, car)) {
+          if (parkedBuilding && parkedBuilding.pins > 0 && parkedBuilding.pinCooldown <= 0) {
             // Start collecting animation — pin flies to car
-            const pinPos = getPinPixelPos(factory, factory.pins - 1);
-            factory.pins--;
+            const pinPos = getPinPixelPos(parkedBuilding, parkedBuilding.pins - 1);
+            parkedBuilding.pins--;
             addScore(1);
             car.state = 'collecting';
             car.collectProgress = 0;
@@ -788,69 +1069,25 @@ export function updateCars() {
             car.pinSourceY = pinPos.y;
           }
         }
-      } else {
-        car.parkTimer--;
-        if (car.parkTimer <= 0) canDepart = true;
       }
       if (canDepart) {
         car.state = 'departing';
         car.parkProgress = 0;
-
-        if (car.nextState === 'toWork') {
-          // Departing from house: build a new path to the exit point on the opposite lane
-          const buildingId = car.homeBuildingId;
-          const exit = getHouseExitPoint(buildingId);
-          car.parkStartX = car.parkTargetX;
-          car.parkStartY = car.parkTargetY;
-          car.parkTargetX = exit.x;
-          car.parkTargetY = exit.y;
-          car.parkCx1 = (car.parkStartX * 2 + exit.x) / 3;
-          car.parkCy1 = (car.parkStartY * 2 + exit.y) / 3;
-          car.parkCx2 = (car.parkStartX + exit.x * 2) / 3;
-          car.parkCy2 = (car.parkStartY + exit.y * 2) / 3;
-        } else {
-          // Departing from factory: build exit path to the right lane
-          const ep = getFactoryExitPath(car.workBuildingId, car);
-          car.parkStartX = ep.p0x;
-          car.parkStartY = ep.p0y;
-          car.parkCx1 = ep.p1x;
-          car.parkCy1 = ep.p1y;
-          car.parkCx2 = ep.p2x;
-          car.parkCy2 = ep.p2y;
-          car.parkTargetX = ep.p3x;
-          car.parkTargetY = ep.p3y;
-        }
+        setupDepartPath(car);
       }
     } else if (car.state === 'collecting') {
-      // Pin flies from factory to car over ~30 frames
+      // Pin flies from factory/storage to car over ~30 frames
       car.collectProgress += 0.035;
       if (car.collectProgress >= 1) {
         car.collectProgress = 1;
-        // Transition to departing
-        car.state = 'departing';
-        car.parkProgress = 0;
-
-        if (car.nextState === 'toWork') {
-          const buildingId = car.homeBuildingId;
-          const exit = getHouseExitPoint(buildingId);
-          car.parkStartX = car.parkTargetX;
-          car.parkStartY = car.parkTargetY;
-          car.parkTargetX = exit.x;
-          car.parkTargetY = exit.y;
-          car.parkCx1 = (car.parkStartX * 2 + exit.x) / 3;
-          car.parkCy1 = (car.parkStartY * 2 + exit.y) / 3;
-          car.parkCx2 = (car.parkStartX + exit.x * 2) / 3;
-          car.parkCy2 = (car.parkStartY + exit.y * 2) / 3;
+        // Trucks collecting at factory: go back to parked to collect more pins
+        if (car.isTruck && car.nextState === 'toStorage' && car.pinsCarried < TRUCK_CAPACITY) {
+          car.state = 'parked';
+          car.parkedAt = frameCount;
         } else {
-          const ep = getFactoryExitPath(car.workBuildingId, car);
-          car.parkStartX = ep.p0x;
-          car.parkStartY = ep.p0y;
-          car.parkCx1 = ep.p1x;
-          car.parkCy1 = ep.p1y;
-          car.parkCx2 = ep.p2x;
-          car.parkCy2 = ep.p2y;
-          car.parkTargetX = ep.p3x;
-          car.parkTargetY = ep.p3y;
+          car.state = 'departing';
+          car.parkProgress = 0;
+          setupDepartPath(car);
         }
       }
     } else if (car.state === 'departing') {
@@ -880,7 +1117,7 @@ export function updateCars() {
   // Group driving cars by edge+direction for same-edge gap following
   const laneGroups = new Map<string, Car[]>();
   for (const car of cars) {
-    if (car.state !== 'toWork' && car.state !== 'toHome') continue;
+    if (!isDriving(car.state)) continue;
     const key = `${car.edgeId}:${car.edgeDir}`;
     let group = laneGroups.get(key);
     if (!group) { group = []; laneGroups.set(key, group); }
@@ -893,7 +1130,7 @@ export function updateCars() {
   for (const [, group] of laneGroups) {
     // Sort so group[0] is the leader (furthest along in travel direction)
     group.sort((a, b) => a.edgeDir === 1 ? b.t - a.t : a.t - b.t);
-    for (const c of group) targetSpeeds.set(c.id, getBaseSpeed(c.edgeId));
+    for (const c of group) targetSpeeds.set(c.id, getBaseSpeed(c.edgeId, c.isTruck));
 
     for (let i = 1; i < group.length; i++) {
       const front = group[i - 1];
@@ -920,7 +1157,7 @@ export function updateCars() {
   const nodeOwner = new Map<string, { carId: number; dist: number; edgeId: string }>();
 
   for (const car of cars) {
-    if (car.state !== 'toWork' && car.state !== 'toHome') continue;
+    if (!isDriving(car.state)) continue;
     const edge = edges.get(car.edgeId);
     if (!edge) continue;
 
@@ -950,7 +1187,7 @@ export function updateCars() {
 
   // 3. Yield to intersection owner from a DIFFERENT edge — smooth deceleration
   for (const car of cars) {
-    if (car.state !== 'toWork' && car.state !== 'toHome') continue;
+    if (!isDriving(car.state)) continue;
     const edge = edges.get(car.edgeId);
     if (!edge) continue;
 
@@ -965,7 +1202,7 @@ export function updateCars() {
       } else if (distToEnd < INTERSECTION_RANGE) {
         const range = INTERSECTION_RANGE - stopDist;
         const brakeFactor = (distToEnd - stopDist) / range;
-        const base = getBaseSpeed(car.edgeId);
+        const base = getBaseSpeed(car.edgeId, car.isTruck);
         const brakeSpeed = base * Math.max(0, Math.min(1, brakeFactor));
         const current = targetSpeeds.get(car.id) ?? base;
         if (brakeSpeed < current) targetSpeeds.set(car.id, brakeSpeed);
@@ -975,7 +1212,7 @@ export function updateCars() {
 
   // 4. Cross-edge lookahead for ALL cars — check next edge and 2 edges ahead
   for (const car of cars) {
-    if (car.state !== 'toWork' && car.state !== 'toHome') continue;
+    if (!isDriving(car.state)) continue;
     if (car.pathIndex >= car.path.length || car.pathIndex + 1 >= car.path.length) continue;
 
     const edge = edges.get(car.edgeId);
@@ -1000,7 +1237,7 @@ export function updateCars() {
       } else {
         const range = INTERSECTION_RANGE - stopDist;
         const brakeFactor = (distToEnd - stopDist) / range;
-        const base = getBaseSpeed(car.edgeId);
+        const base = getBaseSpeed(car.edgeId, car.isTruck);
         const brakeSpeed = base * Math.max(0, brakeFactor);
         const current = targetSpeeds.get(car.id) ?? base;
         if (brakeSpeed < current) targetSpeeds.set(car.id, brakeSpeed);
@@ -1011,7 +1248,7 @@ export function updateCars() {
     // Approaching a narrow road from a wider road — slow down to narrow speed
     if (nextEdge.narrow && !edge.narrow) {
       const narrowBase = NARROW_SPEED;
-      const current = targetSpeeds.get(car.id) ?? getBaseSpeed(car.edgeId);
+      const current = targetSpeeds.get(car.id) ?? getBaseSpeed(car.edgeId, car.isTruck);
       if (distToEnd < CORNER_BRAKE_DIST && current > narrowBase) {
         const brakeFactor = distToEnd / CORNER_BRAKE_DIST;
         const brakeSpeed = narrowBase + (current - narrowBase) * brakeFactor;
@@ -1039,7 +1276,7 @@ export function updateCars() {
         } else {
           const range = INTERSECTION_RANGE - stopDist;
           const brakeFactor = (distToEnd - stopDist) / range;
-          const base = getBaseSpeed(car.edgeId);
+          const base = getBaseSpeed(car.edgeId, car.isTruck);
           const brakeSpeed = base * 0.15 * Math.max(0, brakeFactor);
           const current = targetSpeeds.get(car.id) ?? base;
           if (brakeSpeed < current) targetSpeeds.set(car.id, brakeSpeed);
@@ -1061,7 +1298,7 @@ export function updateCars() {
             const d = Math.abs(c.t - startT2) * edge2.length;
             if (d < MIN_GAP + CAR_LEN) {
               // Congestion 2 edges away — gentle slowdown
-              const base = getBaseSpeed(car.edgeId);
+              const base = getBaseSpeed(car.edgeId, car.isTruck);
               const brakeSpeed = base * 0.6;
               const current = targetSpeeds.get(car.id) ?? base;
               if (brakeSpeed < current) targetSpeeds.set(car.id, brakeSpeed);
@@ -1075,7 +1312,7 @@ export function updateCars() {
 
   // 5. Corner braking: slow down approaching turns proportional to angle change
   for (const car of cars) {
-    if (car.state !== 'toWork' && car.state !== 'toHome') continue;
+    if (!isDriving(car.state)) continue;
     if (car.pathIndex >= car.path.length || car.pathIndex + 1 >= car.path.length) continue;
 
     const edge = edges.get(car.edgeId);
@@ -1095,7 +1332,7 @@ export function updateCars() {
     const turn = Math.abs(angleDiff(curAngle, nextAngle));
     if (turn < 0.1) continue;
 
-    const base = getBaseSpeed(car.edgeId);
+    const base = getBaseSpeed(car.edgeId, car.isTruck);
     let cornerSpeed: number;
     if (turn >= Math.PI / 2) {
       cornerSpeed = CORNER_MIN_SPEED;
@@ -1115,8 +1352,8 @@ export function updateCars() {
 
   // 6. Apply speeds with smooth acceleration/deceleration
   for (const car of cars) {
-    if (car.state !== 'toWork' && car.state !== 'toHome') continue;
-    const ts = targetSpeeds.get(car.id) ?? getBaseSpeed(car.edgeId);
+    if (!isDriving(car.state)) continue;
+    const ts = targetSpeeds.get(car.id) ?? getBaseSpeed(car.edgeId, car.isTruck);
     if (car.speed < ts) {
       car.speed = Math.min(car.speed + CAR_ACCEL, ts);
     } else if (car.speed > ts) {
@@ -1137,7 +1374,7 @@ export function updateCars() {
 
   // Move driving cars
   for (const car of cars) {
-    if (car.state !== 'toWork' && car.state !== 'toHome') continue;
+    if (!isDriving(car.state)) continue;
     if (car.speed <= 0) continue;
 
     const edge = edges.get(car.edgeId);
@@ -1178,22 +1415,38 @@ export function updateCars() {
           }
         } else {
           // Arrived at destination
-          const prevState = car.state as 'toWork' | 'toHome';
-          const targetBuildingId = prevState === 'toWork' ? car.workBuildingId : car.homeBuildingId;
+          const prevState = car.state as Car['state'];
+          const targetBuildingId = getArrivalTarget(car, prevState);
           const targetBuilding = buildingById.get(targetBuildingId);
           if (targetBuilding) {
-            // Disabled factory — turn around and go home
-            if (targetBuilding.type === 'factory' && targetBuilding.disabled && prevState === 'toWork') {
-              car.nextState = 'toHome';
+            // Disabled factory — turn around
+            if (targetBuilding.type === 'factory' && targetBuilding.disabled && (prevState === 'toWork' || prevState === 'toFactory')) {
+              car.nextState = car.isTruck ? 'toStorage' : 'toHome';
               startDriving(car, cars.indexOf(car));
             } else {
-              // Check if factory is full or has a car mid-animation
+              // Check if building is full or has a car mid-animation
               let blocked = false;
-              if (targetBuilding.type === 'factory' && targetBuilding.maxParkedCars > 0) {
+              if ((targetBuilding.type === 'factory' || targetBuilding.type === 'storage') && targetBuilding.maxParkedCars > 0) {
                 const parkedCount = countParkedCars(targetBuildingId);
                 const hasAnimating = cars.some(c =>
-                  c.workBuildingId === targetBuildingId && (c.state === 'parking' || c.state === 'collecting' || c.state === 'departing'));
+                  (c.state === 'parking' || c.state === 'collecting' || c.state === 'departing') && getParkedBuildingId(c) === targetBuildingId);
                 if (parkedCount >= targetBuilding.maxParkedCars || hasAnimating) {
+                  blocked = true;
+                }
+              }
+              // Trucks can only enter factories when the parking lot is completely empty
+              // Regular cars cannot enter a factory while a truck is inside
+              if (targetBuilding.type === 'factory') {
+                const truckInside = cars.some(c => c !== car && c.isTruck &&
+                  (c.state === 'parking' || c.state === 'parked' || c.state === 'collecting' || c.state === 'departing') &&
+                  getParkedBuildingId(c) === targetBuildingId);
+                if (car.isTruck) {
+                  // Truck needs empty lot
+                  const anyoneInside = cars.some(c => c !== car &&
+                    (c.state === 'parking' || c.state === 'parked' || c.state === 'collecting' || c.state === 'departing') &&
+                    getParkedBuildingId(c) === targetBuildingId);
+                  if (anyoneInside) blocked = true;
+                } else if (truckInside) {
                   blocked = true;
                 }
               }
@@ -1202,13 +1455,13 @@ export function updateCars() {
                 car.pathIndex--;
                 car.speed = 0;
               } else {
-                car.nextState = prevState === 'toWork' ? 'toHome' : 'toWork';
+                car.nextState = getNextState(car, prevState);
                 car.parkStartX = car.x;
                 car.parkStartY = car.y;
                 car.parkProgress = 0;
                 car.state = 'parking';
 
-                if (targetBuilding.type === 'factory') {
+                if (targetBuilding.type === 'factory' || targetBuilding.type === 'storage') {
                   const bp = getFactoryParkPath(targetBuildingId, car);
                   car.parkStartX = bp.p0x;
                   car.parkStartY = bp.p0y;
@@ -1240,7 +1493,7 @@ export function updateCars() {
       }
     }
 
-    if (car.state === 'toWork' || car.state === 'toHome') {
+    if (isDriving(car.state)) {
       updateCarPosition(car);
     }
   }
@@ -1254,13 +1507,25 @@ function rerouteCar(car: Car) {
 
   let destKey: string | null = null;
   if (car.state === 'toWork') {
-    // Try to pick a better factory
+    // Regular car: try to pick a better pin source
+    const sameColorSources = buildings.filter(b =>
+      (b.type === 'factory' || b.type === 'storage') && b.color === car.color && !b.disabled);
+    const result = pickBestPinSource(currentNodeKey, sameColorSources);
+    if (result) {
+      car.workBuildingId = result.building.id;
+      destKey = result.building.nodeKey;
+    }
+  } else if (car.state === 'toFactory') {
+    // Truck: try a different factory
     const sameColorFactories = buildings.filter(b => b.type === 'factory' && b.color === car.color && !b.disabled);
     const result = pickBestFactory(currentNodeKey, sameColorFactories);
     if (result) {
       car.workBuildingId = result.factory.id;
       destKey = result.factory.nodeKey;
     }
+  } else if (car.state === 'toStorage') {
+    const storage = buildingById.get(car.storageBuildingId);
+    if (storage) destKey = storage.nodeKey;
   } else {
     const home = buildingById.get(car.homeBuildingId);
     if (home) destKey = home.nodeKey;
@@ -1286,8 +1551,10 @@ function rerouteCar(car: Car) {
 }
 
 function startDriving(car: Car, carIndex: number) {
-  const home = buildingById.get(car.homeBuildingId);
-  if (!home) {
+  // Determine origin building (where the car is departing from)
+  const parkedAtId = getParkedBuildingId(car);
+  const origin = buildingById.get(parkedAtId);
+  if (!origin) {
     cars.splice(carIndex, 1);
     return;
   }
@@ -1295,18 +1562,33 @@ function startDriving(car: Car, carIndex: number) {
   let path: string[] | null = null;
 
   if (car.nextState === 'toWork') {
-    // Re-evaluate which factory to go to
+    // Regular car: re-evaluate which factory/storage to pick up from
+    const sameColorSources = buildings.filter(b =>
+      (b.type === 'factory' || b.type === 'storage') && b.color === car.color);
+    const result = pickBestPinSource(origin.nodeKey, sameColorSources);
+    if (result) {
+      car.workBuildingId = result.building.id;
+      path = result.path;
+    }
+  } else if (car.nextState === 'toHome') {
+    // Regular car going home
+    const home = buildingById.get(car.homeBuildingId);
+    if (home) {
+      path = findPath(origin.nodeKey, home.nodeKey);
+    }
+  } else if (car.nextState === 'toFactory') {
+    // Truck: pick best factory to collect from
     const sameColorFactories = buildings.filter(b => b.type === 'factory' && b.color === car.color);
-    const result = pickBestFactory(home.nodeKey, sameColorFactories);
+    const result = pickBestFactory(origin.nodeKey, sameColorFactories);
     if (result) {
       car.workBuildingId = result.factory.id;
       path = result.path;
     }
-  } else {
-    // Going home — straightforward
-    const work = buildingById.get(car.workBuildingId);
-    if (work) {
-      path = findPath(work.nodeKey, home.nodeKey);
+  } else if (car.nextState === 'toStorage') {
+    // Truck: go home to storage
+    const storage = buildingById.get(car.storageBuildingId);
+    if (storage) {
+      path = findPath(origin.nodeKey, storage.nodeKey);
     }
   }
 
@@ -1319,7 +1601,6 @@ function startDriving(car: Car, carIndex: number) {
   const edge = getEdgeBetween(path[0], path[1]);
   if (!edge) return;
   if (!isEdgeEntryClear(edge.id, path[0], path[1])) {
-    // Can't enter — wait and retry next frame
     car.state = 'parked';
     car.parkTimer = 10;
     return;
@@ -1331,7 +1612,7 @@ function startDriving(car: Car, carIndex: number) {
   car.edgeId = edge.id;
   car.edgeDir = edge.fromKey === path[0] ? 1 : -1;
   car.t = car.edgeDir === 1 ? 0 : 1;
-  car.speed = CAR_SPEED;
+  car.speed = car.isTruck ? TRUCK_SPEED : CAR_SPEED;
   car.targetAngle = computeEdgeAngle(edge, car.edgeDir);
   if (edge.narrow) lockNarrowChain(edge.id, car.edgeDir);
   updateCarPosition(car);
