@@ -738,13 +738,7 @@ export function updateCars() {
     }
   }
 
-  // Smooth angle interpolation for parking/departing cars only.
-  // Driving cars use look-ahead steering — angle set directly in updateCarPosition.
-  for (const car of cars) {
-    if (car.state === 'parking' || car.state === 'departing') {
-      car.angle = lerpAngle(car.angle, car.targetAngle, TURN_LERP);
-    }
-  }
+  // Parking/departing angle is now handled inline with bezier tangent below.
 
   // Update parking/parked/departing cars
   for (let i = cars.length - 1; i >= 0; i--) {
@@ -763,13 +757,13 @@ export function updateCars() {
       const t = car.parkProgress;
       car.x = cubicBezier(t, car.parkStartX, car.parkCx1, car.parkCx2, car.parkTargetX);
       car.y = cubicBezier(t, car.parkStartY, car.parkCy1, car.parkCy2, car.parkTargetY);
-      // Tangent for angle
+      // Angle follows bezier tangent directly — car rides the curve like rails
       const tx = cubicBezierTangent(t, car.parkStartX, car.parkCx1, car.parkCx2, car.parkTargetX);
       const ty = cubicBezierTangent(t, car.parkStartY, car.parkCy1, car.parkCy2, car.parkTargetY);
       if (Math.hypot(tx, ty) > 0.01) {
-        car.targetAngle = Math.atan2(ty, tx);
+        car.angle = Math.atan2(ty, tx);
+        car.targetAngle = car.angle;
       }
-      car.angle = lerpAngle(car.angle, car.targetAngle, TURN_LERP);
     } else if (car.state === 'parked') {
       // At a factory (nextState === 'toHome'): FIFO — earliest parked departs first
       // At home (nextState === 'toWork'): use fixed timer
@@ -834,9 +828,9 @@ export function updateCars() {
         car.x = bx;
         car.y = by;
         if (Math.hypot(btx, bty) > 0.01) {
-          car.targetAngle = Math.atan2(bty, btx);
+          car.angle = Math.atan2(bty, btx);
+          car.targetAngle = car.angle;
         }
-        car.angle = lerpAngle(car.angle, car.targetAngle, TURN_LERP);
       }
     }
   }

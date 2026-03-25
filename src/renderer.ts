@@ -199,15 +199,6 @@ function drawHighways(ctx: CanvasRenderingContext2D) {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Ramp indicators at endpoints (small circles)
-    ctx.fillStyle = '#888';
-    ctx.beginPath();
-    ctx.arc(hw.p0x, hw.p0y, HIGHWAY_ROAD_W / 2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(hw.p3x, hw.p3y, HIGHWAY_ROAD_W / 2, 0, Math.PI * 2);
-    ctx.fill();
-
     ctx.restore();
   }
 
@@ -368,6 +359,10 @@ function drawBuildingBodies(ctx: CanvasRenderingContext2D) {
       } else {
         drawFactory(ctx, b, pos);
       }
+      // Draw pins on top of building layer
+      if (!b.disabled && b.maxPins > 0) {
+        drawFactoryPins(ctx, pos.x, pos.y, pos.w, pos.h, b.pins, b.maxPins);
+      }
     }
   }
 }
@@ -441,17 +436,17 @@ function lightenColor(hex: string, amount: number): string {
   return `rgb(${lr},${lg},${lb})`;
 }
 
-function drawFactoryPins(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, pins: number, maxPins: number) {
+function drawFactoryPins(ctx: CanvasRenderingContext2D, fx: number, fy: number, fw: number, fh: number, pins: number, maxPins: number) {
   if (maxPins === 0) return;
-  // Pins in top-right area
+  // Pin area: top-right of the factory building portion
+  // Building occupies roughly the top 40% (for left/right) or left 40% (for top/bottom)
   const cols = 3;
   const rows = Math.ceil(maxPins / cols);
   const radius = 3.5;
   const spacing = 10;
   const areaW = cols * spacing;
-  const areaH = rows * spacing;
-  const startX = x + w - areaW - 4;
-  const startY = y + 6;
+  const startX = fx + fw - areaW - 8;
+  const startY = fy + 8;
 
   for (let i = 0; i < maxPins; i++) {
     const col = i % cols;
