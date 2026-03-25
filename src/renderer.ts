@@ -1,4 +1,4 @@
-import { GRID, HALF, ROAD_W, DASH_LEN, DASH_GAP, CAR_LEN, CAR_WID, BG_COLOR, ROAD_COLOR, TOOLBAR_HEIGHT, HIGHWAY_COLOR, HIGHWAY_ROAD_W, NARROW_ROAD_W } from './constants.ts';
+import { GRID, HALF, ROAD_W, DASH_LEN, DASH_GAP, CAR_LEN, CAR_WID, BG_COLOR, ROAD_COLOR, TOOLBAR_HEIGHT, HIGHWAY_COLOR, HIGHWAY_ROAD_W, NARROW_ROAD_W, PIN_COOLDOWN } from './constants.ts';
 import { camX, camY, zoom } from './camera.ts';
 import { edges, nodes, parseKey } from './graph.ts';
 import { buildings, getBuildingPixelPos, getConnectionPixelPos, getConnectionPoint, HOUSE_W, HOUSE_H, FACTORY_W, FACTORY_H } from './buildings.ts';
@@ -63,6 +63,7 @@ export function render(ctx: CanvasRenderingContext2D, width: number, height: num
   drawCars(ctx);
   drawBuildingShadows(ctx);
   drawBuildingBodies(ctx);
+  drawCollectingPins(ctx);
 
   // Restore from camera transform + clip
   ctx.restore();
@@ -361,7 +362,7 @@ function drawBuildingBodies(ctx: CanvasRenderingContext2D) {
       }
       // Draw pins on top of building layer
       if (!b.disabled && b.maxPins > 0) {
-        drawFactoryPins(ctx, pos.x, pos.y, pos.w, pos.h, b.pins, b.maxPins);
+        drawFactoryPins(ctx, pos.x, pos.y, pos.w, pos.h, b.pins, b.maxPins, b.pinCooldown);
       }
     }
   }
@@ -422,7 +423,7 @@ function drawFactory(ctx: CanvasRenderingContext2D, b: typeof buildings[0], pos:
 
   // Draw pins inside the building area (skip if disabled)
   if (!b.disabled) {
-    drawFactoryPins(ctx, bx, by, bw, bh, b.pins, b.maxPins);
+    drawFactoryPins(ctx, bx, by, bw, bh, b.pins, b.maxPins, b.pinCooldown);
   }
 }
 
@@ -436,17 +437,17 @@ function lightenColor(hex: string, amount: number): string {
   return `rgb(${lr},${lg},${lb})`;
 }
 
-function drawFactoryPins(ctx: CanvasRenderingContext2D, fx: number, fy: number, fw: number, fh: number, pins: number, maxPins: number) {
+function drawFactoryPins(ctx: CanvasRenderingContext2D, fx: number, fy: number, fw: number, fh: number, pins: number, maxPins: number, pinCooldown: number) {
   if (maxPins === 0) return;
-  // Pin area: top-right of the factory building portion
-  // Building occupies roughly the top 40% (for left/right) or left 40% (for top/bottom)
   const cols = 3;
-  const rows = Math.ceil(maxPins / cols);
-  const radius = 3.5;
+  const baseRadius = 3.5;
   const spacing = 10;
   const areaW = cols * spacing;
   const startX = fx + fw - areaW - 8;
   const startY = fy + 8;
+
+  // Spawn animation progress for the newest pin (0 = just spawned, 1 = fully settled)
+  const spawnT = pins > 0 && pinCooldown > 0 ? 1 - pinCooldown / PIN_COOLDOWN : 1;
 
   for (let i = 0; i < maxPins; i++) {
     const col = i % cols;
@@ -454,15 +455,34 @@ function drawFactoryPins(ctx: CanvasRenderingContext2D, fx: number, fy: number, 
     const px = startX + col * spacing + spacing / 2;
     const py = startY + row * spacing + spacing / 2;
 
-    ctx.beginPath();
-    ctx.arc(px, py, radius, 0, Math.PI * 2);
-
     if (i < pins) {
-      ctx.fillStyle = '#fff';
-      ctx.fill();
+      const isNewest = i === pins - 1 && spawnT < 1;
+      if (isNewest) {
+        // Elastic bounce: overshoot then settle
+        // t goes 0→1, scale overshoots to ~1.4 then bounces to 1.0
+        const t = spawnT;
+        const bounce = t < 0.4
+          ? t / 0.4 * 1.5                           // grow to 1.5x
+          : 1 + 0.5 * Math.cos((t - 0.4) / 0.6 * Math.PI * 2) * (1 - t); // bounce and settle
+        const r = baseRadius * Math.max(0, bounce);
+        const alpha = Math.min(1, t * 3); // fade in over first third
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(px, py, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      } else {
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(px, py, baseRadius, 0, Math.PI * 2);
+        ctx.fill();
+      }
     } else {
       ctx.strokeStyle = 'rgba(255,255,255,0.25)';
       ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(px, py, baseRadius, 0, Math.PI * 2);
       ctx.stroke();
     }
   }
@@ -476,8 +496,7 @@ function drawCars(ctx: CanvasRenderingContext2D) {
     // Pivot is at the rear axle — offset drawing so rear is at origin
     const rearOffset = CAR_LEN * 0.3; // rear axle ~30% from back
 
-    const alpha = (car.state === 'parked') ? 0.6 : 1;
-    ctx.globalAlpha = alpha;
+    ctx.globalAlpha = 1;
 
     // Car body with rounded corners, shifted so rear axle is at pivot
     const hh = CAR_WID / 2;
@@ -499,6 +518,29 @@ function drawCars(ctx: CanvasRenderingContext2D) {
 
     ctx.globalAlpha = 1;
     ctx.restore();
+  }
+}
+
+function drawCollectingPins(ctx: CanvasRenderingContext2D) {
+  for (const car of cars) {
+    if (car.state !== 'collecting') continue;
+    const t = car.collectProgress;
+    // Ease-out curve for snappy start, gentle arrival
+    const et = 1 - (1 - t) * (1 - t);
+    const px = car.pinSourceX + (car.x - car.pinSourceX) * et;
+    const py = car.pinSourceY + (car.y - car.pinSourceY) * et;
+    // Pin fades out as it arrives
+    const alpha = 1 - t * 0.5;
+    // Pin grows slightly then shrinks
+    const scale = 1 + 0.3 * Math.sin(t * Math.PI);
+    const radius = 3.5 * scale;
+
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(px, py, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
   }
 }
 

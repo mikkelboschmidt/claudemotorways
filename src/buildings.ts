@@ -277,6 +277,22 @@ export function getBuildingCenter(b: Building): { x: number; y: number } {
   };
 }
 
+// Get the pixel position of a specific pin slot in a factory
+export function getPinPixelPos(b: Building, pinIndex: number): { x: number; y: number } {
+  const pos = getBuildingPixelPos(b);
+  const cols = 3;
+  const spacing = 10;
+  const areaW = cols * spacing;
+  const startX = pos.x + pos.w - areaW - 8;
+  const startY = pos.y + 8;
+  const col = pinIndex % cols;
+  const row = Math.floor(pinIndex / cols);
+  return {
+    x: startX + col * spacing + spacing / 2,
+    y: startY + row * spacing + spacing / 2,
+  };
+}
+
 // Check if tile (gx, gy) is occupied by any building
 export function isInsideBuilding(gx: number, gy: number): boolean {
   for (const b of buildings) {

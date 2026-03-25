@@ -1,6 +1,7 @@
 // Background music player — loops an MP3 from public/music/
 
-export let musicEnabled = true;
+const AUDIO_KEY = 'claudemotorways_audio';
+export let musicEnabled = localStorage.getItem(AUDIO_KEY) !== 'off';
 
 const VOLUME = 0.3;
 const audio = new Audio();
@@ -35,6 +36,7 @@ export function stopMusic() {
 
 export function toggleMusic(): boolean {
   musicEnabled = !musicEnabled;
+  localStorage.setItem(AUDIO_KEY, musicEnabled ? 'on' : 'off');
   if (musicEnabled) {
     startMusic();
   } else {

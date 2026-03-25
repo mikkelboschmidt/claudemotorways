@@ -49,7 +49,7 @@ export interface Car {
   angle: number;
   targetAngle: number; // for smooth rotation
   speed: number;
-  state: 'toWork' | 'toHome' | 'parking' | 'parked' | 'departing';
+  state: 'toWork' | 'toHome' | 'parking' | 'parked' | 'collecting' | 'departing';
   parkTimer: number;
   parkProgress: number;
   parkStartX: number;
@@ -66,6 +66,9 @@ export interface Car {
   parkSlot: number; // which slot in the factory this car occupies
   stuckFrames: number; // frames spent at speed 0 (for rerouting)
   nextState: 'toWork' | 'toHome';
+  collectProgress: number; // 0→1 animation of pin flying to car
+  pinSourceX: number; // factory pin origin (world px)
+  pinSourceY: number;
 }
 
 export interface RoadPreview {

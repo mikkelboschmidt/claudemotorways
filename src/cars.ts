@@ -1,7 +1,7 @@
 import { Car } from './types.ts';
 import { CAR_SPEED, CAR_ACCEL, CAR_DECEL, CAR_LEN, CAR_WID, MIN_GAP, LANE_W, SPAWN_INTERVAL, MAX_CARS_PER_HOUSE, PARK_DURATION, PARK_ANIM_SPEED, TURN_LERP, CORNER_BRAKE_DIST, CORNER_MIN_SPEED, CORNER_MED_SPEED, HIGHWAY_SPEED } from './constants.ts';
 import { edges, getEdgeBetween, graphVersion, nodes } from './graph.ts';
-import { buildings, buildingById, getBuildingCenter, getBuildingPixelPos, getConnectionPixelPos } from './buildings.ts';
+import { buildings, buildingById, getBuildingCenter, getBuildingPixelPos, getConnectionPixelPos, getPinPixelPos } from './buildings.ts';
 import { findPath } from './pathfinding.ts';
 import { addScore } from './score.ts';
 import { highwayEdgeSet } from './highway.ts';
@@ -47,7 +47,7 @@ export function removeCarsForBuilding(buildingId: number) {
 export function evictCarsFromFactory(factoryId: number) {
   for (const car of cars) {
     if (car.workBuildingId !== factoryId) continue;
-    if (car.state === 'parked') {
+    if (car.state === 'parked' || car.state === 'collecting') {
       // Force immediate departure
       car.state = 'departing';
       car.parkProgress = 0;
@@ -80,7 +80,7 @@ function lerpAngle(current: number, target: number, t: number): number {
 function countParkedCars(buildingId: number): number {
   let count = 0;
   for (const c of cars) {
-    if (c.workBuildingId === buildingId && (c.state === 'parking' || c.state === 'parked' || c.state === 'departing')) {
+    if (c.workBuildingId === buildingId && (c.state === 'parking' || c.state === 'parked' || c.state === 'collecting' || c.state === 'departing')) {
       count++;
     }
   }
@@ -94,7 +94,7 @@ function getFactoryParkSlot(buildingId: number, car: Car): number {
   const takenSlots = new Set<number>();
   for (const c of cars) {
     if (c === car) continue;
-    if (c.workBuildingId === buildingId && (c.state === 'parking' || c.state === 'parked' || c.state === 'departing')) {
+    if (c.workBuildingId === buildingId && (c.state === 'parking' || c.state === 'parked' || c.state === 'collecting' || c.state === 'departing')) {
       takenSlots.add(c.parkSlot);
     }
   }
@@ -112,7 +112,7 @@ function canDepartFactory(buildingId: number, car: Car): boolean {
     if (c === car) continue;
     if (c.workBuildingId !== buildingId) continue;
     // Block if any car is mid-animation in this factory
-    if (c.state === 'parking' || c.state === 'departing') return false;
+    if (c.state === 'parking' || c.state === 'collecting' || c.state === 'departing') return false;
     // Block if another parked car arrived earlier (FIFO)
     if (c.state === 'parked' && c.parkedAt < car.parkedAt) return false;
   }
@@ -332,7 +332,7 @@ function getHouseExitPoint(buildingId: number): { x: number; y: number } {
 function factoryNeed(factory: typeof buildings[0]): number {
   let carsAssigned = 0;
   for (const c of cars) {
-    if (c.workBuildingId === factory.id && (c.state === 'toWork' || c.state === 'parking' || c.state === 'parked')) {
+    if (c.workBuildingId === factory.id && (c.state === 'toWork' || c.state === 'parking' || c.state === 'parked' || c.state === 'collecting')) {
       carsAssigned++;
     }
   }
@@ -554,6 +554,9 @@ function createCar(homeId: number, workId: number, color: string, path: string[]
     parkSlot: 0,
     stuckFrames: 0,
     nextState: 'toHome',
+    collectProgress: 0,
+    pinSourceX: 0,
+    pinSourceY: 0,
   };
 
   if (edge.narrow) lockNarrowChain(edge.id, dir);
@@ -775,9 +778,14 @@ export function updateCars() {
           canDepart = true;
         } else if (canDepartFactory(car.workBuildingId, car)) {
           if (factory && factory.pins > 0 && factory.pinCooldown <= 0) {
+            // Start collecting animation — pin flies to car
+            const pinPos = getPinPixelPos(factory, factory.pins - 1);
             factory.pins--;
             addScore(1);
-            canDepart = true;
+            car.state = 'collecting';
+            car.collectProgress = 0;
+            car.pinSourceX = pinPos.x;
+            car.pinSourceY = pinPos.y;
           }
         }
       } else {
@@ -802,6 +810,38 @@ export function updateCars() {
           car.parkCy2 = (car.parkStartY + exit.y * 2) / 3;
         } else {
           // Departing from factory: build exit path to the right lane
+          const ep = getFactoryExitPath(car.workBuildingId, car);
+          car.parkStartX = ep.p0x;
+          car.parkStartY = ep.p0y;
+          car.parkCx1 = ep.p1x;
+          car.parkCy1 = ep.p1y;
+          car.parkCx2 = ep.p2x;
+          car.parkCy2 = ep.p2y;
+          car.parkTargetX = ep.p3x;
+          car.parkTargetY = ep.p3y;
+        }
+      }
+    } else if (car.state === 'collecting') {
+      // Pin flies from factory to car over ~30 frames
+      car.collectProgress += 0.035;
+      if (car.collectProgress >= 1) {
+        car.collectProgress = 1;
+        // Transition to departing
+        car.state = 'departing';
+        car.parkProgress = 0;
+
+        if (car.nextState === 'toWork') {
+          const buildingId = car.homeBuildingId;
+          const exit = getHouseExitPoint(buildingId);
+          car.parkStartX = car.parkTargetX;
+          car.parkStartY = car.parkTargetY;
+          car.parkTargetX = exit.x;
+          car.parkTargetY = exit.y;
+          car.parkCx1 = (car.parkStartX * 2 + exit.x) / 3;
+          car.parkCy1 = (car.parkStartY * 2 + exit.y) / 3;
+          car.parkCx2 = (car.parkStartX + exit.x * 2) / 3;
+          car.parkCy2 = (car.parkStartY + exit.y * 2) / 3;
+        } else {
           const ep = getFactoryExitPath(car.workBuildingId, car);
           car.parkStartX = ep.p0x;
           car.parkStartY = ep.p0y;
@@ -1152,7 +1192,7 @@ export function updateCars() {
               if (targetBuilding.type === 'factory' && targetBuilding.maxParkedCars > 0) {
                 const parkedCount = countParkedCars(targetBuildingId);
                 const hasAnimating = cars.some(c =>
-                  c.workBuildingId === targetBuildingId && (c.state === 'parking' || c.state === 'departing'));
+                  c.workBuildingId === targetBuildingId && (c.state === 'parking' || c.state === 'collecting' || c.state === 'departing'));
                 if (parkedCount >= targetBuilding.maxParkedCars || hasAnimating) {
                   blocked = true;
                 }
