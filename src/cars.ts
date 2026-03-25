@@ -1,5 +1,5 @@
 import { Car } from './types.ts';
-import { CAR_SPEED, CAR_ACCEL, CAR_DECEL, CAR_LEN, CAR_WID, MIN_GAP, LANE_W, SPAWN_INTERVAL, MAX_CARS_PER_HOUSE, PARK_DURATION, PARK_ANIM_SPEED, TURN_LERP, CORNER_BRAKE_DIST, CORNER_MIN_SPEED, CORNER_MED_SPEED, HIGHWAY_SPEED, TRUCK_SPEED, TRUCK_CAPACITY, MAX_TRUCKS_PER_STORAGE, TRUCK_SPAWN_INTERVAL } from './constants.ts';
+import { CAR_SPEED, CAR_ACCEL, CAR_DECEL, CAR_LEN, CAR_WID, MIN_GAP, LANE_W, SPAWN_INTERVAL, MAX_CARS_PER_HOUSE, PARK_DURATION, PARK_ANIM_SPEED, TURN_LERP, CORNER_BRAKE_DIST, CORNER_MIN_SPEED, CORNER_MED_SPEED, HIGHWAY_SPEED, TRUCK_SPEED, TRUCK_CAPACITY, MAX_TRUCKS_PER_STORAGE, TRUCK_SPAWN_INTERVAL, FACTORY_MAX_PINS } from './constants.ts';
 import { edges, getEdgeBetween, graphVersion, nodes } from './graph.ts';
 import { buildings, buildingById, getBuildingCenter, getBuildingPixelPos, getConnectionPixelPos, getPinPixelPos } from './buildings.ts';
 import { findPath } from './pathfinding.ts';
@@ -411,21 +411,30 @@ function pickBestPinSource(fromNodeKey: string, targets: typeof buildings): { bu
       need = factoryNeed(target);
       if (need <= 0 && target.pins === 0) continue;
     } else {
-      // Storage: need = pins available minus cars heading there, with small base desire
+      // Storage: only send cars if there are actual pins to collect
+      if (target.pins === 0) continue;
       let carsHeading = 0;
       for (const c of cars) {
         if (!c.isTruck && c.workBuildingId === target.id && (c.state === 'toWork' || c.state === 'parking' || c.state === 'parked' || c.state === 'collecting')) {
           carsHeading++;
         }
       }
-      need = target.pins - carsHeading + 0.5;
-      if (need <= 0 && target.pins === 0) continue;
+      need = target.pins - carsHeading;
+      if (need <= 0) continue;
     }
 
     const path = findPath(fromNodeKey, target.nodeKey);
     if (!path || path.length < 2) continue;
 
-    const score = need * 10 - path.length;
+    let score: number;
+    if (target.type === 'storage') {
+      // Prefer storage to keep inventory low
+      score = need * 10 + 15 - path.length;
+    } else {
+      // Factory: urgency rises as pins approach capacity (prevents burn-out)
+      const urgency = target.pins / FACTORY_MAX_PINS;
+      score = need * 10 * (1 + urgency * 2) - path.length;
+    }
     if (score > bestScore) {
       bestScore = score;
       best = { building: target, path };
@@ -1046,6 +1055,9 @@ export function updateCars() {
         // Regular car at factory or storage (nextState === 'toHome')
         if (parkedBuilding && parkedBuilding.disabled) {
           canDepart = true;
+        } else if (parkedBuilding && parkedBuilding.type === 'storage' && parkedBuilding.pins === 0) {
+          // Storage is empty — leave immediately so we don't block the truck
+          canDepart = true;
         } else if (canDepartBuilding(parkedAtId, car)) {
           if (parkedBuilding && parkedBuilding.pins > 0 && parkedBuilding.pinCooldown <= 0) {
             // Start collecting animation — pin flies to car
@@ -1410,11 +1422,19 @@ export function updateCars() {
               // Check if building is full or has a car mid-animation
               let blocked = false;
               if ((targetBuilding.type === 'factory' || targetBuilding.type === 'storage') && targetBuilding.maxParkedCars > 0) {
-                const parkedCount = countParkedCars(targetBuildingId);
-                const hasAnimating = cars.some(c =>
-                  (c.state === 'parking' || c.state === 'collecting' || c.state === 'departing') && getParkedBuildingId(c) === targetBuildingId);
-                if (parkedCount >= targetBuilding.maxParkedCars || hasAnimating) {
-                  blocked = true;
+                if (targetBuilding.type === 'storage' && !car.isTruck) {
+                  // Storage: cars can enter freely (one at a time via animation check),
+                  // but trucks don't block car entry
+                  const carAnimating = cars.some(c =>
+                    !c.isTruck && (c.state === 'parking' || c.state === 'collecting' || c.state === 'departing') && getParkedBuildingId(c) === targetBuildingId);
+                  if (carAnimating) blocked = true;
+                } else {
+                  const parkedCount = countParkedCars(targetBuildingId);
+                  const hasAnimating = cars.some(c =>
+                    (c.state === 'parking' || c.state === 'collecting' || c.state === 'departing') && getParkedBuildingId(c) === targetBuildingId);
+                  if (parkedCount >= targetBuilding.maxParkedCars || hasAnimating) {
+                    blocked = true;
+                  }
                 }
               }
               // Trucks can only enter factories when the parking lot is completely empty

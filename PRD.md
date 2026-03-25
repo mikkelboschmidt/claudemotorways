@@ -222,3 +222,5 @@ Right side: FPS counter, speed controls (⏸ 1× 2× 3×), music toggle, reset b
 9. **UI**: Score display and toolbar (screen-space, not affected by camera).
 
 Buildings use an SVG sprite system with programmatic color replacement. Each SVG has three layer groups (`Ground`, `Shadows`, `Building`) filtered by hiding non-target groups. Colors are replaced by matching element IDs (`RoofMain` → building color, `RoofShadow` → darkened variant). Disabled buildings render in gray (`#555555`).
+
+**SVG assets are manually authored and must never be modified programmatically.** All SVG files in `assets/` are hand-crafted — changes to sprites should be made by the designer, not by code or automation.
