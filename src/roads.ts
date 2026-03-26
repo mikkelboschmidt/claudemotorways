@@ -24,6 +24,9 @@ const DRAG_THRESHOLD = 8; // pixels of screen movement before drag activates
 // Whether input is from touch (disables hover ghost)
 let isTouch = false;
 
+// Pending tap action (deferred to pointerup to avoid pinch-zoom false triggers)
+let pendingTap: (() => void) | null = null;
+
 // Callback to get active touch count (set from main.ts to avoid circular import)
 let getActiveTouchCount: () => number = () => 0;
 export function setTouchCountGetter(fn: () => number) { getActiveTouchCount = fn; }
@@ -44,6 +47,7 @@ export function cancelRoadDrag() {
   dragging = false;
   dragConfirmed = false;
   removeRoadDragging = false;
+  pendingTap = null;
   pendingRemoveTiles.clear();
   roadPreview = null;
   hoverGx = null;
@@ -145,17 +149,24 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
     } else if (activeTool === 'addBuilding') {
       const gridX = Math.floor(px / GRID);
       const gridY = Math.floor(py / GRID);
-      if (addBuilding(gridX, gridY, selectedBuildingType, selectedColor)) {
-        playSfx('build');
-        saveGame();
-      }
+      const bType = selectedBuildingType;
+      const bColor = selectedColor;
+      pendingTap = () => {
+        if (addBuilding(gridX, gridY, bType, bColor)) {
+          playSfx('build');
+          saveGame();
+        }
+      };
     } else if (activeTool === 'removeBuilding') {
       const building = findBuildingAtPixel(px, py);
       if (building) {
-        removeCarsForBuilding(building.id);
-        removeBuilding(building.id);
-        playSfx('demolish');
-        saveGame();
+        const bid = building.id;
+        pendingTap = () => {
+          removeCarsForBuilding(bid);
+          removeBuilding(bid);
+          playSfx('demolish');
+          saveGame();
+        };
       }
     } else if (activeTool === 'addHighway') {
       // Check for handle drag first
@@ -259,6 +270,12 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
   });
 
   canvas.addEventListener('pointerup', () => {
+    // Execute deferred tap action (building place/remove) if no drag/pinch occurred
+    if (pendingTap && !dragConfirmed && getActiveTouchCount() < 2) {
+      pendingTap();
+    }
+    pendingTap = null;
+
     // Finalize highway handle drag
     if (draggingHighwayId >= 0) {
       const hw = highways.find(h => h.id === draggingHighwayId);
