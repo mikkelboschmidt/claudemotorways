@@ -3,6 +3,7 @@ import { nodeKey, nodes, addEdge, bumpGraphVersion, removeEdge } from './graph.t
 import { GRID, HALF, PIN_SPAWN_INTERVAL, PIN_COOLDOWN, FACTORY_MAX_PINS, FACTORY_MAX_PARKED, STORAGE_W, STORAGE_H, STORAGE_MAX_PINS, STORAGE_MAX_PARKED } from './constants.ts';
 import { resetSpawnTimer, evictCarsFromFactory, removeCarsForBuilding } from './cars.ts';
 import { addScore } from './score.ts';
+import { getFactorySprite, getStorageSprite } from './sprites.ts';
 
 export const HOUSE_W = 1;
 export const HOUSE_H = 1;
@@ -286,11 +287,51 @@ export function getBuildingCenter(b: Building): { x: number; y: number } {
   };
 }
 
-// Get the pixel position of a specific pin slot in a factory
+// Get the pixel position of a specific pin slot in a building
 export function getPinPixelPos(b: Building, pinIndex: number): { x: number; y: number } {
   const pos = getBuildingPixelPos(b);
-  const cols = 3;
+
+  // Try to get pin placement from sprite
+  const sprite = b.type === 'storage'
+    ? getStorageSprite(b.connectionSide, b.color)
+    : b.type === 'factory'
+      ? getFactorySprite(b.connectionSide, b.color)
+      : null;
+  const pp = sprite?.pinPlacement;
+
+  if (pp) {
+    const rows = b.type === 'storage' ? 4 : 2;
+    const cols = Math.ceil(b.maxPins / rows);
+    const spacing = Math.min(pp.w / cols, pp.h / rows);
+    const gridW = cols * spacing;
+    const gridH = rows * spacing;
+    const startX = pos.x + pp.x + (pp.w - gridW) / 2;
+    const startY = pos.y + pp.y + (pp.h - gridH) / 2;
+    const col = pinIndex % cols;
+    const row = Math.floor(pinIndex / cols);
+    return {
+      x: startX + col * spacing + spacing / 2,
+      y: startY + row * spacing + spacing / 2,
+    };
+  }
+
+  // Fallback: hardcoded layouts
   const spacing = 10;
+  if (b.type === 'storage') {
+    const cols = 4;
+    const areaW = cols * spacing;
+    const areaH = cols * spacing;
+    const startX = pos.x + (pos.w - areaW) / 2;
+    const startY = pos.y + (pos.h - areaH) / 2;
+    const col = pinIndex % cols;
+    const row = Math.floor(pinIndex / cols);
+    return {
+      x: startX + col * spacing + spacing / 2,
+      y: startY + row * spacing + spacing / 2,
+    };
+  }
+  // Factory: 3-column top-right layout
+  const cols = 3;
   const areaW = cols * spacing;
   const startX = pos.x + pos.w - areaW - 8;
   const startY = pos.y + 8;

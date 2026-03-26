@@ -10,7 +10,7 @@ import { score } from './score.ts';
 import { gameSpeed, SPEED_OPTIONS, SPEED_LABELS } from './speed.ts';
 import { highways, highwayEdgeSet, highwayPhase, highwayStartGx, highwayStartGy, highwayPreviewEndPx, highwayPreviewEndPy, computeBezierControls, draggingHighwayId } from './highway.ts';
 import { musicEnabled } from './music.ts';
-import { getHouseSprite, getFactorySprite, getStorageSprite, drawSpriteLayer } from './sprites.ts';
+import { getHouseSprite, getFactorySprite, getStorageSprite, drawSpriteLayer, PinPlacement } from './sprites.ts';
 
 export function render(ctx: CanvasRenderingContext2D, width: number, height: number, preview: RoadPreview | null, fps: number = 0) {
   const gameHeight = height - TOOLBAR_HEIGHT;
@@ -377,7 +377,8 @@ function drawBuildingBodies(ctx: CanvasRenderingContext2D) {
       }
       // Draw pins on top of building layer
       if (!b.disabled && b.maxPins > 0) {
-        drawFactoryPins(ctx, pos.x, pos.y, pos.w, pos.h, b.pins, b.maxPins, b.pinCooldown);
+        const factorySprite = getFactorySprite(b.connectionSide, color);
+        drawBuildingPins(ctx, pos.x, pos.y, pos.w, pos.h, b.pins, b.maxPins, b.pinCooldown, 'factory', factorySprite?.pinPlacement ?? null);
       }
     } else if (b.type === 'storage') {
       const sprite = getStorageSprite(b.connectionSide, color);
@@ -387,7 +388,7 @@ function drawBuildingBodies(ctx: CanvasRenderingContext2D) {
         drawStorage(ctx, b, pos);
       }
       if (b.maxPins > 0) {
-        drawFactoryPins(ctx, pos.x, pos.y, pos.w, pos.h, b.pins, b.maxPins, 0);
+        drawBuildingPins(ctx, pos.x, pos.y, pos.w, pos.h, b.pins, b.maxPins, 0, 'storage', sprite?.pinPlacement ?? null);
       }
     }
   }
@@ -448,7 +449,7 @@ function drawFactory(ctx: CanvasRenderingContext2D, b: typeof buildings[0], pos:
 
   // Draw pins inside the building area (skip if disabled)
   if (!b.disabled) {
-    drawFactoryPins(ctx, bx, by, bw, bh, b.pins, b.maxPins, b.pinCooldown);
+    drawBuildingPins(ctx, bx, by, bw, bh, b.pins, b.maxPins, b.pinCooldown, 'factory', null);
   }
 }
 
@@ -506,14 +507,35 @@ function darkenColor(hex: string, amount: number): string {
   return `rgb(${Math.round(r * (1 - amount))},${Math.round(g * (1 - amount))},${Math.round(b * (1 - amount))})`;
 }
 
-function drawFactoryPins(ctx: CanvasRenderingContext2D, fx: number, fy: number, fw: number, fh: number, pins: number, maxPins: number, pinCooldown: number) {
+function drawBuildingPins(ctx: CanvasRenderingContext2D, fx: number, fy: number, fw: number, fh: number, pins: number, maxPins: number, pinCooldown: number, type: 'factory' | 'storage', pinPlacement: PinPlacement | null) {
   if (maxPins === 0) return;
-  const cols = 3;
   const baseRadius = 3.5;
-  const spacing = 10;
-  const areaW = cols * spacing;
-  const startX = fx + fw - areaW - 8;
-  const startY = fy + 8;
+
+  let startX: number, startY: number, cols: number, spacing: number;
+
+  if (pinPlacement) {
+    // Use SVG-defined pin placement area — fit a grid inside it
+    const rows = type === 'storage' ? 4 : 2;
+    cols = Math.ceil(maxPins / rows);
+    spacing = Math.min(pinPlacement.w / cols, pinPlacement.h / rows);
+    const gridW = cols * spacing;
+    const gridH = rows * spacing;
+    startX = fx + pinPlacement.x + (pinPlacement.w - gridW) / 2;
+    startY = fy + pinPlacement.y + (pinPlacement.h - gridH) / 2;
+  } else {
+    // Fallback: hardcoded layouts
+    cols = type === 'storage' ? 4 : 3;
+    spacing = 10;
+    const areaW = cols * spacing;
+    if (type === 'storage') {
+      const areaH = cols * spacing;
+      startX = fx + (fw - areaW) / 2;
+      startY = fy + (fh - areaH) / 2;
+    } else {
+      startX = fx + fw - areaW - 8;
+      startY = fy + 8;
+    }
+  }
 
   // Spawn animation progress for the newest pin (0 = just spawned, 1 = fully settled)
   const spawnT = pins > 0 && pinCooldown > 0 ? 1 - pinCooldown / PIN_COOLDOWN : 1;

@@ -15,6 +15,13 @@ interface SpriteLayer {
   ready: boolean;
 }
 
+export interface PinPlacement {
+  x: number;      // pixel offset from building top-left
+  y: number;
+  w: number;
+  h: number;
+}
+
 export interface LayeredSprite {
   ground: SpriteLayer;   // drawn below roads/cars
   shadow: SpriteLayer;   // drawn above cars, below buildings
@@ -23,6 +30,7 @@ export interface LayeredSprite {
   anchorY: number;
   width: number;
   height: number;
+  pinPlacement: PinPlacement | null;
 }
 
 interface SpriteDef {
@@ -141,8 +149,49 @@ function svgToImage(svg: string): SpriteLayer {
   return layer;
 }
 
+// Extract PinPlacement rect from SVG raw string.
+// Returns pixel offset relative to the building's top-left corner.
+// SVG coordinates map 1:1 to sprite pixels (viewBox matches tile dimensions × GRID).
+function extractPinPlacement(svgRaw: string, def: SpriteDef): PinPlacement | null {
+  const match = svgRaw.match(/<rect[^>]*id="PinPlacement"[^>]*\/>/);
+  if (!match) return null;
+  const tag = match[0];
+  const x = parseFloat(tag.match(/\bx="([^"]*)"/)![1]);
+  const y = parseFloat(tag.match(/\by="([^"]*)"/)![1]);
+  const w = parseFloat(tag.match(/\bwidth="([^"]*)"/)![1]);
+  const h = parseFloat(tag.match(/\bheight="([^"]*)"/)![1]);
+  // Anchor in SVG space is where the building's top-left sits
+  const anchorSvgX = def.anchorTileX * GRID;
+  const anchorSvgY = def.anchorTileY * GRID;
+  return {
+    x: x - anchorSvgX,
+    y: y - anchorSvgY,
+    w,
+    h,
+  };
+}
+
 // Cache: "type:side:color" → LayeredSprite
 const spriteCache = new Map<string, LayeredSprite>();
+
+function buildSprite(def: SpriteDef, color: string): LayeredSprite {
+  const svg = colorize(def.raw, def, color);
+  const allLayerIds = [...def.groundIds, ...def.shadowIds, ...def.buildingIds];
+  // Hide PinPlacement rect from all layers (it's just metadata)
+  let filtered = svg;
+  filtered = filtered.replace(/(<[^>]*id="PinPlacement")/, '$1 display="none"');
+
+  return {
+    ground: svgToImage(filterLayer(filtered, allLayerIds, def.groundIds)),
+    shadow: svgToImage(filterLayer(filtered, allLayerIds, def.shadowIds)),
+    building: svgToImage(filterLayer(filtered, allLayerIds, def.buildingIds)),
+    anchorX: def.anchorTileX * GRID,
+    anchorY: def.anchorTileY * GRID,
+    width: def.widthTiles * GRID,
+    height: def.heightTiles * GRID,
+    pinPlacement: extractPinPlacement(def.raw, def),
+  };
+}
 
 export function getHouseSprite(side: ConnectionSide, color: string): LayeredSprite | null {
   const defKey = `house:${side}`;
@@ -153,19 +202,7 @@ export function getHouseSprite(side: ConnectionSide, color: string): LayeredSpri
   const cached = spriteCache.get(cacheKey);
   if (cached) return cached;
 
-  const svg = colorize(def.raw, def, color);
-  const allLayerIds = [...def.groundIds, ...def.shadowIds, ...def.buildingIds];
-
-  const sprite: LayeredSprite = {
-    ground: svgToImage(filterLayer(svg, allLayerIds, def.groundIds)),
-    shadow: svgToImage(filterLayer(svg, allLayerIds, def.shadowIds)),
-    building: svgToImage(filterLayer(svg, allLayerIds, def.buildingIds)),
-    anchorX: def.anchorTileX * GRID,
-    anchorY: def.anchorTileY * GRID,
-    width: def.widthTiles * GRID,
-    height: def.heightTiles * GRID,
-  };
-
+  const sprite = buildSprite(def, color);
   spriteCache.set(cacheKey, sprite);
   return sprite;
 }
@@ -179,19 +216,7 @@ export function getFactorySprite(side: ConnectionSide, color: string): LayeredSp
   const cached = spriteCache.get(cacheKey);
   if (cached) return cached;
 
-  const svg = colorize(def.raw, def, color);
-  const allLayerIds = [...def.groundIds, ...def.shadowIds, ...def.buildingIds];
-
-  const sprite: LayeredSprite = {
-    ground: svgToImage(filterLayer(svg, allLayerIds, def.groundIds)),
-    shadow: svgToImage(filterLayer(svg, allLayerIds, def.shadowIds)),
-    building: svgToImage(filterLayer(svg, allLayerIds, def.buildingIds)),
-    anchorX: def.anchorTileX * GRID,
-    anchorY: def.anchorTileY * GRID,
-    width: def.widthTiles * GRID,
-    height: def.heightTiles * GRID,
-  };
-
+  const sprite = buildSprite(def, color);
   spriteCache.set(cacheKey, sprite);
   return sprite;
 }
@@ -205,19 +230,7 @@ export function getStorageSprite(side: ConnectionSide, color: string): LayeredSp
   const cached = spriteCache.get(cacheKey);
   if (cached) return cached;
 
-  const svg = colorize(def.raw, def, color);
-  const allLayerIds = [...def.groundIds, ...def.shadowIds, ...def.buildingIds];
-
-  const sprite: LayeredSprite = {
-    ground: svgToImage(filterLayer(svg, allLayerIds, def.groundIds)),
-    shadow: svgToImage(filterLayer(svg, allLayerIds, def.shadowIds)),
-    building: svgToImage(filterLayer(svg, allLayerIds, def.buildingIds)),
-    anchorX: def.anchorTileX * GRID,
-    anchorY: def.anchorTileY * GRID,
-    width: def.widthTiles * GRID,
-    height: def.heightTiles * GRID,
-  };
-
+  const sprite = buildSprite(def, color);
   spriteCache.set(cacheKey, sprite);
   return sprite;
 }

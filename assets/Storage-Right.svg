@@ -1,17 +1,17 @@
 <svg width="160" height="160" viewBox="0 0 160 160" fill="none" xmlns="http://www.w3.org/2000/svg">
 <g id="Storage-Right">
 <g id="Ground">
-<rect id="Fill" x="40" y="40" width="80" height="80" fill="#414141"/>
+<rect id="Fill" x="40" y="40" width="80" height="80" fill="#555555"/>
+<path id="Polygon 1" d="M101 100L107 93.9378L107 106.062L101 100Z" fill="white" fill-opacity="0.39"/>
+<path id="Polygon 2" d="M116 100L110 106.062L110 93.9378L116 100Z" fill="white" fill-opacity="0.39"/>
 </g>
 <g id="Shadows">
-<path id="Shadow" d="M131 59V131H59L44 116V44H116L131 59Z" fill="black" fill-opacity="0.1"/>
+<path id="Shadow" d="M105 55V105H55L40 90V40H90L105 55Z" fill="black" fill-opacity="0.1"/>
 </g>
+<rect id="PinPlacement" x="44.5" y="44.5" width="41" height="41" stroke="black"/>
 <g id="Building">
-<rect id="RoofMain" x="44" y="44" width="72" height="72" fill="#FF0000"/>
-<path id="RoofShadow" d="M112 51H51V112H48V48H112V51Z" fill="#CC0000"/>
-<path id="RoofShadow_2" d="M110 70V110H70L60 100V60H100L110 70Z" fill="#CC0000"/>
-<rect id="RoofMain_2" x="60" y="60" width="40" height="40" fill="#FF0000"/>
-<rect id="RoofShadow_3" x="116" y="84" width="8" height="30" fill="#CC0000"/>
+<rect id="RoofMain" x="40" y="40" width="50" height="50" fill="#FF0000"/>
+<path id="RoofShadow" d="M86 47H47V86H44V44H86V47Z" fill="#CC0000"/>
 </g>
 </g>
 </svg>
