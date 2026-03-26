@@ -1,11 +1,11 @@
-import { GRID, HALF, ROAD_W, DASH_LEN, DASH_GAP, CAR_LEN, CAR_WID, BG_COLOR, ROAD_COLOR, TOOLBAR_HEIGHT, HIGHWAY_COLOR, HIGHWAY_ROAD_W, NARROW_ROAD_W, PIN_COOLDOWN, TRUCK_LEN, TRUCK_WID } from './constants.ts';
+import { GRID, HALF, ROAD_W, DASH_LEN, DASH_GAP, CAR_LEN, CAR_WID, BG_COLOR, ROAD_COLOR, HIGHWAY_COLOR, HIGHWAY_ROAD_W, NARROW_ROAD_W, PIN_COOLDOWN, TRUCK_LEN, TRUCK_WID } from './constants.ts';
 import { camX, camY, zoom } from './camera.ts';
 import { edges, nodes, parseKey } from './graph.ts';
 import { buildings, getBuildingPixelPos, getConnectionPixelPos, getConnectionPoint, HOUSE_W, HOUSE_H, FACTORY_W, FACTORY_H, STORAGE_W_TILES, STORAGE_H_TILES } from './buildings.ts';
 import { hoverGx, hoverGy, pendingRemoveTiles } from './roads.ts';
 import { cars } from './cars.ts';
 import { RoadPreview, ToolType, BUILDING_COLORS } from './types.ts';
-import { activeTool, selectedColor, selectedBuildingType } from './toolbar.ts';
+import { activeTool, selectedColor, selectedBuildingType, gearMenuOpen } from './toolbar.ts';
 import { score } from './score.ts';
 import { gameSpeed, SPEED_OPTIONS, SPEED_LABELS } from './speed.ts';
 import { highways, highwayEdgeSet, highwayPhase, highwayStartGx, highwayStartGy, highwayPreviewEndPx, highwayPreviewEndPy, computeBezierControls, draggingHighwayId } from './highway.ts';
@@ -13,16 +13,14 @@ import { musicEnabled } from './music.ts';
 import { getHouseSprite, getFactorySprite, getStorageSprite, drawSpriteLayer, PinPlacement } from './sprites.ts';
 
 export function render(ctx: CanvasRenderingContext2D, width: number, height: number, preview: RoadPreview | null, fps: number = 0) {
-  const gameHeight = height - TOOLBAR_HEIGHT;
-
   // Clear entire canvas
   ctx.fillStyle = BG_COLOR;
-  ctx.fillRect(0, 0, width, gameHeight);
+  ctx.fillRect(0, 0, width, height);
 
-  // Clip game area so nothing draws over toolbar
+  // Clip game area
   ctx.save();
   ctx.beginPath();
-  ctx.rect(0, 0, width, gameHeight);
+  ctx.rect(0, 0, width, height);
   ctx.clip();
 
   // Apply camera transform: scale then translate
@@ -33,7 +31,7 @@ export function render(ctx: CanvasRenderingContext2D, width: number, height: num
   const worldLeft = camX;
   const worldTop = camY;
   const worldRight = camX + width / zoom;
-  const worldBottom = camY + gameHeight / zoom;
+  const worldBottom = camY + height / zoom;
 
   ctx.strokeStyle = 'rgba(255,255,255,0.05)';
   ctx.lineWidth = 1 / zoom; // keep 1px on screen
@@ -666,249 +664,386 @@ function drawScore(ctx: CanvasRenderingContext2D, width: number) {
   ctx.fillText(text, width - 15, 15);
 }
 
-function drawToolbar(ctx: CanvasRenderingContext2D, width: number, height: number, fps: number = 0) {
-  const y = height - TOOLBAR_HEIGHT;
+// ============ FLOATING TOOLBAR ============
 
-  ctx.fillStyle = '#2c3e50';
-  ctx.fillRect(0, y, width, TOOLBAR_HEIGHT);
-  ctx.strokeStyle = '#4a6785';
-  ctx.lineWidth = 2;
+const BTN_SIZE = 44;      // circular button diameter
+const BTN_GAP = 10;       // gap between buttons
+const BTN_MARGIN = 12;    // margin from screen edge
+const GEAR_SIZE = 48;     // gear button diameter
+
+// Draw a circular button with icon
+function drawCircleButton(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, active: boolean, drawIcon: (ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) => void) {
+  // Background
+  ctx.fillStyle = active ? '#3498db' : 'rgba(44, 62, 80, 0.85)';
   ctx.beginPath();
-  ctx.moveTo(0, y);
-  ctx.lineTo(width, y);
-  ctx.stroke();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
 
-  const tools: { type: ToolType; label: string }[] = [
-    { type: 'addRoad', label: 'Road' },
-    { type: 'addNarrow', label: 'Narrow' },
-    { type: 'addHighway', label: 'Highway' },
-    { type: 'removeRoad', label: 'Remove' },
-    { type: 'addBuilding', label: 'Building' },
-    { type: 'removeBuilding', label: 'Demolish' },
-  ];
-
-  let x = 15;
-  const btnH = 40;
-  const btnY = y + (TOOLBAR_HEIGHT - btnH) / 2;
-
-  ctx.font = '13px sans-serif';
-
-  for (const tool of tools) {
-    const btnW = ctx.measureText(tool.label).width + 30;
-    const isActive = activeTool === tool.type;
-
-    ctx.fillStyle = isActive ? '#3498db' : '#34495e';
+  // Active ring
+  if (active) {
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.roundRect(x, btnY, btnW, btnH, 6);
-    ctx.fill();
-
-    if (isActive) {
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.roundRect(x, btnY, btnW, btnH, 6);
-      ctx.stroke();
-    }
-
-    ctx.fillStyle = '#fff';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(tool.label, x + btnW / 2, btnY + btnH / 2);
-
-    x += btnW + 10;
-  }
-
-  if (activeTool === 'addBuilding') {
-    x += 10;
-    ctx.strokeStyle = '#4a6785';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(x, btnY + 4);
-    ctx.lineTo(x, btnY + btnH - 4);
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.stroke();
-    x += 15;
-
-    const houseW = 50;
-    const factoryW = 60;
-
-    ctx.fillStyle = selectedBuildingType === 'house' ? '#3498db' : '#34495e';
-    ctx.beginPath();
-    ctx.roundRect(x, btnY, houseW, btnH, 6);
-    ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.fillText('House', x + houseW / 2, btnY + btnH / 2);
-    x += houseW + 6;
-
-    ctx.fillStyle = selectedBuildingType === 'factory' ? '#3498db' : '#34495e';
-    ctx.beginPath();
-    ctx.roundRect(x, btnY, factoryW, btnH, 6);
-    ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.fillText('Factory', x + factoryW / 2, btnY + btnH / 2);
-    x += factoryW + 6;
-
-    const storageW = 60;
-    ctx.fillStyle = selectedBuildingType === 'storage' ? '#3498db' : '#34495e';
-    ctx.beginPath();
-    ctx.roundRect(x, btnY, storageW, btnH, 6);
-    ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.fillText('Storage', x + storageW / 2, btnY + btnH / 2);
-    x += storageW + 15;
-
-    const swatchSize = 28;
-    for (const color of BUILDING_COLORS) {
-      const isSelected = selectedColor === color;
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.roundRect(x, btnY + (btnH - swatchSize) / 2, swatchSize, swatchSize, 4);
-      ctx.fill();
-      if (isSelected) {
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.roundRect(x, btnY + (btnH - swatchSize) / 2, swatchSize, swatchSize, 4);
-        ctx.stroke();
-      }
-      x += swatchSize + 6;
-    }
   }
 
-  // Speed controls + Reset — right-aligned
-  const resetLabel = 'Reset';
-  const resetW = ctx.measureText(resetLabel).width + 24;
-  const resetX = width - resetW - 15;
-  ctx.fillStyle = '#8B0000';
-  ctx.beginPath();
-  ctx.roundRect(resetX, btnY, resetW, btnH, 6);
-  ctx.fill();
-  ctx.fillStyle = '#fff';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(resetLabel, resetX + resetW / 2, btnY + btnH / 2);
+  // Icon
+  drawIcon(ctx, cx, cy, r);
+}
 
-  // Music toggle — left of Reset
-  const musicLabel = musicEnabled ? '♫ On' : '♫ Off';
-  const musicW = ctx.measureText(musicLabel).width + 24;
-  const musicX = resetX - musicW - 10;
-  ctx.fillStyle = musicEnabled ? '#27ae60' : '#34495e';
+// Icon drawing functions
+function iconRoad(ctx: CanvasRenderingContext2D, cx: number, cy: number, _r: number) {
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 6;
+  ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.roundRect(musicX, btnY, musicW, btnH, 6);
-  ctx.fill();
-  ctx.fillStyle = '#fff';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(musicLabel, musicX + musicW / 2, btnY + btnH / 2);
+  ctx.moveTo(cx - 10, cy);
+  ctx.lineTo(cx + 10, cy);
+  ctx.stroke();
+  // Center dashes
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 3]);
+  ctx.beginPath();
+  ctx.moveTo(cx - 10, cy);
+  ctx.lineTo(cx + 10, cy);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
 
-  // Speed buttons + FPS — left of music
-  const speedBtnW = 32;
-  const speedGap = 4;
-  const speedGroupW = SPEED_OPTIONS.length * speedBtnW + (SPEED_OPTIONS.length - 1) * speedGap;
-  // FPS label sits left of speed buttons
-  const fpsText = `${fps} FPS`;
-  ctx.font = 'bold 12px monospace';
-  const fpsW = ctx.measureText(fpsText).width;
-  const fpsGap = 12;
-  let sx = musicX - speedGroupW - fpsW - fpsGap - 20;
-  // Draw FPS
-  const fpsColor = fps >= 50 ? '#2ecc71' : fps >= 30 ? '#f1c40f' : '#e74c3c';
-  ctx.fillStyle = fpsColor;
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(fpsText, sx, btnY + btnH / 2);
-  sx += fpsW + fpsGap;
-  ctx.font = '13px sans-serif';
-  for (let i = 0; i < SPEED_OPTIONS.length; i++) {
-    const spd = SPEED_OPTIONS[i];
-    const isActive = gameSpeed === spd;
-    ctx.fillStyle = isActive ? '#3498db' : '#34495e';
-    ctx.beginPath();
-    ctx.roundRect(sx, btnY, speedBtnW, btnH, 6);
-    ctx.fill();
-    if (isActive) {
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.roundRect(sx, btnY, speedBtnW, btnH, 6);
-      ctx.stroke();
-    }
-    ctx.fillStyle = '#fff';
-    ctx.font = spd === 0 ? 'bold 15px sans-serif' : '13px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(SPEED_LABELS[i], sx + speedBtnW / 2, btnY + btnH / 2);
-    ctx.font = '13px sans-serif';
-    sx += speedBtnW + speedGap;
+function iconNarrow(ctx: CanvasRenderingContext2D, cx: number, cy: number, _r: number) {
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(cx - 10, cy);
+  ctx.lineTo(cx + 10, cy);
+  ctx.stroke();
+}
+
+function iconHighway(ctx: CanvasRenderingContext2D, cx: number, cy: number, _r: number) {
+  // Two parallel lines with yellow dash
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(cx - 10, cy - 4);
+  ctx.lineTo(cx + 10, cy - 4);
+  ctx.moveTo(cx - 10, cy + 4);
+  ctx.lineTo(cx + 10, cy + 4);
+  ctx.stroke();
+  ctx.strokeStyle = '#f1c40f';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 3]);
+  ctx.beginPath();
+  ctx.moveTo(cx - 10, cy);
+  ctx.lineTo(cx + 10, cy);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function iconRemove(ctx: CanvasRenderingContext2D, cx: number, cy: number, _r: number) {
+  ctx.strokeStyle = '#e74c3c';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(cx - 7, cy - 7);
+  ctx.lineTo(cx + 7, cy + 7);
+  ctx.moveTo(cx + 7, cy - 7);
+  ctx.lineTo(cx - 7, cy + 7);
+  ctx.stroke();
+}
+
+function iconBuilding(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
+  // Show the icon of the currently selected building type
+  switch (selectedBuildingType) {
+    case 'factory': iconFactory(ctx, cx, cy, r); break;
+    case 'storage': iconStorage(ctx, cx, cy, r); break;
+    default: iconHouse(ctx, cx, cy, r); break;
   }
 }
 
-export function getToolbarLayout(ctx: CanvasRenderingContext2D, width: number, height: number) {
-  const y = height - TOOLBAR_HEIGHT;
-  const tools: { type: ToolType; label: string }[] = [
-    { type: 'addRoad', label: 'Road' },
-    { type: 'addNarrow', label: 'Narrow' },
-    { type: 'addHighway', label: 'Highway' },
-    { type: 'removeRoad', label: 'Remove' },
-    { type: 'addBuilding', label: 'Building' },
-    { type: 'removeBuilding', label: 'Demolish' },
-  ];
+function iconDemolish(ctx: CanvasRenderingContext2D, cx: number, cy: number, _r: number) {
+  // Hammer shape
+  ctx.strokeStyle = '#e74c3c';
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  // Handle
+  ctx.moveTo(cx - 6, cy + 8);
+  ctx.lineTo(cx + 4, cy - 2);
+  ctx.stroke();
+  // Head
+  ctx.fillStyle = '#e74c3c';
+  ctx.beginPath();
+  ctx.moveTo(cx + 2, cy - 4);
+  ctx.lineTo(cx + 9, cy - 8);
+  ctx.lineTo(cx + 7, cy - 1);
+  ctx.lineTo(cx, cy - 1);
+  ctx.closePath();
+  ctx.fill();
+}
 
-  const btnH = 40;
-  const btnY = y + (TOOLBAR_HEIGHT - btnH) / 2;
-  let x = 15;
-  ctx.font = '13px sans-serif';
+// Building sub-type icons
+function iconHouse(ctx: CanvasRenderingContext2D, cx: number, cy: number, _r: number) {
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(cx - 6, cy - 2, 12, 10);
+  ctx.beginPath();
+  ctx.moveTo(cx - 8, cy - 2);
+  ctx.lineTo(cx, cy - 9);
+  ctx.lineTo(cx + 8, cy - 2);
+  ctx.closePath();
+  ctx.fill();
+}
 
-  const buttons: { type: ToolType; x: number; y: number; w: number; h: number }[] = [];
-  for (const tool of tools) {
-    const btnW = ctx.measureText(tool.label).width + 30;
-    buttons.push({ type: tool.type, x, y: btnY, w: btnW, h: btnH });
-    x += btnW + 10;
+function iconFactory(ctx: CanvasRenderingContext2D, cx: number, cy: number, _r: number) {
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(cx - 8, cy - 2, 16, 10);
+  // Chimney
+  ctx.fillRect(cx + 3, cy - 8, 4, 6);
+}
+
+function iconStorage(ctx: CanvasRenderingContext2D, cx: number, cy: number, _r: number) {
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(cx - 7, cy - 7, 14, 14);
+  // Grid lines
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - 7);
+  ctx.lineTo(cx, cy + 7);
+  ctx.moveTo(cx - 7, cy);
+  ctx.lineTo(cx + 7, cy);
+  ctx.stroke();
+}
+
+// Gear icon
+function iconGear(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
+  const ir = r * 0.35;
+  const or = r * 0.6;
+  const teeth = 6;
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  for (let i = 0; i < teeth; i++) {
+    const a1 = (i / teeth) * Math.PI * 2 - Math.PI / teeth / 2;
+    const a2 = a1 + Math.PI / teeth * 0.6;
+    const a3 = a1 + Math.PI / teeth;
+    ctx.lineTo(cx + Math.cos(a1) * or, cy + Math.sin(a1) * or);
+    ctx.lineTo(cx + Math.cos(a2) * or, cy + Math.sin(a2) * or);
+    ctx.lineTo(cx + Math.cos(a2) * ir * 1.3, cy + Math.sin(a2) * ir * 1.3);
+    ctx.lineTo(cx + Math.cos(a3) * ir * 1.3, cy + Math.sin(a3) * ir * 1.3);
   }
+  ctx.closePath();
+  ctx.fill();
+  // Center hole
+  ctx.fillStyle = gearMenuOpen ? '#3498db' : 'rgba(44, 62, 80, 0.85)';
+  ctx.beginPath();
+  ctx.arc(cx, cy, ir * 0.6, 0, Math.PI * 2);
+  ctx.fill();
+}
 
-  const buildingTypeButtons: { type: 'house' | 'factory' | 'storage'; x: number; y: number; w: number; h: number }[] = [];
-  const colorButtons: { color: string; x: number; y: number; w: number; h: number }[] = [];
+interface ToolIconDef {
+  type: ToolType;
+  buildingType?: 'house' | 'factory' | 'storage';
+  icon: (ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) => void;
+}
 
-  if (activeTool === 'addBuilding') {
-    x += 10 + 15;
-    const houseW = 50;
-    const factoryW = 60;
-    const storageW = 60;
-    buildingTypeButtons.push({ type: 'house', x, y: btnY, w: houseW, h: btnH });
-    x += houseW + 6;
-    buildingTypeButtons.push({ type: 'factory', x, y: btnY, w: factoryW, h: btnH });
-    x += factoryW + 6;
-    buildingTypeButtons.push({ type: 'storage', x, y: btnY, w: storageW, h: btnH });
-    x += storageW + 15;
+const TOOL_ICONS: ToolIconDef[] = [
+  { type: 'addRoad', icon: iconRoad },
+  { type: 'addNarrow', icon: iconNarrow },
+  { type: 'addHighway', icon: iconHighway },
+  { type: 'removeRoad', icon: iconRemove },
+  { type: 'addBuilding', buildingType: 'house', icon: iconHouse },
+  { type: 'addBuilding', buildingType: 'factory', icon: iconFactory },
+  { type: 'addBuilding', buildingType: 'storage', icon: iconStorage },
+  // Color circle goes here (index 7) — handled separately
+  { type: 'removeBuilding', icon: iconDemolish },
+];
 
-    const swatchSize = 28;
-    for (const color of BUILDING_COLORS) {
-      colorButtons.push({ color, x, y: btnY + (btnH - swatchSize) / 2, w: swatchSize, h: swatchSize });
-      x += swatchSize + 6;
+const COLOR_SLOT_INDEX = 7; // color circle inserted before demolish
+
+function isToolActive(def: ToolIconDef): boolean {
+  if (def.buildingType) {
+    return activeTool === 'addBuilding' && selectedBuildingType === def.buildingType;
+  }
+  return activeTool === def.type;
+}
+
+function drawToolbar(ctx: CanvasRenderingContext2D, width: number, height: number, fps: number = 0) {
+  const r = BTN_SIZE / 2;
+  const totalSlots = TOOL_ICONS.length + 1; // +1 for color circle
+  const startY = height / 2 - (totalSlots * (BTN_SIZE + BTN_GAP) - BTN_GAP) / 2;
+
+  // Left column: tool buttons with color circle inserted at COLOR_SLOT_INDEX
+  let slot = 0;
+  for (let i = 0; i < TOOL_ICONS.length; i++) {
+    if (i === COLOR_SLOT_INDEX) {
+      // Draw color circle
+      const cx = BTN_MARGIN + r;
+      const cy = startY + slot * (BTN_SIZE + BTN_GAP) + r;
+      ctx.fillStyle = selectedColor;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.stroke();
+      slot++;
     }
+    const def = TOOL_ICONS[i];
+    const cx = BTN_MARGIN + r;
+    const cy = startY + slot * (BTN_SIZE + BTN_GAP) + r;
+    drawCircleButton(ctx, cx, cy, r, isToolActive(def), def.icon);
+    slot++;
   }
 
-  // Reset button
-  const resetLabel = 'Reset';
-  const resetW = ctx.measureText(resetLabel).width + 24;
-  const resetX = width - resetW - 15;
-  const resetButton = { x: resetX, y: btnY, w: resetW, h: btnH };
+  // Gear button — bottom right
+  const gearR = GEAR_SIZE / 2;
+  const gearCx = width - BTN_MARGIN - gearR;
+  const gearCy = height - BTN_MARGIN - gearR;
+  ctx.fillStyle = gearMenuOpen ? '#3498db' : 'rgba(44, 62, 80, 0.85)';
+  ctx.beginPath();
+  ctx.arc(gearCx, gearCy, gearR, 0, Math.PI * 2);
+  ctx.fill();
+  iconGear(ctx, gearCx, gearCy, gearR);
 
-  // Music toggle button
-  const musicLabel = musicEnabled ? '♫ On' : '♫ Off';
-  const musicW = ctx.measureText(musicLabel).width + 24;
-  const musicX = resetX - musicW - 10;
-  const musicButton = { x: musicX, y: btnY, w: musicW, h: btnH };
+  // Gear menu — popup above gear button
+  if (gearMenuOpen) {
+    const menuW = 180;
+    const menuH = 160;
+    const menuX = width - BTN_MARGIN - menuW;
+    const menuY = gearCy - gearR - BTN_GAP - menuH;
+
+    // Background
+    ctx.fillStyle = 'rgba(44, 62, 80, 0.95)';
+    ctx.beginPath();
+    ctx.roundRect(menuX, menuY, menuW, menuH, 8);
+    ctx.fill();
+
+    const pad = 10;
+    let my = menuY + pad;
+
+    // FPS display
+    const fpsText = `${fps} FPS`;
+    ctx.font = 'bold 12px monospace';
+    const fpsColor = fps >= 50 ? '#2ecc71' : fps >= 30 ? '#f1c40f' : '#e74c3c';
+    ctx.fillStyle = fpsColor;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(fpsText, menuX + pad, my + 10);
+    my += 28;
+
+    // Speed buttons row
+    const speedBtnW = 34;
+    const speedGap = 4;
+    let sx = menuX + pad;
+    ctx.font = '13px sans-serif';
+    for (let i = 0; i < SPEED_OPTIONS.length; i++) {
+      const spd = SPEED_OPTIONS[i];
+      const isActive = gameSpeed === spd;
+      ctx.fillStyle = isActive ? '#3498db' : '#34495e';
+      ctx.beginPath();
+      ctx.roundRect(sx, my, speedBtnW, 32, 6);
+      ctx.fill();
+      if (isActive) {
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(sx, my, speedBtnW, 32, 6);
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#fff';
+      ctx.font = spd === 0 ? 'bold 14px sans-serif' : '13px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(SPEED_LABELS[i], sx + speedBtnW / 2, my + 16);
+      ctx.font = '13px sans-serif';
+      sx += speedBtnW + speedGap;
+    }
+    my += 42;
+
+    // Music button
+    const musicLabel = musicEnabled ? '♫ On' : '♫ Off';
+    ctx.fillStyle = musicEnabled ? '#27ae60' : '#34495e';
+    ctx.beginPath();
+    ctx.roundRect(menuX + pad, my, menuW - pad * 2, 32, 6);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(musicLabel, menuX + menuW / 2, my + 16);
+    my += 42;
+
+    // Reset button
+    ctx.fillStyle = '#8B0000';
+    ctx.beginPath();
+    ctx.roundRect(menuX + pad, my, menuW - pad * 2, 32, 6);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Reset', menuX + menuW / 2, my + 16);
+  }
+}
+
+export function getToolbarLayout(_ctx: CanvasRenderingContext2D, width: number, height: number) {
+  const r = BTN_SIZE / 2;
+
+  // Left column: tool buttons + color circle inserted at COLOR_SLOT_INDEX
+  const totalSlots = TOOL_ICONS.length + 1;
+  const startY = height / 2 - (totalSlots * (BTN_SIZE + BTN_GAP) - BTN_GAP) / 2;
+
+  const buttons: { type: ToolType; buildingType?: 'house' | 'factory' | 'storage'; x: number; y: number; w: number; h: number }[] = [];
+  let colorButton: { x: number; y: number; w: number; h: number } | null = null;
+  let slot = 0;
+  for (let i = 0; i < TOOL_ICONS.length; i++) {
+    if (i === COLOR_SLOT_INDEX) {
+      const cx = BTN_MARGIN + r;
+      const cy = startY + slot * (BTN_SIZE + BTN_GAP) + r;
+      colorButton = { x: cx - r, y: cy - r, w: BTN_SIZE, h: BTN_SIZE };
+      slot++;
+    }
+    const def = TOOL_ICONS[i];
+    const cx = BTN_MARGIN + r;
+    const cy = startY + slot * (BTN_SIZE + BTN_GAP) + r;
+    buttons.push({ type: def.type, buildingType: def.buildingType, x: cx - r, y: cy - r, w: BTN_SIZE, h: BTN_SIZE });
+    slot++;
+  }
+
+  // Gear button
+  const gearR = GEAR_SIZE / 2;
+  const gearCx = width - BTN_MARGIN - gearR;
+  const gearCy = height - BTN_MARGIN - gearR;
+  const gearButton = { x: gearCx - gearR, y: gearCy - gearR, w: GEAR_SIZE, h: GEAR_SIZE };
+
+  // Gear menu items
+  const menuW = 180;
+  const menuH = 160;
+  const menuX = width - BTN_MARGIN - menuW;
+  const menuY = gearCy - gearR - BTN_GAP - menuH;
+  const pad = 10;
 
   // Speed buttons
-  const speedBtnW = 32;
+  let my = menuY + pad + 28;
+  const speedBtnW = 34;
   const speedGap = 4;
-  const speedGroupW = SPEED_OPTIONS.length * speedBtnW + (SPEED_OPTIONS.length - 1) * speedGap;
-  let sx = musicX - speedGroupW - 20;
+  let sx = menuX + pad;
   const speedButtons: { speed: number; x: number; y: number; w: number; h: number }[] = [];
   for (let i = 0; i < SPEED_OPTIONS.length; i++) {
-    speedButtons.push({ speed: SPEED_OPTIONS[i], x: sx, y: btnY, w: speedBtnW, h: btnH });
+    speedButtons.push({ speed: SPEED_OPTIONS[i], x: sx, y: my, w: speedBtnW, h: 32 });
     sx += speedBtnW + speedGap;
   }
+  my += 42;
 
-  return { buttons, buildingTypeButtons, colorButtons, resetButton, musicButton, speedButtons };
+  // Music button
+  const musicButton = { x: menuX + pad, y: my, w: menuW - pad * 2, h: 32 };
+  my += 42;
+
+  // Reset button
+  const resetButton = { x: menuX + pad, y: my, w: menuW - pad * 2, h: 32 };
+
+  return { buttons, colorButton, resetButton, musicButton, speedButtons, gearButton };
 }

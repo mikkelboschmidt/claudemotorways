@@ -1,4 +1,4 @@
-import { GRID, ROAD_W, TOOLBAR_HEIGHT } from './constants.ts';
+import { GRID, ROAD_W } from './constants.ts';
 import { screenToWorld } from './camera.ts';
 import { addEdge, bumpGraphVersion, removeEdge, nodeKey, nodes, getNodeEdges } from './graph.ts';
 import { segmentCutsBuilding, findBuildingAtPixel, addBuilding, removeBuilding, getBuildingEdgeAt, connectBuildingOnSide } from './buildings.ts';
@@ -113,8 +113,6 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
 
-    if (sy >= canvas.height - TOOLBAR_HEIGHT) return;
-
     // Convert screen coords to world coords for all game-area interactions
     const [px, py] = screenToWorld(sx, sy);
 
@@ -212,7 +210,7 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
     }
 
     // Update hover position for ghost previews (skip for touch — no hover state)
-    if (!isTouch && sy < canvas.height - TOOLBAR_HEIGHT) {
+    if (!isTouch) {
       if (activeTool === 'addBuilding') {
         hoverGx = Math.floor(px / GRID);
         hoverGy = Math.floor(py / GRID);
@@ -228,13 +226,10 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
       if (activeTool === 'addHighway' && highwayPhase === 'pickEnd') {
         setHighwayPreviewEnd(px, py);
       }
-    } else if (!isTouch) {
-      hoverGx = null;
-      hoverGy = null;
     }
 
     // Recompute tiles for remove-road drag
-    if (removeRoadDragging && dragConfirmed && activeTool === 'removeRoad' && sy < canvas.height - TOOLBAR_HEIGHT) {
+    if (removeRoadDragging && dragConfirmed && activeTool === 'removeRoad') {
       const rawGx = snapToGrid(px);
       const rawGy = snapToGrid(py);
       const [endGx, endGy] = snapTo8Dir(removeStartGx, removeStartGy, rawGx, rawGy);

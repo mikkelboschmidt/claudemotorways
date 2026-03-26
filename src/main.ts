@@ -1,12 +1,12 @@
-import { TOOLBAR_HEIGHT } from './constants.ts';
 import { initBuildingNodes, updatePins } from './buildings.ts';
 import { initRoadInput, roadPreview, cancelRoadDrag, setTouchCountGetter } from './roads.ts';
 import { spawnCars, updateCars } from './cars.ts';
 import { render, getToolbarLayout } from './renderer.ts';
-import { setActiveTool, setSelectedColor, setSelectedBuildingType } from './toolbar.ts';
+import { setActiveTool, setSelectedColor, selectedColor, setSelectedBuildingType, toggleGearMenu, closeGearMenu, gearMenuOpen } from './toolbar.ts';
+import { BUILDING_COLORS } from './types.ts';
 import { saveGame, loadGame, clearSave } from './save.ts';
 import { tickPathfindingFrame } from './pathfinding.ts';
-import { gameSpeed, setGameSpeed, SPEED_OPTIONS, SPEED_LABELS } from './speed.ts';
+import { gameSpeed, setGameSpeed } from './speed.ts';
 import { pan, zoomAt } from './camera.ts';
 import { toggleMusic, ensureMusicStarted } from './music.ts';
 
@@ -42,69 +42,73 @@ canvas.addEventListener('pointerdown', () => ensureMusicStarted(), { once: true 
 // Track active touch count so single-finger gestures can be disambiguated from pan/zoom
 let activeTouchCount = 0;
 
-// Toolbar click handling
+// Helper: check if point is inside rect
+function hitRect(px: number, py: number, r: { x: number; y: number; w: number; h: number }): boolean {
+  return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
+}
+
+// Toolbar click handling — floating buttons
 canvas.addEventListener('pointerdown', (e) => {
   const rect = canvas.getBoundingClientRect();
   const px = e.clientX - rect.left;
   const py = e.clientY - rect.top;
 
-  // Only handle clicks in toolbar area
-  if (py < canvas.height - TOOLBAR_HEIGHT) return;
-
   ctx.font = '13px sans-serif';
   const layout = getToolbarLayout(ctx, canvas.width, canvas.height);
 
-  // Check reset button
-  if (layout.resetButton) {
-    const rb = layout.resetButton;
-    if (px >= rb.x && px <= rb.x + rb.w && py >= rb.y && py <= rb.y + rb.h) {
+  // Gear button
+  if (hitRect(px, py, layout.gearButton)) {
+    toggleGearMenu();
+    e.stopImmediatePropagation();
+    return;
+  }
+
+  // Gear menu items (only when open)
+  if (gearMenuOpen) {
+    if (hitRect(px, py, layout.resetButton)) {
       clearSave();
       window.location.reload();
       return;
     }
-  }
-
-  // Check music toggle button
-  if (layout.musicButton) {
-    const mb = layout.musicButton;
-    if (px >= mb.x && px <= mb.x + mb.w && py >= mb.y && py <= mb.y + mb.h) {
+    if (hitRect(px, py, layout.musicButton)) {
       toggleMusic();
-      e.stopPropagation();
+      e.stopImmediatePropagation();
       return;
     }
-  }
-
-  // Check speed buttons
-  for (const btn of layout.speedButtons) {
-    if (px >= btn.x && px <= btn.x + btn.w && py >= btn.y && py <= btn.y + btn.h) {
-      setGameSpeed(btn.speed);
-      e.stopPropagation();
-      return;
+    for (const btn of layout.speedButtons) {
+      if (hitRect(px, py, btn)) {
+        setGameSpeed(btn.speed);
+        e.stopImmediatePropagation();
+        return;
+      }
     }
+    // Click anywhere else closes menu
+    closeGearMenu();
+    e.stopImmediatePropagation();
+    return;
   }
 
+  // Tool buttons (left column — includes building types)
   for (const btn of layout.buttons) {
-    if (px >= btn.x && px <= btn.x + btn.w && py >= btn.y && py <= btn.y + btn.h) {
-      setActiveTool(btn.type);
-      e.stopPropagation();
+    if (hitRect(px, py, btn)) {
+      if (btn.buildingType) {
+        setActiveTool('addBuilding');
+        setSelectedBuildingType(btn.buildingType);
+      } else {
+        setActiveTool(btn.type);
+      }
+      e.stopImmediatePropagation();
       return;
     }
   }
 
-  for (const btn of layout.buildingTypeButtons) {
-    if (px >= btn.x && px <= btn.x + btn.w && py >= btn.y && py <= btn.y + btn.h) {
-      setSelectedBuildingType(btn.type);
-      e.stopPropagation();
-      return;
-    }
-  }
-
-  for (const btn of layout.colorButtons) {
-    if (px >= btn.x && px <= btn.x + btn.w && py >= btn.y && py <= btn.y + btn.h) {
-      setSelectedColor(btn.color);
-      e.stopPropagation();
-      return;
-    }
+  // Color circle — cycle to next color on tap
+  if (layout.colorButton && hitRect(px, py, layout.colorButton)) {
+    const idx = BUILDING_COLORS.indexOf(selectedColor);
+    const next = BUILDING_COLORS[(idx + 1) % BUILDING_COLORS.length];
+    setSelectedColor(next);
+    e.stopImmediatePropagation();
+    return;
   }
 }, true);
 
