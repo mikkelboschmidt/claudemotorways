@@ -674,7 +674,7 @@ const GEAR_SIZE = 48;     // gear button diameter
 // Draw a circular button with icon
 function drawCircleButton(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, active: boolean, drawIcon: (ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) => void) {
   // Background
-  ctx.fillStyle = active ? '#3498db' : 'rgba(44, 62, 80, 0.85)';
+  ctx.fillStyle = active ? '#000' : 'rgba(44, 62, 80, 0.85)';
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.fill();
@@ -744,7 +744,7 @@ function iconHighway(ctx: CanvasRenderingContext2D, cx: number, cy: number, _r: 
 }
 
 function iconRemove(ctx: CanvasRenderingContext2D, cx: number, cy: number, _r: number) {
-  ctx.strokeStyle = '#e74c3c';
+  ctx.strokeStyle = '#fff';
   ctx.lineWidth = 3;
   ctx.lineCap = 'round';
   ctx.beginPath();
@@ -766,7 +766,7 @@ function iconBuilding(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: 
 
 function iconDemolish(ctx: CanvasRenderingContext2D, cx: number, cy: number, _r: number) {
   // Hammer shape
-  ctx.strokeStyle = '#e74c3c';
+  ctx.strokeStyle = '#fff';
   ctx.lineWidth = 2.5;
   ctx.lineCap = 'round';
   ctx.beginPath();
@@ -775,7 +775,7 @@ function iconDemolish(ctx: CanvasRenderingContext2D, cx: number, cy: number, _r:
   ctx.lineTo(cx + 4, cy - 2);
   ctx.stroke();
   // Head
-  ctx.fillStyle = '#e74c3c';
+  ctx.fillStyle = '#fff';
   ctx.beginPath();
   ctx.moveTo(cx + 2, cy - 4);
   ctx.lineTo(cx + 9, cy - 8);
@@ -787,7 +787,7 @@ function iconDemolish(ctx: CanvasRenderingContext2D, cx: number, cy: number, _r:
 
 // Building sub-type icons
 function iconHouse(ctx: CanvasRenderingContext2D, cx: number, cy: number, _r: number) {
-  ctx.fillStyle = '#fff';
+  ctx.fillStyle = selectedColor;
   ctx.fillRect(cx - 6, cy - 2, 12, 10);
   ctx.beginPath();
   ctx.moveTo(cx - 8, cy - 2);
@@ -798,14 +798,14 @@ function iconHouse(ctx: CanvasRenderingContext2D, cx: number, cy: number, _r: nu
 }
 
 function iconFactory(ctx: CanvasRenderingContext2D, cx: number, cy: number, _r: number) {
-  ctx.fillStyle = '#fff';
+  ctx.fillStyle = selectedColor;
   ctx.fillRect(cx - 8, cy - 2, 16, 10);
   // Chimney
   ctx.fillRect(cx + 3, cy - 8, 4, 6);
 }
 
 function iconStorage(ctx: CanvasRenderingContext2D, cx: number, cy: number, _r: number) {
-  ctx.strokeStyle = '#fff';
+  ctx.strokeStyle = selectedColor;
   ctx.lineWidth = 2;
   ctx.strokeRect(cx - 7, cy - 7, 14, 14);
   // Grid lines
@@ -854,14 +854,14 @@ const TOOL_ICONS: ToolIconDef[] = [
   { type: 'addNarrow', icon: iconNarrow },
   { type: 'addHighway', icon: iconHighway },
   { type: 'removeRoad', icon: iconRemove },
+  // Color circle goes here (index 4) — handled separately
   { type: 'addBuilding', buildingType: 'house', icon: iconHouse },
   { type: 'addBuilding', buildingType: 'factory', icon: iconFactory },
   { type: 'addBuilding', buildingType: 'storage', icon: iconStorage },
-  // Color circle goes here (index 7) — handled separately
   { type: 'removeBuilding', icon: iconDemolish },
 ];
 
-const COLOR_SLOT_INDEX = 7; // color circle inserted before demolish
+const COLOR_SLOT_INDEX = 4; // color circle inserted before house
 
 function isToolActive(def: ToolIconDef): boolean {
   if (def.buildingType) {
@@ -886,11 +886,6 @@ function drawToolbar(ctx: CanvasRenderingContext2D, width: number, height: numbe
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.stroke();
       slot++;
     }
     const def = TOOL_ICONS[i];
