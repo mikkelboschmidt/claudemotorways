@@ -15,6 +15,19 @@ let dragStartGy = 0;
 let currentGx = 0;
 let currentGy = 0;
 
+// Track screen start position for drag threshold (touch needs this)
+let dragStartSx = 0;
+let dragStartSy = 0;
+let dragConfirmed = false; // true once movement exceeds threshold
+const DRAG_THRESHOLD = 8; // pixels of screen movement before drag activates
+
+// Whether input is from touch (disables hover ghost)
+let isTouch = false;
+
+// Callback to get active touch count (set from main.ts to avoid circular import)
+let getActiveTouchCount: () => number = () => 0;
+export function setTouchCountGetter(fn: () => number) { getActiveTouchCount = fn; }
+
 export let roadPreview: RoadPreview | null = null;
 
 // Hover position in grid coords (null when not over game area)
@@ -26,6 +39,21 @@ let removeRoadDragging = false;
 let removeStartGx = 0;
 let removeStartGy = 0;
 export const pendingRemoveTiles = new Set<string>();
+
+export function cancelRoadDrag() {
+  dragging = false;
+  dragConfirmed = false;
+  removeRoadDragging = false;
+  pendingRemoveTiles.clear();
+  roadPreview = null;
+  hoverGx = null;
+  hoverGy = null;
+  if (draggingHighwayId >= 0) {
+    const hw = highways.find(h => h.id === draggingHighwayId);
+    if (hw) rebuildHighway(hw);
+    setDraggingHighwayId(-1);
+  }
+}
 
 function computeRemoveTiles(gx1: number, gy1: number, gx2: number, gy2: number) {
   pendingRemoveTiles.clear();
@@ -74,7 +102,13 @@ function snapTo8Dir(startGx: number, startGy: number, rawGx: number, rawGy: numb
 }
 
 export function initRoadInput(canvas: HTMLCanvasElement) {
-  canvas.addEventListener('mousedown', (e) => {
+  canvas.addEventListener('pointerdown', (e) => {
+    // Ignore multi-touch (handled by touch pan/zoom in main.ts)
+    if (getActiveTouchCount() >= 2) return;
+
+    isTouch = e.pointerType === 'touch';
+    canvas.setPointerCapture(e.pointerId);
+
     const rect = canvas.getBoundingClientRect();
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
@@ -83,6 +117,11 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
 
     // Convert screen coords to world coords for all game-area interactions
     const [px, py] = screenToWorld(sx, sy);
+
+    // Store screen start position for drag threshold
+    dragStartSx = sx;
+    dragStartSy = sy;
+    dragConfirmed = false;
 
     if (activeTool === 'addRoad' || activeTool === 'addNarrow') {
       dragStartGx = snapToGrid(px);
@@ -152,11 +191,18 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
     }
   });
 
-  canvas.addEventListener('mousemove', (e) => {
+  canvas.addEventListener('pointermove', (e) => {
     const rect = canvas.getBoundingClientRect();
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
     const [px, py] = screenToWorld(sx, sy);
+
+    // Check drag threshold for touch — don't activate drag until finger moves enough
+    if ((dragging || removeRoadDragging) && !dragConfirmed) {
+      const dist = Math.hypot(sx - dragStartSx, sy - dragStartSy);
+      if (dist < DRAG_THRESHOLD) return;
+      dragConfirmed = true;
+    }
 
     // Highway handle drag — update midpoint visually (world coords)
     if (draggingHighwayId >= 0) {
@@ -165,8 +211,8 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
       return;
     }
 
-    // Update hover position for ghost previews
-    if (sy < canvas.height - TOOLBAR_HEIGHT) {
+    // Update hover position for ghost previews (skip for touch — no hover state)
+    if (!isTouch && sy < canvas.height - TOOLBAR_HEIGHT) {
       if (activeTool === 'addBuilding') {
         hoverGx = Math.floor(px / GRID);
         hoverGy = Math.floor(py / GRID);
@@ -182,13 +228,13 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
       if (activeTool === 'addHighway' && highwayPhase === 'pickEnd') {
         setHighwayPreviewEnd(px, py);
       }
-    } else {
+    } else if (!isTouch) {
       hoverGx = null;
       hoverGy = null;
     }
 
     // Recompute tiles for remove-road drag
-    if (removeRoadDragging && activeTool === 'removeRoad' && sy < canvas.height - TOOLBAR_HEIGHT) {
+    if (removeRoadDragging && dragConfirmed && activeTool === 'removeRoad' && sy < canvas.height - TOOLBAR_HEIGHT) {
       const rawGx = snapToGrid(px);
       const rawGy = snapToGrid(py);
       const [endGx, endGy] = snapTo8Dir(removeStartGx, removeStartGy, rawGx, rawGy);
@@ -196,7 +242,7 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
     }
 
     // Road drag preview
-    if (dragging && (activeTool === 'addRoad' || activeTool === 'addNarrow')) {
+    if (dragging && dragConfirmed && (activeTool === 'addRoad' || activeTool === 'addNarrow')) {
       const rawGx = snapToGrid(px);
       const rawGy = snapToGrid(py);
 
@@ -217,7 +263,7 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
     }
   });
 
-  canvas.addEventListener('mouseup', () => {
+  canvas.addEventListener('pointerup', () => {
     // Finalize highway handle drag
     if (draggingHighwayId >= 0) {
       const hw = highways.find(h => h.id === draggingHighwayId);
@@ -231,7 +277,7 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
 
     if (removeRoadDragging) {
       removeRoadDragging = false;
-      if (pendingRemoveTiles.size > 0) {
+      if (dragConfirmed && pendingRemoveTiles.size > 0) {
         for (const tileKey of pendingRemoveTiles) {
           const edgeIds = getNodeEdges(tileKey);
           for (const eid of edgeIds) {
@@ -242,34 +288,32 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
         bumpGraphVersion();
         pendingRemoveTiles.clear();
         saveGame();
+      } else {
+        pendingRemoveTiles.clear();
       }
+      dragConfirmed = false;
       return;
     }
 
-    if (!dragging) return;
+    if (!dragging) { dragConfirmed = false; return; }
     dragging = false;
 
-    if ((activeTool === 'addRoad' || activeTool === 'addNarrow') && (currentGx !== dragStartGx || currentGy !== dragStartGy)) {
+    if (dragConfirmed && (activeTool === 'addRoad' || activeTool === 'addNarrow') && (currentGx !== dragStartGx || currentGy !== dragStartGy)) {
       createRoadSegments(dragStartGx, dragStartGy, currentGx, currentGy, activeTool === 'addNarrow');
       playSfx('road');
       saveGame();
     }
     roadPreview = null;
+    dragConfirmed = false;
   });
 
+  canvas.addEventListener('pointercancel', () => {
+    cancelRoadDrag();
+  });
+
+  // Mouse leave still useful for desktop — cancel drags when cursor leaves canvas
   canvas.addEventListener('mouseleave', () => {
-    dragging = false;
-    removeRoadDragging = false;
-    pendingRemoveTiles.clear();
-    roadPreview = null;
-    hoverGx = null;
-    hoverGy = null;
-    setHighwayPhase('idle');
-    if (draggingHighwayId >= 0) {
-      const hw = highways.find(h => h.id === draggingHighwayId);
-      if (hw) rebuildHighway(hw);
-      setDraggingHighwayId(-1);
-    }
+    if (!isTouch) cancelRoadDrag();
   });
 
   // Escape or right-click cancels highway placement

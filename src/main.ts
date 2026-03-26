@@ -1,6 +1,6 @@
 import { TOOLBAR_HEIGHT } from './constants.ts';
 import { initBuildingNodes, updatePins } from './buildings.ts';
-import { initRoadInput, roadPreview } from './roads.ts';
+import { initRoadInput, roadPreview, cancelRoadDrag, setTouchCountGetter } from './roads.ts';
 import { spawnCars, updateCars } from './cars.ts';
 import { render, getToolbarLayout } from './renderer.ts';
 import { setActiveTool, setSelectedColor, setSelectedBuildingType } from './toolbar.ts';
@@ -26,6 +26,7 @@ if (!loadGame()) {
   initBuildingNodes();
 }
 initRoadInput(canvas);
+setTouchCountGetter(() => activeTouchCount);
 
 // Auto-save every 5 seconds (counted in sim ticks)
 let saveTimer = 0;
@@ -36,11 +37,13 @@ let fpsFrames = 0;
 let fpsLastTime = performance.now();
 
 // Start music on first user interaction (browser requires gesture for audio)
-canvas.addEventListener('mousedown', () => ensureMusicStarted(), { once: true });
-canvas.addEventListener('touchstart', () => ensureMusicStarted(), { once: true });
+canvas.addEventListener('pointerdown', () => ensureMusicStarted(), { once: true });
+
+// Track active touch count so single-finger gestures can be disambiguated from pan/zoom
+let activeTouchCount = 0;
 
 // Toolbar click handling
-canvas.addEventListener('mousedown', (e) => {
+canvas.addEventListener('pointerdown', (e) => {
   const rect = canvas.getBoundingClientRect();
   const px = e.clientX - rect.left;
   const py = e.clientY - rect.top;
@@ -145,8 +148,11 @@ function getPinchDist(e: TouchEvent): number {
 }
 
 canvas.addEventListener('touchstart', (e) => {
-  if (e.touches.length === 2) {
+  activeTouchCount = e.touches.length;
+  if (e.touches.length >= 2) {
     e.preventDefault();
+    // Cancel any in-progress road drag when second finger arrives
+    cancelRoadDrag();
     touchIds = [e.touches[0].identifier, e.touches[1].identifier];
     [lastTouchX, lastTouchY] = getTouchCenter(e);
     lastPinchDist = getPinchDist(e);
@@ -172,6 +178,7 @@ canvas.addEventListener('touchmove', (e) => {
 }, { passive: false });
 
 canvas.addEventListener('touchend', (e) => {
+  activeTouchCount = e.touches.length;
   if (e.touches.length < 2) {
     touchIds = [];
     lastPinchDist = 0;
