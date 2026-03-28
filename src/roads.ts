@@ -57,6 +57,10 @@ export function cancelRoadDrag() {
     if (hw) rebuildHighway(hw);
     setDraggingHighwayId(-1);
   }
+  // Cancel highway placement in progress
+  if (highwayPhase !== 'idle') {
+    setHighwayPhase('idle');
+  }
 }
 
 function computeRemoveTiles(gx1: number, gy1: number, gx2: number, gy2: number) {
@@ -220,6 +224,11 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
       return;
     }
 
+    // Highway preview (world coords) — must update for both mouse and touch
+    if (activeTool === 'addHighway' && highwayPhase === 'pickEnd') {
+      setHighwayPreviewEnd(px, py);
+    }
+
     // Update hover position for ghost previews (skip for touch — no hover state)
     if (!isTouch) {
       if (activeTool === 'addBuilding') {
@@ -231,11 +240,6 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
       } else {
         hoverGx = null;
         hoverGy = null;
-      }
-
-      // Highway preview (world coords)
-      if (activeTool === 'addHighway' && highwayPhase === 'pickEnd') {
-        setHighwayPreviewEnd(px, py);
       }
     }
 
