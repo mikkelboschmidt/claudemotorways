@@ -114,7 +114,7 @@ export function downloadSave() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'claudemotorways-city.json';
+  a.download = 'loomways-city.json';
   a.click();
   URL.revokeObjectURL(url);
 }
