@@ -238,19 +238,17 @@ Floating circular buttons (44px diameter) arranged in a vertical column on the l
 
 | Icon | Tool | Description |
 |---|---|---|
-| Road lines | `addRoad` | Drag to place two-lane roads |
-| Narrow line | `addNarrow` | Drag to place single-lane roads |
-| Highway lines | `addHighway` | Two-click placement + draggable midpoint |
-| X cross | `removeRoad` | Drag across road tiles to delete edges |
-| **Color circle** | — | Filled circle showing the selected building color. Tap to cycle to the next color |
-| House icon | `addBuilding` (house) | Place a house |
-| Factory icon | `addBuilding` (factory) | Place a factory |
-| Storage icon | `addBuilding` (storage) | Place a storage depot |
-| Hammer icon | `removeBuilding` | Tap a building to remove it and its connected edges |
+| Road SVG | `addRoad` | Drag to place two-lane roads |
+| Narrow SVG | `addNarrow` | Drag to place single-lane roads |
+| Highway SVG | `addHighway` | Two-click placement + draggable midpoint |
+| Demolish SVG | `demolish` | Tap a building to remove it, or drag across road tiles to delete edges/highways |
+| **Color SVG** | — | Shows the selected building color via `CurrentColor` layer. Tap to cycle to the next color |
+| House SVG | `addBuilding` (house) | Place a house |
+| Factory SVG | `addBuilding` (factory) | Place a factory |
+| Storage SVG | `addBuilding` (storage) | Place a storage depot |
 
+- All toolbar icons are loaded from `assets/Icon-*.svg` files and rendered onto the canvas. SVGs with a layer `id="CurrentColor"` have their fill dynamically replaced with the selected building color.
 - The active tool has a black background with a white ring outline; inactive tools use a semi-transparent dark background (`rgba(44, 62, 80, 0.85)`).
-- Building icons (house, factory, storage) are drawn in the currently selected color.
-- The Building tool button dynamically shows the icon of the selected building sub-type.
 
 ### Gear Menu (bottom-right)
 

@@ -13,9 +13,69 @@ import { musicEnabled } from './music.ts';
 import { cities } from './cities.ts';
 import { getHouseSprite, getFactorySprite, getStorageSprite, drawSpriteLayer, PinPlacement } from './sprites.ts';
 import splashUrl from '../assets/splashscreen.png';
+import iconRoadNormalRaw from '../assets/Icon-Road-Normal.svg?raw';
+import iconRoadNarrowRaw from '../assets/Icon-Road-Narrow.svg?raw';
+import iconRoadHighwayRaw from '../assets/Icon-Road-Highway.svg?raw';
+import iconDemolishRaw from '../assets/Icon-Demolish.svg?raw';
+import iconColorRaw from '../assets/Icon-Color.svg?raw';
+import iconHouseRaw from '../assets/Icon-House.svg?raw';
+import iconFactoryRaw from '../assets/Icon-Factory.svg?raw';
+import iconStorageRaw from '../assets/Icon-Storage.svg?raw';
 
 const splashImg = new Image();
 splashImg.src = splashUrl;
+
+// SVG icon image cache — keyed by (rawSvg + colorOverride)
+const iconCache = new Map<string, HTMLImageElement>();
+
+function darkenHex(hex: string, factor: number): string {
+  const r = Math.round(parseInt(hex.slice(1, 3), 16) * factor);
+  const g = Math.round(parseInt(hex.slice(3, 5), 16) * factor);
+  const b = Math.round(parseInt(hex.slice(5, 7), 16) * factor);
+  return `rgb(${r},${g},${b})`;
+}
+
+function getIconImage(rawSvg: string, colorOverride?: string): HTMLImageElement {
+  const key = rawSvg + (colorOverride ?? '');
+  let img = iconCache.get(key);
+  if (img) return img;
+  let svg = rawSvg;
+  if (colorOverride) {
+    // Replace fill on RoofMain (main color) and RoofShadow (darkened)
+    svg = svg.replace(/(id="RoofMain(?:_\d+)?"[^>]*fill=")([^"]*)(")/, `$1${colorOverride}$3`);
+    svg = svg.replace(/(id="RoofShadow(?:_\d+)?"[^>]*fill=")([^"]*)(")/, `$1${darkenHex(colorOverride, 0.7)}$3`);
+  }
+  img = new Image();
+  img.src = 'data:image/svg+xml,' + encodeURIComponent(svg);
+  iconCache.set(key, img);
+  return img;
+}
+
+// Invalidate cached icons when color changes so CurrentColor layers update
+let lastIconColor = '';
+function invalidateIconCacheIfNeeded() {
+  if (selectedColor !== lastIconColor) {
+    // Only clear entries that had a color override
+    for (const [key] of iconCache) {
+      // Keys with color override are longer than the raw SVG alone
+      // Simpler: just clear all — they'll be recreated quickly
+    }
+    iconCache.clear();
+    lastIconColor = selectedColor;
+  }
+}
+
+function drawSvgIcon(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, rawSvg: string, colorOverride?: string) {
+  const img = getIconImage(rawSvg, colorOverride);
+  if (!img.complete) return;
+  const size = r * 2; // fill the full button diameter
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.clip();
+  ctx.drawImage(img, cx - size / 2, cy - size / 2, size, size);
+  ctx.restore();
+}
 
 export function render(ctx: CanvasRenderingContext2D, width: number, height: number, preview: RoadPreview | null, fps: number = 0) {
   // Clear entire canvas
@@ -806,164 +866,65 @@ const GEAR_SIZE = 48;     // gear button diameter
 
 // Draw a circular button with icon
 function drawCircleButton(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, active: boolean, drawIcon: (ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) => void) {
-  // Drop shadow
+  // Drop shadow — draw an opaque circle offset below, then cover it with the icon
   ctx.save();
   ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
-  ctx.shadowBlur = 8;
+  ctx.shadowBlur = 6;
   ctx.shadowOffsetX = 0;
   ctx.shadowOffsetY = 2;
-
-  // Background
-  ctx.fillStyle = active ? '#000' : 'rgba(44, 62, 80, 0.85)';
+  ctx.fillStyle = '#000';
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 
-  // Thin white outline
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.stroke();
+  // Icon (SVG provides its own background, clipped to circle)
+  drawIcon(ctx, cx, cy, r);
 
-  // Active ring
   if (active) {
+    // Active: white ring
     ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+  } else {
+    // Inactive: solid dark outline
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.stroke();
   }
-
-  // Icon
-  drawIcon(ctx, cx, cy, r);
 }
 
-// Icon drawing functions
-function iconRoad(ctx: CanvasRenderingContext2D, cx: number, cy: number, _r: number) {
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 6;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(cx - 10, cy);
-  ctx.lineTo(cx + 10, cy);
-  ctx.stroke();
-  // Center dashes
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 1;
-  ctx.setLineDash([3, 3]);
-  ctx.beginPath();
-  ctx.moveTo(cx - 10, cy);
-  ctx.lineTo(cx + 10, cy);
-  ctx.stroke();
-  ctx.setLineDash([]);
+// SVG-based icon drawing functions
+function iconRoad(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
+  drawSvgIcon(ctx, cx, cy, r, iconRoadNormalRaw);
 }
 
-function iconNarrow(ctx: CanvasRenderingContext2D, cx: number, cy: number, _r: number) {
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 3;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(cx - 10, cy);
-  ctx.lineTo(cx + 10, cy);
-  ctx.stroke();
+function iconNarrow(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
+  drawSvgIcon(ctx, cx, cy, r, iconRoadNarrowRaw);
 }
 
-function iconHighway(ctx: CanvasRenderingContext2D, cx: number, cy: number, _r: number) {
-  // Two parallel lines with yellow dash
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 2;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(cx - 10, cy - 4);
-  ctx.lineTo(cx + 10, cy - 4);
-  ctx.moveTo(cx - 10, cy + 4);
-  ctx.lineTo(cx + 10, cy + 4);
-  ctx.stroke();
-  ctx.strokeStyle = '#f1c40f';
-  ctx.lineWidth = 1;
-  ctx.setLineDash([3, 3]);
-  ctx.beginPath();
-  ctx.moveTo(cx - 10, cy);
-  ctx.lineTo(cx + 10, cy);
-  ctx.stroke();
-  ctx.setLineDash([]);
+function iconHighway(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
+  drawSvgIcon(ctx, cx, cy, r, iconRoadHighwayRaw);
 }
 
-function iconRemove(ctx: CanvasRenderingContext2D, cx: number, cy: number, _r: number) {
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 3;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(cx - 7, cy - 7);
-  ctx.lineTo(cx + 7, cy + 7);
-  ctx.moveTo(cx + 7, cy - 7);
-  ctx.lineTo(cx - 7, cy + 7);
-  ctx.stroke();
+function iconDemolishIcon(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
+  drawSvgIcon(ctx, cx, cy, r, iconDemolishRaw);
 }
 
-function iconBuilding(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
-  // Show the icon of the currently selected building type
-  switch (selectedBuildingType) {
-    case 'factory': iconFactory(ctx, cx, cy, r); break;
-    case 'storage': iconStorage(ctx, cx, cy, r); break;
-    default: iconHouse(ctx, cx, cy, r); break;
-  }
+function iconHouse(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
+  drawSvgIcon(ctx, cx, cy, r, iconHouseRaw, selectedColor);
 }
 
-function iconDemolish(ctx: CanvasRenderingContext2D, cx: number, cy: number, _r: number) {
-  // Hammer shape
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 2.5;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  // Handle
-  ctx.moveTo(cx - 6, cy + 8);
-  ctx.lineTo(cx + 4, cy - 2);
-  ctx.stroke();
-  // Head
-  ctx.fillStyle = '#fff';
-  ctx.beginPath();
-  ctx.moveTo(cx + 2, cy - 4);
-  ctx.lineTo(cx + 9, cy - 8);
-  ctx.lineTo(cx + 7, cy - 1);
-  ctx.lineTo(cx, cy - 1);
-  ctx.closePath();
-  ctx.fill();
+function iconFactory(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
+  drawSvgIcon(ctx, cx, cy, r, iconFactoryRaw, selectedColor);
 }
 
-// Building sub-type icons
-function iconHouse(ctx: CanvasRenderingContext2D, cx: number, cy: number, _r: number) {
-  ctx.fillStyle = selectedColor;
-  ctx.fillRect(cx - 6, cy - 2, 12, 10);
-  ctx.beginPath();
-  ctx.moveTo(cx - 8, cy - 2);
-  ctx.lineTo(cx, cy - 9);
-  ctx.lineTo(cx + 8, cy - 2);
-  ctx.closePath();
-  ctx.fill();
-}
-
-function iconFactory(ctx: CanvasRenderingContext2D, cx: number, cy: number, _r: number) {
-  ctx.fillStyle = selectedColor;
-  ctx.fillRect(cx - 8, cy - 2, 16, 10);
-  // Chimney
-  ctx.fillRect(cx + 3, cy - 8, 4, 6);
-}
-
-function iconStorage(ctx: CanvasRenderingContext2D, cx: number, cy: number, _r: number) {
-  ctx.strokeStyle = selectedColor;
-  ctx.lineWidth = 2;
-  ctx.strokeRect(cx - 7, cy - 7, 14, 14);
-  // Grid lines
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(cx, cy - 7);
-  ctx.lineTo(cx, cy + 7);
-  ctx.moveTo(cx - 7, cy);
-  ctx.lineTo(cx + 7, cy);
-  ctx.stroke();
+function iconStorage(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
+  drawSvgIcon(ctx, cx, cy, r, iconStorageRaw, selectedColor);
 }
 
 // Gear icon
@@ -1001,15 +962,14 @@ const TOOL_ICONS: ToolIconDef[] = [
   { type: 'addRoad', icon: iconRoad },
   { type: 'addNarrow', icon: iconNarrow },
   { type: 'addHighway', icon: iconHighway },
-  { type: 'removeRoad', icon: iconRemove },
-  // Color circle goes here (index 4) — handled separately
+  // Color circle goes here (index 3) — handled separately
   { type: 'addBuilding', buildingType: 'house', icon: iconHouse },
   { type: 'addBuilding', buildingType: 'factory', icon: iconFactory },
   { type: 'addBuilding', buildingType: 'storage', icon: iconStorage },
-  { type: 'removeBuilding', icon: iconDemolish },
+  { type: 'demolish', icon: iconDemolishIcon },
 ];
 
-const COLOR_SLOT_INDEX = 4; // color circle inserted before house
+const COLOR_SLOT_INDEX = 3; // color circle inserted before house
 
 function isToolActive(def: ToolIconDef): boolean {
   if (def.buildingType) {
@@ -1019,6 +979,7 @@ function isToolActive(def: ToolIconDef): boolean {
 }
 
 function drawToolbar(ctx: CanvasRenderingContext2D, width: number, height: number, fps: number = 0) {
+  invalidateIconCacheIfNeeded();
   const r = BTN_SIZE / 2;
   const totalSlots = TOOL_ICONS.length + 1; // +1 for color circle
   const startY = height / 2 - (totalSlots * (BTN_SIZE + BTN_GAP) - BTN_GAP) / 2;
@@ -1027,48 +988,12 @@ function drawToolbar(ctx: CanvasRenderingContext2D, width: number, height: numbe
   let slot = 0;
   for (let i = 0; i < TOOL_ICONS.length; i++) {
     if (i === COLOR_SLOT_INDEX) {
-      // Draw color circle
+      // Draw color button using SVG icon with CurrentColor
       const cx = BTN_MARGIN + r;
       const cy = startY + slot * (BTN_SIZE + BTN_GAP) + r;
-
-      // Drop shadow
-      ctx.save();
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
-      ctx.shadowBlur = 8;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 2;
-      ctx.fillStyle = selectedColor;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-
-      // Thin white outline
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.stroke();
-
-      // Draw small refresh/cycle icon to indicate color is changeable
-      const iconR = r * 0.45;
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(cx, cy, iconR, -Math.PI * 0.7, Math.PI * 0.5);
-      ctx.stroke();
-      // Arrowhead at end of arc
-      const arrowAngle = Math.PI * 0.5;
-      const ax = cx + Math.cos(arrowAngle) * iconR;
-      const ay = cy + Math.sin(arrowAngle) * iconR;
-      const arrowSize = 4;
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-      ctx.beginPath();
-      ctx.moveTo(ax + arrowSize * Math.cos(arrowAngle - 0.3), ay + arrowSize * Math.sin(arrowAngle - 0.3));
-      ctx.lineTo(ax + arrowSize * Math.cos(arrowAngle + Math.PI / 2 + 0.3), ay + arrowSize * Math.sin(arrowAngle + Math.PI / 2 + 0.3));
-      ctx.lineTo(ax + arrowSize * Math.cos(arrowAngle + Math.PI - 0.3), ay + arrowSize * Math.sin(arrowAngle + Math.PI - 0.3));
-      ctx.closePath();
-      ctx.fill();
+      drawCircleButton(ctx, cx, cy, r, false, (ctx2, cx2, cy2, r2) => {
+        drawSvgIcon(ctx2, cx2, cy2, r2, iconColorRaw, selectedColor);
+      });
       slot++;
     }
     const def = TOOL_ICONS[i];
@@ -1212,6 +1137,31 @@ function drawToolbar(ctx: CanvasRenderingContext2D, width: number, height: numbe
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('Reset', menuX + menuW / 2, my + 16);
+  }
+
+  // Current selection label — bottom left
+  let label = '';
+  switch (activeTool) {
+    case 'addRoad': label = 'Road'; break;
+    case 'addNarrow': label = 'Narrow Road'; break;
+    case 'addHighway': label = 'Highway'; break;
+    case 'demolish': label = 'Demolish'; break;
+    case 'addBuilding':
+      switch (selectedBuildingType) {
+        case 'house': label = 'Residential'; break;
+        case 'factory': label = 'Factory'; break;
+        case 'storage': label = 'Storage'; break;
+      }
+      break;
+  }
+  if (label) {
+    ctx.font = 'bold 13px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'bottom';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.fillText(label, BTN_MARGIN + 1, height - BTN_MARGIN + 1);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(label, BTN_MARGIN, height - BTN_MARGIN);
   }
 }
 

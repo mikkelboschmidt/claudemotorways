@@ -81,6 +81,6 @@ export interface RoadPreview {
   endGy: number;
 }
 
-export type ToolType = 'addRoad' | 'addNarrow' | 'removeRoad' | 'addBuilding' | 'removeBuilding' | 'addHighway' | 'addStorage';
+export type ToolType = 'addRoad' | 'addNarrow' | 'removeRoad' | 'addBuilding' | 'removeBuilding' | 'addHighway' | 'addStorage' | 'demolish';
 
 export const BUILDING_COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6'];
