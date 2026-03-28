@@ -37,7 +37,7 @@ A logistics puzzle game where players build road networks connecting residential
 
 ### Building Placement Rules
 
-- Buildings cannot overlap. Disabled (burned) buildings can be replaced — placing a new building on a burned-out one removes the old building but preserves its road edges.
+- Buildings cannot overlap. Buildings cannot be placed on tiles that contain road segments. Disabled (burned) buildings can be replaced — placing a new building on a burned-out one removes the old building but preserves its road edges.
 - Houses and storage auto-orient their entrance toward the nearest adjacent road node. If no road is nearby, they default to `right`.
 - Factories always start with entrance on `left`.
 - All building types come in 5 colors: red (`#e74c3c`), blue (`#3498db`), green (`#2ecc71`), orange (`#f39c12`), purple (`#9b59b6`). Cars, trucks, and buildings are color-matched — a red car only visits red factories/storages.
@@ -273,7 +273,7 @@ Tapping anywhere outside the menu closes it.
 The game is fully playable on touch devices. The canvas uses pointer events for tool interactions and touch events for multi-finger gestures.
 
 - **Single finger**: Operates the active tool (place roads, place buildings, etc.) — same as mouse click/drag.
-- **Two-finger pinch**: Zoom in/out. Any in-progress road drag is cancelled when a second finger touches down.
+- **Two-finger pinch**: Zoom in/out. Any in-progress road drag or highway placement is cancelled when a second finger touches down.
 - **Two-finger pan**: Drag the camera with two fingers.
 - **Tool/UI taps**: Tapping floating toolbar buttons and gear menu items works via `pointerdown` hit-testing against the button layout.
 

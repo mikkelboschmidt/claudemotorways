@@ -172,6 +172,14 @@ export function addBuilding(gx: number, gy: number, type: 'house' | 'factory' | 
     if (overlapX && overlapY) return null;
   }
 
+  // Reject placement if any tile in the footprint has a road node with edges
+  for (let tx = gx; tx < gx + newW; tx++) {
+    for (let ty = gy; ty < gy + newH; ty++) {
+      const node = nodes.get(nodeKey(tx, ty));
+      if (node && node.edges.size > 0) return null;
+    }
+  }
+
   let side: ConnectionSide = type === 'factory' ? 'left' : 'right';
 
   // For houses and storage, detect nearby roads and orient the entrance toward one
