@@ -1,5 +1,5 @@
 import { Building, ConnectionSide } from './types.ts';
-import { nodeKey, nodes, addEdge, bumpGraphVersion, removeEdge } from './graph.ts';
+import { nodeKey, nodes, addEdge, bumpGraphVersion } from './graph.ts';
 import { GRID, HALF, PIN_SPAWN_INTERVAL, PIN_COOLDOWN, FACTORY_MAX_PINS, FACTORY_MAX_PARKED, STORAGE_W, STORAGE_H, STORAGE_MAX_PINS, STORAGE_MAX_PARKED } from './constants.ts';
 import { resetSpawnTimer, evictCarsFromFactory, removeCarsForBuilding } from './cars.ts';
 import { addScore } from './score.ts';
@@ -224,14 +224,6 @@ export function removeBuilding(id: number): boolean {
   const b = buildings[idx];
   const [cx, cy] = getConnectionPoint(b);
   const connKey = nodeKey(cx, cy);
-
-  const node = nodes.get(connKey);
-  if (node) {
-    const edgeIds = [...node.edges];
-    for (const eid of edgeIds) {
-      removeEdge(eid);
-    }
-  }
 
   buildingById.delete(b.id);
   buildings.splice(idx, 1);
