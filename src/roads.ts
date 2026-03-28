@@ -7,7 +7,7 @@ import { activeTool, selectedColor, selectedBuildingType } from './toolbar.ts';
 import { removeCarsForEdge, removeCarsForBuilding } from './cars.ts';
 import { saveGame } from './save.ts';
 import { playSfx } from './sfx.ts';
-import { highwayPhase, highwayStartGx, highwayStartGy, draggingHighwayId, setHighwayPhase, setHighwayStart, setHighwayPreviewEnd, setDraggingHighwayId, createHighway, findHighwayAtPixel, findHighwayHandleAtPixel, removeHighway, updateHighwayMid, rebuildHighway, highways } from './highway.ts';
+import { highwayPhase, highwayStartGx, highwayStartGy, draggingHighwayId, draggingHandleIndex, setHighwayPhase, setHighwayStart, setHighwayPreviewEnd, setDraggingHighwayId, setDraggingHandleIndex, createHighway, findHighwayAtPixel, findHighwayHandleAtPixel, removeHighway, updateHighwayMid, rebuildHighway, highways } from './highway.ts';
 
 let dragging = false;
 let dragStartGx = 0;
@@ -190,7 +190,8 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
       // Check for handle drag first
       const handle = findHighwayHandleAtPixel(px, py);
       if (handle && highwayPhase === 'idle') {
-        setDraggingHighwayId(handle.id);
+        setDraggingHighwayId(handle.highway.id);
+        setDraggingHandleIndex(handle.handleIndex);
         return;
       }
 
@@ -231,10 +232,10 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
       dragConfirmed = true;
     }
 
-    // Highway handle drag — update midpoint visually (world coords)
+    // Highway handle drag — update control point visually (world coords)
     if (draggingHighwayId >= 0) {
       const hw = highways.find(h => h.id === draggingHighwayId);
-      if (hw) updateHighwayMid(hw, px, py);
+      if (hw) updateHighwayMid(hw, draggingHandleIndex, px, py);
       return;
     }
 

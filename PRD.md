@@ -64,7 +64,7 @@ A logistics puzzle game where players build road networks connecting residential
 - **Width**: 36px visual (regular + 6px).
 - **Speed**: 2.25 px/frame (150% of regular). Trucks get 1.3× their base speed on highways.
 - **Placement**: Two-click placement (start node, then end node, both must be on existing roads, ≥3 tiles apart). Creates a cubic bezier curve between them.
-- **Midpoint handle**: After placement, the highway's midpoint can be dragged to adjust the curve shape.
+- **Control handles**: After placement, two draggable handles at t≈1/3 and t≈2/3 along the curve allow precise shaping of the highway path.
 - **Visual**: Elevated look with shadow, gray surface (#666), yellow dashed center line.
 - **Pathfinding bonus**: Highways are weighted at 0.65× cost, making them strongly preferred routes.
 
@@ -185,7 +185,7 @@ Four speed settings: Pause (0×), Normal (1×), Fast (2×), Turbo (3×). The gam
 The game auto-saves to `localStorage` every 5 seconds and after every build action. Saved data includes:
 - All buildings (type, position, color, pins, disabled state, connection side)
 - All road edges (coordinates, narrow flag)
-- All highways (start, end, midpoint)
+- All highways (start, end, two control points)
 - Score and next building ID
 
 Cars and trucks are not saved — they respawn naturally after load.
@@ -240,7 +240,7 @@ Floating circular buttons (44px diameter) arranged in a vertical column on the l
 |---|---|---|
 | Road SVG | `addRoad` | Drag to place two-lane roads |
 | Narrow SVG | `addNarrow` | Drag to place single-lane roads |
-| Highway SVG | `addHighway` | Two-click placement + draggable midpoint |
+| Highway SVG | `addHighway` | Two-click placement + two draggable control handles |
 | Demolish SVG | `demolish` | Tap a building to remove it, or drag across road tiles to delete edges/highways |
 | **Color SVG** | — | Shows the selected building color via `CurrentColor` layer. Tap to cycle to the next color |
 | House SVG | `addBuilding` (house) | Place a house |
@@ -270,7 +270,7 @@ Tapping anywhere outside the menu closes it.
 
 The game is fully playable on touch devices. The canvas uses pointer events for tool interactions and touch events for multi-finger gestures.
 
-- **Single finger**: Operates the active tool (place roads, place buildings, etc.) — same as mouse click/drag. Highway midpoint handles use a screen-space hit radius (22px) so they remain easy to tap at any zoom level.
+- **Single finger**: Operates the active tool (place roads, place buildings, etc.) — same as mouse click/drag. Highway control handles use a screen-space hit radius (22px) so they remain easy to tap at any zoom level.
 - **Two-finger pinch**: Zoom in/out. Any in-progress road drag or highway placement is cancelled when a second finger touches down.
 - **Two-finger pan**: Drag the camera with two fingers.
 - **Tool/UI taps**: Tapping floating toolbar buttons and gear menu items works via `pointerdown` hit-testing against the button layout.

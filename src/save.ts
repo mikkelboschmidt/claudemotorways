@@ -11,7 +11,7 @@ export interface SaveData {
   name?: string;
   buildings: Building[];
   edges: [number, number, number, number, boolean?][]; // [gx1, gy1, gx2, gy2, narrow?]
-  highways?: { startGx: number; startGy: number; endGx: number; endGy: number; midX?: number; midY?: number }[];
+  highways?: { startGx: number; startGy: number; endGx: number; endGy: number; midX?: number; midY?: number; mid1X?: number; mid1Y?: number; mid2X?: number; mid2Y?: number }[];
   score: number;
   nextBuildingId: number;
 }
@@ -32,7 +32,8 @@ export function serializeState(): SaveData {
   const hwList = highways.map(hw => ({
     startGx: hw.startGx, startGy: hw.startGy,
     endGx: hw.endGx, endGy: hw.endGy,
-    midX: hw.midX, midY: hw.midY,
+    mid1X: hw.mid1X, mid1Y: hw.mid1Y,
+    mid2X: hw.mid2X, mid2Y: hw.mid2Y,
   }));
 
   return {
@@ -70,7 +71,7 @@ export function loadFromData(data: SaveData): boolean {
   // Restore highways (creates nodes + edges from saved endpoints)
   if (data.highways) {
     for (const hw of data.highways) {
-      createHighway(hw.startGx, hw.startGy, hw.endGx, hw.endGy, hw.midX, hw.midY);
+      createHighway(hw.startGx, hw.startGy, hw.endGx, hw.endGy, hw.mid1X, hw.mid1Y, hw.mid2X, hw.mid2Y);
     }
   }
 

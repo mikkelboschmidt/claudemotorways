@@ -8,7 +8,7 @@ import { RoadPreview, ToolType, BUILDING_COLORS } from './types.ts';
 import { activeTool, selectedColor, selectedBuildingType, gearMenuOpen, demoModalOpen, cityModalOpen } from './toolbar.ts';
 import { score } from './score.ts';
 import { gameSpeed, SPEED_OPTIONS, SPEED_LABELS } from './speed.ts';
-import { highways, highwayEdgeSet, highwayPhase, highwayStartGx, highwayStartGy, highwayPreviewEndPx, highwayPreviewEndPy, computeBezierControls, draggingHighwayId } from './highway.ts';
+import { highways, highwayEdgeSet, highwayPhase, highwayStartGx, highwayStartGy, highwayPreviewEndPx, highwayPreviewEndPy, computeBezierControls, draggingHighwayId, draggingHandleIndex } from './highway.ts';
 import { musicEnabled } from './music.ts';
 import { cities } from './cities.ts';
 import { getHouseSprite, getFactorySprite, getStorageSprite, drawSpriteLayer, PinPlacement } from './sprites.ts';
@@ -376,18 +376,19 @@ function drawHighways(ctx: CanvasRenderingContext2D) {
     drawCars(ctx, hwEdges);
   }
 
-  // Draw draggable midpoint handles when highway tool is active
+  // Draw draggable control point handles when highway tool is active
   if (activeTool === 'addHighway' || draggingHighwayId >= 0) {
     for (const hw of highways) {
-      const isDragging = hw.id === draggingHighwayId;
-      // Handle circle
-      ctx.beginPath();
-      ctx.arc(hw.midX, hw.midY, isDragging ? 8 : 6, 0, Math.PI * 2);
-      ctx.fillStyle = isDragging ? '#e74c3c' : '#3498db';
-      ctx.fill();
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 2;
-      ctx.stroke();
+      for (const [idx, hx, hy] of [[1, hw.mid1X, hw.mid1Y], [2, hw.mid2X, hw.mid2Y]] as [number, number, number][]) {
+        const isDragging = hw.id === draggingHighwayId && idx === draggingHandleIndex;
+        ctx.beginPath();
+        ctx.arc(hx, hy, isDragging ? 8 : 6, 0, Math.PI * 2);
+        ctx.fillStyle = isDragging ? '#e74c3c' : '#3498db';
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
     }
   }
 }
