@@ -18,7 +18,7 @@ A logistics puzzle game where players build road networks connecting residential
 ### Factory (3×2 tiles)
 
 - Produces pins over time. Cars and trucks visit to collect them.
-- **Entrance**: Supports `left` and `right` sides only. Auto-orients toward the nearest road on placement (like storage/houses). Can be changed by dragging a road directly to/from the factory.
+- **Entrance**: Supports all 4 sides. Auto-orients toward the nearest road on placement (like storage/houses). Can be changed by dragging a road directly to/from the factory. For `top`/`bottom` entrances, the connection point is right-aligned (rightmost tile) rather than centered.
 - **Pin spawning**: Every ~15s (900 frames), the factory produces one pin if below capacity.
 - **Pin cooldown**: A freshly spawned pin cannot be picked up for ~1s (60 frames).
 - **Capacity**: 6 pins, 3 parking slots.
@@ -38,7 +38,7 @@ A logistics puzzle game where players build road networks connecting residential
 ### Building Placement Rules
 
 - Buildings cannot overlap. Buildings cannot be placed on tiles that contain road segments. Disabled (burned) buildings can be replaced — placing a new building on a burned-out one removes the old building but preserves its road edges.
-- All building types auto-orient their entrance toward the nearest adjacent road node. If no road is nearby, they default to `right`. Factories only support `left` and `right` entrances.
+- All building types auto-orient their entrance toward the nearest adjacent road node. If no road is nearby, they default to `right`.
 - All building types come in 5 colors: red (`#e74c3c`), blue (`#3498db`), green (`#2ecc71`), orange (`#f39c12`), purple (`#9b59b6`). Cars, trucks, and buildings are color-matched — a red car only visits red factories/storages.
 
 ---
@@ -71,7 +71,7 @@ A logistics puzzle game where players build road networks connecting residential
 ### Road–Building Connections
 
 - **Houses**: The connection tile is the house tile itself. Dragging a road onto a house automatically connects it. The drag direction determines which side becomes the entrance (drag right → right entrance, etc.). Only pure horizontal/vertical drags are matched.
-- **Factories**: Dragging a road onto a factory tile sets the entrance side based on drag direction (left/right only). The connection tile is the tile **adjacent** to the building on its entrance side.
+- **Factories**: Dragging a road onto a factory tile sets the entrance side based on drag direction (all 4 sides). The connection tile is the tile **adjacent** to the building on its entrance side. For `top`/`bottom`, the connection tile is right-aligned (rightmost column) rather than centered.
 - **Storage**: Dragging a road onto a storage tile sets the entrance side based on drag direction (all 4 sides). The connection tile is the tile **adjacent** to the building on its entrance side.
 
 ---
