@@ -50,14 +50,16 @@ export function setNextBuildingId(id: number) {
 }
 
 // Connection point is the tile ADJACENT to the building (where the road node lives)
+// For factory top/bottom, the entrance is right-aligned (rightmost tile) instead of centered.
 export function getConnectionPoint(b: Building): [number, number] {
   const midW = Math.floor(b.w / 2);
   const midH = Math.floor(b.h / 2);
+  const topBottomX = b.type === 'factory' ? b.w - 1 : midW;
   switch (b.connectionSide) {
-    case 'right':  return [b.gx + b.w,     b.gy + midH];
-    case 'left':   return [b.gx - 1,       b.gy + midH];
-    case 'top':    return [b.gx + midW,     b.gy - 1];
-    case 'bottom': return [b.gx + midW,     b.gy + b.h];
+    case 'right':  return [b.gx + b.w,          b.gy + midH];
+    case 'left':   return [b.gx - 1,            b.gy + midH];
+    case 'top':    return [b.gx + topBottomX,    b.gy - 1];
+    case 'bottom': return [b.gx + topBottomX,    b.gy + b.h];
   }
 }
 
@@ -67,24 +69,12 @@ export function getConnectionPoint(b: Building): [number, number] {
 //   The road direction determines which side becomes the entrance.
 export function getBuildingEdgeAt(gx: number, gy: number, roadDirGx: number, roadDirGy: number): { building: Building; side: ConnectionSide } | null {
   for (const b of buildings) {
-    if (b.type === 'factory') {
-      // Factory: only match the exact connection tile
-      const [cx, cy] = getConnectionPoint(b);
-      if (gx !== cx || gy !== cy) continue;
-      switch (b.connectionSide) {
-        case 'right':  if (roadDirGx > 0) return { building: b, side: 'right' }; break;
-        case 'left':   if (roadDirGx < 0) return { building: b, side: 'left' }; break;
-        case 'top':    if (roadDirGy < 0) return { building: b, side: 'top' }; break;
-        case 'bottom': if (roadDirGy > 0) return { building: b, side: 'bottom' }; break;
-      }
-    } else {
-      // House & Storage: match if the tile is ON the building itself
-      if (gx < b.gx || gx >= b.gx + b.w || gy < b.gy || gy >= b.gy + b.h) continue;
-      if (roadDirGx > 0 && roadDirGy === 0) return { building: b, side: 'right' };
-      if (roadDirGx < 0 && roadDirGy === 0) return { building: b, side: 'left' };
-      if (roadDirGy > 0 && roadDirGx === 0) return { building: b, side: 'bottom' };
-      if (roadDirGy < 0 && roadDirGx === 0) return { building: b, side: 'top' };
-    }
+    // All buildings: match if the tile is ON the building itself
+    if (gx < b.gx || gx >= b.gx + b.w || gy < b.gy || gy >= b.gy + b.h) continue;
+    if (roadDirGx > 0 && roadDirGy === 0) return { building: b, side: 'right' };
+    if (roadDirGx < 0 && roadDirGy === 0) return { building: b, side: 'left' };
+    if (roadDirGy > 0 && roadDirGx === 0) return { building: b, side: 'bottom' };
+    if (roadDirGy < 0 && roadDirGx === 0) return { building: b, side: 'top' };
   }
   return null;
 }
@@ -93,9 +83,8 @@ export function getBuildingEdgeAt(gx: number, gy: number, roadDirGx: number, roa
 // (start or end of the road drag landed on the building edge).
 // false when a road was merely placed adjacent to the building.
 export function connectBuildingOnSide(b: Building, side: ConnectionSide, dragGx: number, dragGy: number, isDragEndpoint: boolean) {
-  // Factories: connection side is fixed at creation, never changed by roads.
-  // Houses & Storage: only change side when the user explicitly dragged to/from the building.
-  const canChangeSide = (b.type === 'house' || b.type === 'storage') && isDragEndpoint;
+  // All buildings: change side when the user explicitly dragged to/from the building.
+  const canChangeSide = isDragEndpoint;
 
   if (b.connectionSide !== side && canChangeSide) {
     // Just change the connection side — keep existing road edges intact
@@ -180,20 +169,22 @@ export function addBuilding(gx: number, gy: number, type: 'house' | 'factory' | 
     }
   }
 
-  let side: ConnectionSide = type === 'factory' ? 'left' : 'right';
+  let side: ConnectionSide = 'right';
 
-  // For houses and storage, detect nearby roads and orient the entrance toward one
-  if (type === 'house' || type === 'storage') {
+  // Detect nearby roads and orient the entrance toward one
+  {
     const candidates: ConnectionSide[] = ['right', 'left', 'bottom', 'top'];
     const midW = Math.floor(newW / 2);
     const midH = Math.floor(newH / 2);
+    // Factory top/bottom entrance is right-aligned, not centered
+    const topBottomX = type === 'factory' ? newW - 1 : midW;
     for (const s of candidates) {
       let cx: number, cy: number;
       switch (s) {
-        case 'right':  cx = gx + newW;  cy = gy + midH; break;
-        case 'left':   cx = gx - 1;     cy = gy + midH; break;
-        case 'top':    cx = gx + midW;  cy = gy - 1;    break;
-        case 'bottom': cx = gx + midW;  cy = gy + newH;  break;
+        case 'right':  cx = gx + newW;       cy = gy + midH; break;
+        case 'left':   cx = gx - 1;          cy = gy + midH; break;
+        case 'top':    cx = gx + topBottomX;  cy = gy - 1;    break;
+        case 'bottom': cx = gx + topBottomX;  cy = gy + newH;  break;
       }
       const node = nodes.get(nodeKey(cx, cy));
       if (node && node.edges.size > 0) {
@@ -274,11 +265,12 @@ export function getBuildingPixelPos(b: Building): { x: number; y: number; w: num
 export function getConnectionPixelPos(b: Building): { x: number; y: number } {
   const midW = Math.floor(b.w / 2);
   const midH = Math.floor(b.h / 2);
+  const topBottomX = b.type === 'factory' ? b.w - 1 : midW;
   switch (b.connectionSide) {
-    case 'right':  return { x: (b.gx + b.w) * GRID,       y: (b.gy + midH) * GRID + HALF };
-    case 'left':   return { x: b.gx * GRID,                y: (b.gy + midH) * GRID + HALF };
-    case 'top':    return { x: (b.gx + midW) * GRID + HALF, y: b.gy * GRID };
-    case 'bottom': return { x: (b.gx + midW) * GRID + HALF, y: (b.gy + b.h) * GRID };
+    case 'right':  return { x: (b.gx + b.w) * GRID,            y: (b.gy + midH) * GRID + HALF };
+    case 'left':   return { x: b.gx * GRID,                     y: (b.gy + midH) * GRID + HALF };
+    case 'top':    return { x: (b.gx + topBottomX) * GRID + HALF, y: b.gy * GRID };
+    case 'bottom': return { x: (b.gx + topBottomX) * GRID + HALF, y: (b.gy + b.h) * GRID };
   }
 }
 
