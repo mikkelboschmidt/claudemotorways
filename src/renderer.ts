@@ -5,11 +5,12 @@ import { buildings, getBuildingPixelPos, getConnectionPixelPos, getConnectionPoi
 import { hoverGx, hoverGy, pendingRemoveTiles } from './roads.ts';
 import { cars } from './cars.ts';
 import { RoadPreview, ToolType, BUILDING_COLORS } from './types.ts';
-import { activeTool, selectedColor, selectedBuildingType, gearMenuOpen } from './toolbar.ts';
+import { activeTool, selectedColor, selectedBuildingType, gearMenuOpen, demoModalOpen } from './toolbar.ts';
 import { score } from './score.ts';
 import { gameSpeed, SPEED_OPTIONS, SPEED_LABELS } from './speed.ts';
 import { highways, highwayEdgeSet, highwayPhase, highwayStartGx, highwayStartGy, highwayPreviewEndPx, highwayPreviewEndPy, computeBezierControls, draggingHighwayId } from './highway.ts';
 import { musicEnabled } from './music.ts';
+import { cities } from './cities.ts';
 import { getHouseSprite, getFactorySprite, getStorageSprite, drawSpriteLayer, PinPlacement } from './sprites.ts';
 
 export function render(ctx: CanvasRenderingContext2D, width: number, height: number, preview: RoadPreview | null, fps: number = 0) {
@@ -69,6 +70,7 @@ export function render(ctx: CanvasRenderingContext2D, width: number, height: num
   // Score and toolbar drawn in screen space
   drawScore(ctx, width);
   drawToolbar(ctx, width, height, fps);
+  if (demoModalOpen) drawDemoModal(ctx, width, height);
 }
 
 function drawRoads(ctx: CanvasRenderingContext2D) {
@@ -908,7 +910,10 @@ function drawToolbar(ctx: CanvasRenderingContext2D, width: number, height: numbe
   // Gear menu — popup above gear button
   if (gearMenuOpen) {
     const menuW = 180;
-    const menuH = 160;
+    const pad = 10;
+    // Compute dynamic height: base items + save/load row + city buttons
+    const cityCount = cities.length;
+    const menuH = 160 + 42 + (cityCount > 0 ? 24 + cityCount * 34 : 0);
     const menuX = width - BTN_MARGIN - menuW;
     const menuY = gearCy - gearR - BTN_GAP - menuH;
 
@@ -918,7 +923,6 @@ function drawToolbar(ctx: CanvasRenderingContext2D, width: number, height: numbe
     ctx.roundRect(menuX, menuY, menuW, menuH, 8);
     ctx.fill();
 
-    const pad = 10;
     let my = menuY + pad;
 
     // FPS display
@@ -972,16 +976,124 @@ function drawToolbar(ctx: CanvasRenderingContext2D, width: number, height: numbe
     ctx.fillText(musicLabel, menuX + menuW / 2, my + 16);
     my += 42;
 
+    // Save / Load row
+    const halfW = (menuW - pad * 2 - 6) / 2;
+    ctx.fillStyle = '#2980b9';
+    ctx.beginPath();
+    ctx.roundRect(menuX + pad, my, halfW, 32, 6);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Save', menuX + pad + halfW / 2, my + 16);
+
+    ctx.fillStyle = '#2980b9';
+    ctx.beginPath();
+    ctx.roundRect(menuX + pad + halfW + 6, my, halfW, 32, 6);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.fillText('Load', menuX + pad + halfW + 6 + halfW / 2, my + 16);
+    my += 42;
+
+    // City buttons (if any cities in manifest)
+    if (cityCount > 0) {
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('CITIES', menuX + pad, my + 6);
+      my += 20;
+
+      for (let i = 0; i < cityCount; i++) {
+        ctx.fillStyle = '#34495e';
+        ctx.beginPath();
+        ctx.roundRect(menuX + pad, my, menuW - pad * 2, 28, 6);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.font = '12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(cities[i].name, menuX + menuW / 2, my + 14);
+        my += 34;
+      }
+    }
+
     // Reset button
     ctx.fillStyle = '#8B0000';
     ctx.beginPath();
     ctx.roundRect(menuX + pad, my, menuW - pad * 2, 32, 6);
     ctx.fill();
     ctx.fillStyle = '#fff';
+    ctx.font = '13px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('Reset', menuX + menuW / 2, my + 16);
   }
+}
+
+const MODAL_W = 280;
+const MODAL_H = 150;
+const MODAL_BTN_W = 115;
+const MODAL_BTN_H = 36;
+
+function drawDemoModal(ctx: CanvasRenderingContext2D, width: number, height: number) {
+  // Dim overlay
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+  ctx.fillRect(0, 0, width, height);
+
+  const mx = (width - MODAL_W) / 2;
+  const my = (height - MODAL_H) / 2;
+
+  // Modal background
+  ctx.fillStyle = 'rgba(44, 62, 80, 0.97)';
+  ctx.beginPath();
+  ctx.roundRect(mx, my, MODAL_W, MODAL_H, 12);
+  ctx.fill();
+
+  // Border
+  ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(mx, my, MODAL_W, MODAL_H, 12);
+  ctx.stroke();
+
+  // Title
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 16px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('Welcome to Claude Motorways', mx + MODAL_W / 2, my + 32);
+
+  // Subtitle
+  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  ctx.font = '13px sans-serif';
+  ctx.fillText('Try a demo city or start from scratch', mx + MODAL_W / 2, my + 58);
+
+  // Buttons row
+  const btnY = my + MODAL_H - 16 - MODAL_BTN_H;
+  const gap = 16;
+  const totalBtnW = MODAL_BTN_W * 2 + gap;
+  const btnStartX = mx + (MODAL_W - totalBtnW) / 2;
+
+  // Open Demo button
+  ctx.fillStyle = '#2980b9';
+  ctx.beginPath();
+  ctx.roundRect(btnStartX, btnY, MODAL_BTN_W, MODAL_BTN_H, 8);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 13px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('Open Demo', btnStartX + MODAL_BTN_W / 2, btnY + MODAL_BTN_H / 2);
+
+  // Dismiss button
+  ctx.fillStyle = '#34495e';
+  ctx.beginPath();
+  ctx.roundRect(btnStartX + MODAL_BTN_W + gap, btnY, MODAL_BTN_W, MODAL_BTN_H, 8);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.font = '13px sans-serif';
+  ctx.fillText('Dismiss', btnStartX + MODAL_BTN_W + gap + MODAL_BTN_W / 2, btnY + MODAL_BTN_H / 2);
 }
 
 export function getToolbarLayout(_ctx: CanvasRenderingContext2D, width: number, height: number) {
@@ -1016,10 +1128,11 @@ export function getToolbarLayout(_ctx: CanvasRenderingContext2D, width: number, 
 
   // Gear menu items
   const menuW = 180;
-  const menuH = 160;
+  const pad = 10;
+  const cityCount = cities.length;
+  const menuH = 160 + 42 + (cityCount > 0 ? 24 + cityCount * 34 : 0);
   const menuX = width - BTN_MARGIN - menuW;
   const menuY = gearCy - gearR - BTN_GAP - menuH;
-  const pad = 10;
 
   // Speed buttons
   let my = menuY + pad + 28;
@@ -1037,8 +1150,34 @@ export function getToolbarLayout(_ctx: CanvasRenderingContext2D, width: number, 
   const musicButton = { x: menuX + pad, y: my, w: menuW - pad * 2, h: 32 };
   my += 42;
 
+  // Save / Load buttons
+  const halfW = (menuW - pad * 2 - 6) / 2;
+  const saveButton = { x: menuX + pad, y: my, w: halfW, h: 32 };
+  const loadButton = { x: menuX + pad + halfW + 6, y: my, w: halfW, h: 32 };
+  my += 42;
+
+  // City buttons
+  const cityButtons: { file: string; x: number; y: number; w: number; h: number }[] = [];
+  if (cityCount > 0) {
+    my += 20; // "CITIES" label
+    for (let i = 0; i < cityCount; i++) {
+      cityButtons.push({ file: cities[i].file, x: menuX + pad, y: my, w: menuW - pad * 2, h: 28 });
+      my += 34;
+    }
+  }
+
   // Reset button
   const resetButton = { x: menuX + pad, y: my, w: menuW - pad * 2, h: 32 };
 
-  return { buttons, colorButton, resetButton, musicButton, speedButtons, gearButton };
+  // Demo modal buttons
+  const modalX = (width - MODAL_W) / 2;
+  const modalY = (height - MODAL_H) / 2;
+  const modalBtnY = modalY + MODAL_H - 16 - MODAL_BTN_H;
+  const modalGap = 16;
+  const modalTotalW = MODAL_BTN_W * 2 + modalGap;
+  const modalBtnStartX = modalX + (MODAL_W - modalTotalW) / 2;
+  const demoOpenButton = { x: modalBtnStartX, y: modalBtnY, w: MODAL_BTN_W, h: MODAL_BTN_H };
+  const demoDismissButton = { x: modalBtnStartX + MODAL_BTN_W + modalGap, y: modalBtnY, w: MODAL_BTN_W, h: MODAL_BTN_H };
+
+  return { buttons, colorButton, resetButton, musicButton, speedButtons, gearButton, saveButton, loadButton, cityButtons, demoOpenButton, demoDismissButton };
 }

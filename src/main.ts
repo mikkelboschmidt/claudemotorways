@@ -2,13 +2,14 @@ import { initBuildingNodes, updatePins } from './buildings.ts';
 import { initRoadInput, roadPreview, cancelRoadDrag, setTouchCountGetter } from './roads.ts';
 import { spawnCars, updateCars } from './cars.ts';
 import { render, getToolbarLayout } from './renderer.ts';
-import { setActiveTool, setSelectedColor, selectedColor, setSelectedBuildingType, toggleGearMenu, closeGearMenu, gearMenuOpen } from './toolbar.ts';
+import { setActiveTool, setSelectedColor, selectedColor, setSelectedBuildingType, toggleGearMenu, closeGearMenu, gearMenuOpen, demoModalOpen, showDemoModal, closeDemoModal } from './toolbar.ts';
 import { BUILDING_COLORS } from './types.ts';
-import { saveGame, loadGame, clearSave } from './save.ts';
+import { saveGame, loadGame, clearSave, downloadSave, uploadSave } from './save.ts';
 import { tickPathfindingFrame } from './pathfinding.ts';
 import { gameSpeed, setGameSpeed } from './speed.ts';
 import { pan, zoomAt } from './camera.ts';
 import { toggleMusic, ensureMusicStarted } from './music.ts';
+import { fetchCities, loadCity } from './cities.ts';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
@@ -22,11 +23,14 @@ resize();
 window.addEventListener('resize', resize);
 
 // Load saved game or initialize fresh
-if (!loadGame()) {
+const hadSave = loadGame();
+if (!hadSave) {
   initBuildingNodes();
+  showDemoModal();
 }
 initRoadInput(canvas);
 setTouchCountGetter(() => activeTouchCount);
+fetchCities();
 
 // Auto-save every 5 seconds (counted in sim ticks)
 let saveTimer = 0;
@@ -56,6 +60,18 @@ canvas.addEventListener('pointerdown', (e) => {
   ctx.font = '13px sans-serif';
   const layout = getToolbarLayout(ctx, canvas.width, canvas.height);
 
+  // Demo modal — blocks all other interaction
+  if (demoModalOpen) {
+    if (hitRect(px, py, layout.demoOpenButton)) {
+      closeDemoModal();
+      loadCity('simple-city.json');
+    } else if (hitRect(px, py, layout.demoDismissButton)) {
+      closeDemoModal();
+    }
+    e.stopImmediatePropagation();
+    return;
+  }
+
   // Gear button
   if (hitRect(px, py, layout.gearButton)) {
     toggleGearMenu();
@@ -74,6 +90,24 @@ canvas.addEventListener('pointerdown', (e) => {
       toggleMusic();
       e.stopImmediatePropagation();
       return;
+    }
+    if (hitRect(px, py, layout.saveButton)) {
+      downloadSave();
+      e.stopImmediatePropagation();
+      return;
+    }
+    if (hitRect(px, py, layout.loadButton)) {
+      uploadSave();
+      e.stopImmediatePropagation();
+      return;
+    }
+    for (const btn of layout.cityButtons) {
+      if (hitRect(px, py, btn)) {
+        loadCity(btn.file);
+        closeGearMenu();
+        e.stopImmediatePropagation();
+        return;
+      }
     }
     for (const btn of layout.speedButtons) {
       if (hitRect(px, py, btn)) {
