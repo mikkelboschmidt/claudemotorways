@@ -4,6 +4,7 @@ export let activeTool: ToolType = 'addRoad';
 export let selectedColor: string = BUILDING_COLORS[0];
 export let selectedBuildingType: 'house' | 'factory' | 'storage' = 'house';
 export let gearMenuOpen = false;
+export let demoModalOpen = false;
 
 export function setActiveTool(tool: ToolType) {
   activeTool = tool;
@@ -23,4 +24,12 @@ export function toggleGearMenu() {
 
 export function closeGearMenu() {
   gearMenuOpen = false;
+}
+
+export function showDemoModal() {
+  demoModalOpen = true;
+}
+
+export function closeDemoModal() {
+  demoModalOpen = false;
 }
