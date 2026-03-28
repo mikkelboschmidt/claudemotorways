@@ -194,18 +194,47 @@ Cars and trucks are not saved — they respawn naturally after load.
 
 ## Toolbar
 
-Bottom bar (60px) with left-to-right layout:
+Floating circular buttons (44px diameter) arranged in a vertical column on the left edge of the screen, vertically centered. The game renders full-screen with no fixed toolbar bar — all UI overlays the game canvas.
 
-| Button | Tool | Description |
+### Left Column (top to bottom)
+
+| Icon | Tool | Description |
 |---|---|---|
-| Road | `addRoad` | Drag to place two-lane roads |
-| Narrow | `addNarrow` | Drag to place single-lane roads |
-| Highway | `addHighway` | Two-click placement + draggable midpoint |
-| Remove | `removeRoad` | Drag across road tiles to delete edges |
-| Building | `addBuilding` | Opens sub-menu: House / Factory / Storage + color picker |
-| Demolish | `removeBuilding` | Click a building to remove it and its connected edges |
+| Road lines | `addRoad` | Drag to place two-lane roads |
+| Narrow line | `addNarrow` | Drag to place single-lane roads |
+| Highway lines | `addHighway` | Two-click placement + draggable midpoint |
+| X cross | `removeRoad` | Drag across road tiles to delete edges |
+| **Color circle** | — | Filled circle showing the selected building color. Tap to cycle to the next color |
+| House icon | `addBuilding` (house) | Place a house |
+| Factory icon | `addBuilding` (factory) | Place a factory |
+| Storage icon | `addBuilding` (storage) | Place a storage depot |
+| Hammer icon | `removeBuilding` | Tap a building to remove it and its connected edges |
 
-Right side: FPS counter, speed controls (⏸ 1× 2× 3×), music toggle, reset button.
+- The active tool has a black background with a white ring outline; inactive tools use a semi-transparent dark background (`rgba(44, 62, 80, 0.85)`).
+- Building icons (house, factory, storage) are drawn in the currently selected color.
+- The Building tool button dynamically shows the icon of the selected building sub-type.
+
+### Gear Menu (bottom-right)
+
+A gear button (48px diameter) sits in the bottom-right corner. Tapping it opens a popup menu above the button containing:
+
+1. **FPS counter** — color-coded: green (≥50), yellow (≥30), red (<30).
+2. **Speed controls** — row of buttons: ⏸ 1× 2× 3×.
+3. **Music toggle** — On/Off button.
+4. **Reset button** — dark red, reloads the game and clears save data.
+
+Tapping anywhere outside the menu closes it.
+
+---
+
+## Touch & Mobile Support
+
+The game is fully playable on touch devices. The canvas uses pointer events for tool interactions and touch events for multi-finger gestures.
+
+- **Single finger**: Operates the active tool (place roads, place buildings, etc.) — same as mouse click/drag.
+- **Two-finger pinch**: Zoom in/out. Any in-progress road drag is cancelled when a second finger touches down.
+- **Two-finger pan**: Drag the camera with two fingers.
+- **Tool/UI taps**: Tapping floating toolbar buttons and gear menu items works via `pointerdown` hit-testing against the button layout.
 
 ---
 
