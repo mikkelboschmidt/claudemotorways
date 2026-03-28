@@ -51,19 +51,19 @@ export function render(ctx: CanvasRenderingContext2D, width: number, height: num
 
   drawBuildingGrounds(ctx);
   drawRoads(ctx);
-  drawCars(ctx, false);   // Road cars below highways
-  drawHighways(ctx);
+  drawCars(ctx, 'road');   // Road cars below buildings
 
   if (preview) {
     drawRoadPreview(ctx, preview);
   }
 
-  drawHighwayPreview(ctx);
   drawHoverGhost(ctx);
-  drawCars(ctx, true);    // Highway cars above highways
   drawBuildingShadows(ctx);
   drawBuildingBodies(ctx);
   drawCollectingPins(ctx);
+
+  drawHighways(ctx);       // Highways + their cars on top of everything
+  drawHighwayPreview(ctx);
 
   // Restore from camera transform + clip
   ctx.restore();
@@ -163,38 +163,141 @@ function drawRoads(ctx: CanvasRenderingContext2D) {
   }
 }
 
+// Evaluate cubic bezier at parameter t
+function evalBez(t: number, p0: number, p1: number, p2: number, p3: number): number {
+  const mt = 1 - t;
+  return mt * mt * mt * p0 + 3 * mt * mt * t * p1 + 3 * mt * t * t * p2 + t * t * t * p3;
+}
+// Derivative of cubic bezier at parameter t
+function evalBezDeriv(t: number, p0: number, p1: number, p2: number, p3: number): number {
+  const mt = 1 - t;
+  return 3 * mt * mt * (p1 - p0) + 6 * mt * t * (p2 - p1) + 3 * t * t * (p3 - p2);
+}
+
+// Smoothstep for nicer easing
+function smoothstep(x: number): number {
+  return x * x * (3 - 2 * x);
+}
+
+const HW_SAMPLES = 40;
+const TAPER_T = 0.15; // 15% of curve at each end is transition zone
+
+// Compute tapered half-width at parameter t
+function taperHalfW(t: number, baseHalfW: number): number {
+  const roadHalfW = ROAD_W / 2;
+  if (t < TAPER_T) return roadHalfW + (baseHalfW - roadHalfW) * smoothstep(t / TAPER_T);
+  if (t > 1 - TAPER_T) return roadHalfW + (baseHalfW - roadHalfW) * smoothstep((1 - t) / TAPER_T);
+  return baseHalfW;
+}
+
+// Expand 3-char hex (#abc) to 6-char (#aabbcc)
+function expandHex(c: string): string {
+  if (c.length === 4) return '#' + c[1] + c[1] + c[2] + c[2] + c[3] + c[3];
+  return c;
+}
+
+// Interpolate hex color
+function lerpColor(c0: string, c1: string, f: number): string {
+  const a = expandHex(c0), b = expandHex(c1);
+  const r0 = parseInt(a.slice(1, 3), 16), g0 = parseInt(a.slice(3, 5), 16), b0 = parseInt(a.slice(5, 7), 16);
+  const r1 = parseInt(b.slice(1, 3), 16), g1 = parseInt(b.slice(3, 5), 16), b1 = parseInt(b.slice(5, 7), 16);
+  const r = Math.round(r0 + (r1 - r0) * f), g = Math.round(g0 + (g1 - g0) * f), bb = Math.round(b0 + (b1 - b0) * f);
+  return '#' + ((1 << 24) | (r << 16) | (g << 8) | bb).toString(16).slice(1);
+}
+
+// Build offset polygon edges for a bezier with tapered width
+function buildTaperedEdges(
+  p0x: number, p0y: number, p1x: number, p1y: number,
+  p2x: number, p2y: number, p3x: number, p3y: number,
+  halfW: number, offX = 0, offY = 0
+) {
+  const left: { x: number; y: number }[] = [];
+  const right: { x: number; y: number }[] = [];
+  for (let i = 0; i <= HW_SAMPLES; i++) {
+    const t = i / HW_SAMPLES;
+    const x = evalBez(t, p0x, p1x, p2x, p3x) + offX;
+    const y = evalBez(t, p0y, p1y, p2y, p3y) + offY;
+    const dx = evalBezDeriv(t, p0x, p1x, p2x, p3x);
+    const dy = evalBezDeriv(t, p0y, p1y, p2y, p3y);
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len, ny = dx / len;
+    const hw = taperHalfW(t, halfW);
+    left.push({ x: x + nx * hw, y: y + ny * hw });
+    right.push({ x: x - nx * hw, y: y - ny * hw });
+  }
+  return { left, right };
+}
+
+// Fill a polygon from left edge forward + right edge backward
+function fillTaperedPoly(ctx: CanvasRenderingContext2D, left: { x: number; y: number }[], right: { x: number; y: number }[]) {
+  ctx.beginPath();
+  ctx.moveTo(left[0].x, left[0].y);
+  for (let i = 1; i < left.length; i++) ctx.lineTo(left[i].x, left[i].y);
+  for (let i = right.length - 1; i >= 0; i--) ctx.lineTo(right[i].x, right[i].y);
+  ctx.closePath();
+  ctx.fill();
+}
+
 function drawHighways(ctx: CanvasRenderingContext2D) {
   for (const hw of highways) {
-    // Shadow for elevated look
     ctx.save();
-    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
-    ctx.lineWidth = HIGHWAY_ROAD_W + 6;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(hw.p0x + 3, hw.p0y + 3);
-    ctx.bezierCurveTo(hw.p1x + 3, hw.p1y + 3, hw.p2x + 3, hw.p2y + 3, hw.p3x + 3, hw.p3y + 3);
-    ctx.stroke();
 
-    // Edge outline
-    ctx.strokeStyle = '#444';
-    ctx.lineWidth = HIGHWAY_ROAD_W + 4;
-    ctx.beginPath();
-    ctx.moveTo(hw.p0x, hw.p0y);
-    ctx.bezierCurveTo(hw.p1x, hw.p1y, hw.p2x, hw.p2y, hw.p3x, hw.p3y);
-    ctx.stroke();
+    // 1) Shadow (wider, offset)
+    const shadow = buildTaperedEdges(hw.p0x, hw.p0y, hw.p1x, hw.p1y, hw.p2x, hw.p2y, hw.p3x, hw.p3y, (HIGHWAY_ROAD_W + 6) / 2, 3, 3);
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    fillTaperedPoly(ctx, shadow.left, shadow.right);
 
-    // Highway surface
-    ctx.strokeStyle = HIGHWAY_COLOR;
-    ctx.lineWidth = HIGHWAY_ROAD_W;
-    ctx.beginPath();
-    ctx.moveTo(hw.p0x, hw.p0y);
-    ctx.bezierCurveTo(hw.p1x, hw.p1y, hw.p2x, hw.p2y, hw.p3x, hw.p3y);
-    ctx.stroke();
+    // 2) Outline
+    const outline = buildTaperedEdges(hw.p0x, hw.p0y, hw.p1x, hw.p1y, hw.p2x, hw.p2y, hw.p3x, hw.p3y, (HIGHWAY_ROAD_W + 4) / 2);
+    ctx.fillStyle = '#444';
+    fillTaperedPoly(ctx, outline.left, outline.right);
 
-    // Dashed center line
+    // 3) Surface with color gradient at ends
+    const surface = buildTaperedEdges(hw.p0x, hw.p0y, hw.p1x, hw.p1y, hw.p2x, hw.p2y, hw.p3x, hw.p3y, HIGHWAY_ROAD_W / 2);
+
+    // Draw middle section as one polygon
+    const taperSamples = Math.ceil(TAPER_T * HW_SAMPLES);
+    ctx.fillStyle = HIGHWAY_COLOR;
+    ctx.beginPath();
+    ctx.moveTo(surface.left[taperSamples].x, surface.left[taperSamples].y);
+    for (let i = taperSamples + 1; i <= HW_SAMPLES - taperSamples; i++) ctx.lineTo(surface.left[i].x, surface.left[i].y);
+    for (let i = HW_SAMPLES - taperSamples; i >= taperSamples; i--) ctx.lineTo(surface.right[i].x, surface.right[i].y);
+    ctx.closePath();
+    ctx.fill();
+
+    // Draw start transition quads with color gradient
+    for (let i = 0; i < taperSamples; i++) {
+      const t = (i + 0.5) / HW_SAMPLES;
+      const f = smoothstep(t / TAPER_T);
+      ctx.fillStyle = lerpColor(ROAD_COLOR, HIGHWAY_COLOR, f);
+      ctx.beginPath();
+      ctx.moveTo(surface.left[i].x, surface.left[i].y);
+      ctx.lineTo(surface.left[i + 1].x, surface.left[i + 1].y);
+      ctx.lineTo(surface.right[i + 1].x, surface.right[i + 1].y);
+      ctx.lineTo(surface.right[i].x, surface.right[i].y);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Draw end transition quads with color gradient
+    for (let i = HW_SAMPLES - taperSamples; i < HW_SAMPLES; i++) {
+      const t = (i + 0.5) / HW_SAMPLES;
+      const f = smoothstep((1 - t) / TAPER_T);
+      ctx.fillStyle = lerpColor(ROAD_COLOR, HIGHWAY_COLOR, f);
+      ctx.beginPath();
+      ctx.moveTo(surface.left[i].x, surface.left[i].y);
+      ctx.lineTo(surface.left[i + 1].x, surface.left[i + 1].y);
+      ctx.lineTo(surface.right[i + 1].x, surface.right[i + 1].y);
+      ctx.lineTo(surface.right[i].x, surface.right[i].y);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // 4) Dashed center line (standard bezier stroke)
     ctx.setLineDash([DASH_LEN, DASH_GAP]);
     ctx.strokeStyle = '#dda63a';
     ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(hw.p0x, hw.p0y);
     ctx.bezierCurveTo(hw.p1x, hw.p1y, hw.p2x, hw.p2y, hw.p3x, hw.p3y);
@@ -202,6 +305,10 @@ function drawHighways(ctx: CanvasRenderingContext2D) {
     ctx.setLineDash([]);
 
     ctx.restore();
+
+    // Draw cars on this highway's edges so they layer correctly
+    const hwEdges = new Set(hw.edgeIds);
+    drawCars(ctx, hwEdges);
   }
 
   // Draw draggable midpoint handles when highway tool is active
@@ -234,17 +341,17 @@ function drawHighwayPreview(ctx: CanvasRenderingContext2D) {
 
   ctx.save();
   ctx.globalAlpha = 0.5;
-  ctx.strokeStyle = HIGHWAY_COLOR;
-  ctx.lineWidth = HIGHWAY_ROAD_W;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(p0x, p0y);
-  ctx.bezierCurveTo(p1x, p1y, p2x, p2y, p3x, p3y);
-  ctx.stroke();
 
+  // Tapered surface preview
+  const surface = buildTaperedEdges(p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y, HIGHWAY_ROAD_W / 2);
+  ctx.fillStyle = HIGHWAY_COLOR;
+  fillTaperedPoly(ctx, surface.left, surface.right);
+
+  // Dashed center line
   ctx.setLineDash([DASH_LEN, DASH_GAP]);
   ctx.strokeStyle = '#dda63a';
   ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
   ctx.beginPath();
   ctx.moveTo(p0x, p0y);
   ctx.bezierCurveTo(p1x, p1y, p2x, p2y, p3x, p3y);
@@ -580,11 +687,12 @@ function drawBuildingPins(ctx: CanvasRenderingContext2D, fx: number, fy: number,
   }
 }
 
-function drawCars(ctx: CanvasRenderingContext2D, onHighway?: boolean) {
+function drawCars(ctx: CanvasRenderingContext2D, filter?: 'road' | Set<string>) {
   for (const car of cars) {
-    if (onHighway !== undefined) {
-      const isOnHighway = highwayEdgeSet.has(car.edgeId);
-      if (isOnHighway !== onHighway) continue;
+    if (filter === 'road') {
+      if (highwayEdgeSet.has(car.edgeId)) continue;
+    } else if (filter instanceof Set) {
+      if (!filter.has(car.edgeId)) continue;
     }
     const carLen = car.isTruck ? TRUCK_LEN : CAR_LEN;
     const carWid = car.isTruck ? TRUCK_WID : CAR_WID;
