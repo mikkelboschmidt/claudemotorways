@@ -196,11 +196,35 @@ The player can export the current city as a JSON file via the gear menu's **Save
 
 ---
 
+## Splash Screen
+
+A canvas-rendered modal shown on first visit (no `localStorage` save data). The game simulation pauses while the modal is open; rendering continues so the UI stays responsive.
+
+| Property | Value |
+|---|---|
+| Splash image | `assets/splashscreen.png` — branded "LoomWays" artwork with tagline "Connect. Collect. Construct." |
+| Modal size | `min(70% viewport width, 80% viewport height)`, centered |
+| Overlay | Semi-transparent black (`rgba(0,0,0,0.5)`) covering full canvas |
+| Background | Dark rounded rectangle (14 px radius) with drop shadow |
+| Image clipping | Splash image fills modal area, clipped to the rounded rectangle |
+| Bottom gradient | 100 px fade from transparent to `rgba(0,0,0,0.65)` over the image bottom |
+| Close button | White ✕ circle, top-right corner of modal |
+
+### Buttons (overlaid on splash image, bottom-center)
+
+| Button | Color | Action |
+|---|---|---|
+| **Demo City** | Orange `rgba(232,126,35,0.92)` | Closes modal, loads `simple-city.json` preset |
+| **Start Fresh** | Green `rgba(46,139,87,0.88)` | Closes modal, initialises empty map, saves game |
+
+Each button is 130 × 36 px with a 10 px border radius, white 2 px outline and white centered text. The two buttons sit side-by-side with a 12 px gap, 16 px above the modal bottom edge.
+
+---
+
 ## City Presets
 
 Pre-built demo cities are stored as JSON files in `public/cities/`, listed in `cities/manifest.json` (array of `{ name, file }` entries).
 
-- **First-visit demo modal**: If no save data exists in `localStorage` on launch, a modal appears offering to load the first preset city ("Simple City") or dismiss and start with an empty map.
 - **Gear menu selector**: All preset cities from the manifest appear as buttons in the gear menu. Clicking one loads that city (score resets to 0).
 - Adding a new preset: place the `.json` save file in `public/cities/` and add an entry to `manifest.json`.
 

@@ -1310,14 +1310,17 @@ function drawDemoModal(ctx: CanvasRenderingContext2D, width: number, height: num
   const pillRadius = MODAL_BTN_H / 2;
   const totalBtnW = MODAL_BTN_W * 2 + gap;
   const btnStartX = mx + (size - totalBtnW) / 2;
-  const btnY = my + size - MODAL_BTN_H - 18;
+  const btnY = my + size - MODAL_BTN_H - 46;
 
   // Demo City button
   ctx.save();
   ctx.shadowColor = 'rgba(14, 60, 20, 0.5)';
   ctx.shadowBlur = 10;
   ctx.shadowOffsetY = 3;
-  ctx.fillStyle = 'rgba(232, 126, 35, 0.92)';
+  const demoGrad = ctx.createLinearGradient(0, btnY, 0, btnY + MODAL_BTN_H);
+  demoGrad.addColorStop(0, 'rgba(255, 160, 60, 0.95)');
+  demoGrad.addColorStop(1, 'rgba(210, 100, 20, 0.95)');
+  ctx.fillStyle = demoGrad;
   ctx.beginPath();
   ctx.roundRect(btnStartX, btnY, MODAL_BTN_W, MODAL_BTN_H, pillRadius);
   ctx.fill();
@@ -1338,7 +1341,10 @@ function drawDemoModal(ctx: CanvasRenderingContext2D, width: number, height: num
   ctx.shadowColor = 'rgba(14, 60, 20, 0.5)';
   ctx.shadowBlur = 10;
   ctx.shadowOffsetY = 3;
-  ctx.fillStyle = 'rgba(46, 139, 87, 0.88)';
+  const freshGrad = ctx.createLinearGradient(0, btnY, 0, btnY + MODAL_BTN_H);
+  freshGrad.addColorStop(0, 'rgba(66, 170, 110, 0.92)');
+  freshGrad.addColorStop(1, 'rgba(30, 110, 65, 0.92)');
+  ctx.fillStyle = freshGrad;
   ctx.beginPath();
   ctx.roundRect(btnStartX + MODAL_BTN_W + gap, btnY, MODAL_BTN_W, MODAL_BTN_H, pillRadius);
   ctx.fill();
@@ -1428,10 +1434,10 @@ export function getToolbarLayout(_ctx: CanvasRenderingContext2D, width: number, 
 
   // Demo modal buttons
   const { size: modalSize, mx: modalX, my: modalY } = getModalMetrics(width, height);
-  const modalGap = 12;
+  const modalGap = 14;
   const modalTotalW = MODAL_BTN_W * 2 + modalGap;
   const modalBtnStartX = modalX + (modalSize - modalTotalW) / 2;
-  const modalBtnY = modalY + modalSize - MODAL_BTN_H - 16;
+  const modalBtnY = modalY + modalSize - MODAL_BTN_H - 46;
   const demoOpenButton = { x: modalBtnStartX, y: modalBtnY, w: MODAL_BTN_W, h: MODAL_BTN_H };
   const demoDismissButton = { x: modalBtnStartX + MODAL_BTN_W + modalGap, y: modalBtnY, w: MODAL_BTN_W, h: MODAL_BTN_H };
   const closeSize = 28;
