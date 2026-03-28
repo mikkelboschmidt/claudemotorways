@@ -1,7 +1,7 @@
 import { defineConfig } from "vite";
 
 export default defineConfig({
-  base: "/claudemotorways/",
+  base: "/",
   server: {
     port: process.env.CONDUCTOR_PORT
       ? Number(process.env.CONDUCTOR_PORT)
