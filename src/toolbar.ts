@@ -5,6 +5,7 @@ export let selectedColor: string = BUILDING_COLORS[0];
 export let selectedBuildingType: 'house' | 'factory' | 'storage' = 'house';
 export let gearMenuOpen = false;
 export let demoModalOpen = false;
+export let cityModalOpen = false;
 
 export function setActiveTool(tool: ToolType) {
   activeTool = tool;
@@ -32,4 +33,12 @@ export function showDemoModal() {
 
 export function closeDemoModal() {
   demoModalOpen = false;
+}
+
+export function showCityModal() {
+  cityModalOpen = true;
+}
+
+export function closeCityModal() {
+  cityModalOpen = false;
 }
