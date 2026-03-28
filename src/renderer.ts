@@ -613,13 +613,26 @@ function drawCars(ctx: CanvasRenderingContext2D) {
       ctx.beginPath();
       ctx.roundRect(carLen - rearOffset - cabLen, -hh + 1, cabLen - 1, carWid - 2, 2);
       ctx.fill();
-      // Cargo pin indicator
+      // Cargo pin dots
       if (car.pinsCarried > 0) {
-        ctx.fillStyle = 'rgba(255,255,255,0.5)';
-        ctx.font = 'bold 7px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(`${car.pinsCarried}`, -rearOffset + (carLen - cabLen) / 2, 0);
+        const bedLeft = -rearOffset + 2;
+        const bedRight = carLen - rearOffset - cabLen - 1;
+        const bedW = bedRight - bedLeft;
+        const dotR = 1.5;
+        const cols = 3;
+        const rows = 2;
+        const spacingX = bedW / (cols + 1);
+        const spacingY = (carWid - 4) / (rows + 1);
+        ctx.fillStyle = 'rgba(255,255,255,0.8)';
+        for (let d = 0; d < car.pinsCarried && d < 6; d++) {
+          const col = d % cols;
+          const row = Math.floor(d / cols);
+          const dx = bedLeft + spacingX * (col + 1);
+          const dy = -hh + 2 + spacingY * (row + 1);
+          ctx.beginPath();
+          ctx.arc(dx, dy, dotR, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
     } else {
       // Windshield
