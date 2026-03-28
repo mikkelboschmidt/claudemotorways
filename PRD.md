@@ -192,7 +192,7 @@ Cars and trucks are not saved — they respawn naturally after load.
 
 ### Download / Upload
 
-The player can export the current city as a JSON file via the gear menu's **Save City** button (downloads `claudemotorways-city.json`). The **Load City** button opens a file picker to import a previously exported city; score resets to 0 on import.
+The player can export the current city as a JSON file via the gear menu's **Save City** button (downloads `loomways-city.json`). The **Load City** button opens a file picker to import a previously exported city; score resets to 0 on import.
 
 ---
 
@@ -260,7 +260,7 @@ A gear button (48px diameter) sits in the bottom-right corner. Tapping it opens 
 2. **Speed controls** — row of buttons: ⏸ 1× 2× 3×.
 3. **Music toggle** — On/Off button.
 4. **Reset button** — dark red, reloads the game and clears save data.
-5. **Save City** — downloads the current game state as a `.json` file (`claudemotorways-city.json`).
+5. **Save City** — downloads the current game state as a `.json` file (`loomways-city.json`).
 6. **Load City** — opens a file picker to upload a previously saved `.json` city file. Score resets to 0 on load.
 7. **City selector** — lists all preset cities from `cities/manifest.json`. Clicking a city loads it (score resets to 0).
 
@@ -276,6 +276,12 @@ The game is fully playable on touch devices. The canvas uses pointer events for 
 - **Two-finger pinch**: Zoom in/out. Any in-progress road drag is cancelled when a second finger touches down.
 - **Two-finger pan**: Drag the camera with two fingers.
 - **Tool/UI taps**: Tapping floating toolbar buttons and gear menu items works via `pointerdown` hit-testing against the button layout.
+
+---
+
+## Deployment
+
+The game is deployed to **GitHub Pages** with the custom domain **loomways.com**. The `public/CNAME` file maps the GitHub Pages site to `loomways.com`. Deployment is automated via a GitHub Actions workflow on push to `main`.
 
 ---
 
