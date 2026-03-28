@@ -136,7 +136,21 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
       currentGy = dragStartGy;
       dragging = true;
       roadPreview = null;
-    } else if (activeTool === 'removeRoad') {
+    } else if (activeTool === 'removeRoad' || activeTool === 'demolish') {
+      // Demolish: try building first, then fall back to road/highway removal
+      if (activeTool === 'demolish') {
+        const building = findBuildingAtPixel(px, py);
+        if (building) {
+          const bid = building.id;
+          pendingTap = () => {
+            removeCarsForBuilding(bid);
+            removeBuilding(bid);
+            playSfx('demolish');
+            saveGame();
+          };
+          return;
+        }
+      }
       // Check if clicking on a highway first
       const hw = findHighwayAtPixel(px, py);
       if (hw) {
@@ -244,7 +258,7 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
     }
 
     // Recompute tiles for remove-road drag
-    if (removeRoadDragging && dragConfirmed && activeTool === 'removeRoad') {
+    if (removeRoadDragging && dragConfirmed && (activeTool === 'removeRoad' || activeTool === 'demolish')) {
       const rawGx = snapToGrid(px);
       const rawGy = snapToGrid(py);
       const [endGx, endGy] = snapTo8Dir(removeStartGx, removeStartGy, rawGx, rawGy);
