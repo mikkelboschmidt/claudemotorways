@@ -1312,51 +1312,66 @@ function drawDemoModal(ctx: CanvasRenderingContext2D, width: number, height: num
   const btnStartX = mx + (size - totalBtnW) / 2;
   const btnY = my + size - MODAL_BTN_H - 46;
 
+  // Animated multi-color glow for buttons (colors from splash image)
+  const glowColors = [
+    [255, 160, 60],   // orange
+    [255, 215, 0],    // yellow
+    [0, 206, 209],    // cyan/teal
+    [224, 64, 64],    // red
+    [66, 170, 110],   // green
+  ];
+  const t = performance.now() / 1000;
+  const pulse = 0.5 + 0.5 * Math.sin(t * 3); // pulsate intensity
+  const colorIdx = t * 0.8; // slow color cycle
+  const c0 = glowColors[Math.floor(colorIdx) % glowColors.length];
+  const c1 = glowColors[(Math.floor(colorIdx) + 1) % glowColors.length];
+  const frac = colorIdx % 1;
+  const gr = Math.round(c0[0] + (c1[0] - c0[0]) * frac);
+  const gg = Math.round(c0[1] + (c1[1] - c0[1]) * frac);
+  const gb = Math.round(c0[2] + (c1[2] - c0[2]) * frac);
+  const glowAlpha = 0.5 + 0.4 * pulse;
+  const glowBlur = 12 + 10 * pulse;
+
+  // Helper to draw a glowing button
+  const drawGlowBtn = (bx: number, grad: CanvasGradient, label: string) => {
+    // Multi-color glow layers
+    ctx.save();
+    ctx.shadowColor = `rgba(${gr}, ${gg}, ${gb}, ${glowAlpha})`;
+    ctx.shadowBlur = glowBlur;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.roundRect(bx, btnY, MODAL_BTN_W, MODAL_BTN_H, pillRadius);
+    ctx.fill();
+    // Second glow pass for richer effect
+    ctx.shadowBlur = glowBlur * 1.5;
+    ctx.shadowColor = `rgba(${gr}, ${gg}, ${gb}, ${glowAlpha * 0.4})`;
+    ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(bx, btnY, MODAL_BTN_W, MODAL_BTN_H, pillRadius);
+    ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 14px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, bx + MODAL_BTN_W / 2, btnY + MODAL_BTN_H / 2);
+  };
+
   // Demo City button
-  ctx.save();
-  ctx.shadowColor = 'rgba(14, 60, 20, 0.5)';
-  ctx.shadowBlur = 10;
-  ctx.shadowOffsetY = 3;
   const demoGrad = ctx.createLinearGradient(0, btnY, 0, btnY + MODAL_BTN_H);
   demoGrad.addColorStop(0, 'rgba(255, 160, 60, 0.95)');
   demoGrad.addColorStop(1, 'rgba(210, 100, 20, 0.95)');
-  ctx.fillStyle = demoGrad;
-  ctx.beginPath();
-  ctx.roundRect(btnStartX, btnY, MODAL_BTN_W, MODAL_BTN_H, pillRadius);
-  ctx.fill();
-  ctx.restore();
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.roundRect(btnStartX, btnY, MODAL_BTN_W, MODAL_BTN_H, pillRadius);
-  ctx.stroke();
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 14px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('Demo City', btnStartX + MODAL_BTN_W / 2, btnY + MODAL_BTN_H / 2);
+  drawGlowBtn(btnStartX, demoGrad, 'Demo City');
 
   // Start Fresh button
-  ctx.save();
-  ctx.shadowColor = 'rgba(14, 60, 20, 0.5)';
-  ctx.shadowBlur = 10;
-  ctx.shadowOffsetY = 3;
   const freshGrad = ctx.createLinearGradient(0, btnY, 0, btnY + MODAL_BTN_H);
   freshGrad.addColorStop(0, 'rgba(66, 170, 110, 0.92)');
   freshGrad.addColorStop(1, 'rgba(30, 110, 65, 0.92)');
-  ctx.fillStyle = freshGrad;
-  ctx.beginPath();
-  ctx.roundRect(btnStartX + MODAL_BTN_W + gap, btnY, MODAL_BTN_W, MODAL_BTN_H, pillRadius);
-  ctx.fill();
-  ctx.restore();
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.roundRect(btnStartX + MODAL_BTN_W + gap, btnY, MODAL_BTN_W, MODAL_BTN_H, pillRadius);
-  ctx.stroke();
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 14px sans-serif';
-  ctx.fillText('Start Fresh', btnStartX + MODAL_BTN_W + gap + MODAL_BTN_W / 2, btnY + MODAL_BTN_H / 2);
+  drawGlowBtn(btnStartX + MODAL_BTN_W + gap, freshGrad, 'Start Fresh');
 }
 
 export function getToolbarLayout(_ctx: CanvasRenderingContext2D, width: number, height: number) {
