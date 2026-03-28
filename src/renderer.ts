@@ -654,8 +654,8 @@ function drawCollectingPins(ctx: CanvasRenderingContext2D) {
 }
 
 function drawScore(ctx: CanvasRenderingContext2D, width: number) {
-  const text = `Score: ${score}`;
-  ctx.font = 'bold 18px sans-serif';
+  const text = `Points: ${score}  Cars: ${cars.length}`;
+  ctx.font = 'bold 14px sans-serif';
   ctx.textAlign = 'right';
   ctx.textBaseline = 'top';
   ctx.fillStyle = 'rgba(0,0,0,0.4)';
@@ -673,11 +673,26 @@ const GEAR_SIZE = 48;     // gear button diameter
 
 // Draw a circular button with icon
 function drawCircleButton(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, active: boolean, drawIcon: (ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) => void) {
+  // Drop shadow
+  ctx.save();
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
+  ctx.shadowBlur = 8;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 2;
+
   // Background
   ctx.fillStyle = active ? '#000' : 'rgba(44, 62, 80, 0.85)';
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.fill();
+  ctx.restore();
+
+  // Thin white outline
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.stroke();
 
   // Active ring
   if (active) {
@@ -882,9 +897,44 @@ function drawToolbar(ctx: CanvasRenderingContext2D, width: number, height: numbe
       // Draw color circle
       const cx = BTN_MARGIN + r;
       const cy = startY + slot * (BTN_SIZE + BTN_GAP) + r;
+
+      // Drop shadow
+      ctx.save();
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
+      ctx.shadowBlur = 8;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 2;
       ctx.fillStyle = selectedColor;
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // Thin white outline
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Draw small refresh/cycle icon to indicate color is changeable
+      const iconR = r * 0.45;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, iconR, -Math.PI * 0.7, Math.PI * 0.5);
+      ctx.stroke();
+      // Arrowhead at end of arc
+      const arrowAngle = Math.PI * 0.5;
+      const ax = cx + Math.cos(arrowAngle) * iconR;
+      const ay = cy + Math.sin(arrowAngle) * iconR;
+      const arrowSize = 4;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.beginPath();
+      ctx.moveTo(ax + arrowSize * Math.cos(arrowAngle - 0.3), ay + arrowSize * Math.sin(arrowAngle - 0.3));
+      ctx.lineTo(ax + arrowSize * Math.cos(arrowAngle + Math.PI / 2 + 0.3), ay + arrowSize * Math.sin(arrowAngle + Math.PI / 2 + 0.3));
+      ctx.lineTo(ax + arrowSize * Math.cos(arrowAngle + Math.PI - 0.3), ay + arrowSize * Math.sin(arrowAngle + Math.PI - 0.3));
+      ctx.closePath();
       ctx.fill();
       slot++;
     }
@@ -899,10 +949,25 @@ function drawToolbar(ctx: CanvasRenderingContext2D, width: number, height: numbe
   const gearR = GEAR_SIZE / 2;
   const gearCx = width - BTN_MARGIN - gearR;
   const gearCy = height - BTN_MARGIN - gearR;
+  // Drop shadow
+  ctx.save();
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
+  ctx.shadowBlur = 8;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 2;
   ctx.fillStyle = gearMenuOpen ? '#3498db' : 'rgba(44, 62, 80, 0.85)';
   ctx.beginPath();
   ctx.arc(gearCx, gearCy, gearR, 0, Math.PI * 2);
   ctx.fill();
+  ctx.restore();
+
+  // Thin white outline
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(gearCx, gearCy, gearR, 0, Math.PI * 2);
+  ctx.stroke();
+
   iconGear(ctx, gearCx, gearCy, gearR);
 
   // Gear menu — popup above gear button
