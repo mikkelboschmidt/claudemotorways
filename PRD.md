@@ -272,7 +272,7 @@ Tapping anywhere outside the menu closes it.
 
 The game is fully playable on touch devices. The canvas uses pointer events for tool interactions and touch events for multi-finger gestures.
 
-- **Single finger**: Operates the active tool (place roads, place buildings, etc.) — same as mouse click/drag.
+- **Single finger**: Operates the active tool (place roads, place buildings, etc.) — same as mouse click/drag. Highway midpoint handles use a screen-space hit radius (22px) so they remain easy to tap at any zoom level.
 - **Two-finger pinch**: Zoom in/out. Any in-progress road drag or highway placement is cancelled when a second finger touches down.
 - **Two-finger pan**: Drag the camera with two fingers.
 - **Tool/UI taps**: Tapping floating toolbar buttons and gear menu items works via `pointerdown` hit-testing against the button layout.

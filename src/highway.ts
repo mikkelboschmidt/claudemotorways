@@ -1,6 +1,7 @@
 import { GRID, HALF, HIGHWAY_ROAD_W } from './constants.ts';
 import { nodeKey, nodes, ensureNodeRaw, addEdgeRaw, removeEdge, bumpGraphVersion } from './graph.ts';
 import { removeCarsForEdge } from './cars.ts';
+import { zoom } from './camera.ts';
 
 export interface Highway {
   id: number;
@@ -204,10 +205,12 @@ export function removeHighway(id: number) {
 }
 
 // Find a highway handle (midpoint) near a pixel position
-const HANDLE_RADIUS = 10;
+// Use a screen-space hit radius so the handle stays easy to hit at any zoom level
+const HANDLE_SCREEN_RADIUS = 22; // screen pixels — comfortable for both mouse and touch
 export function findHighwayHandleAtPixel(px: number, py: number): Highway | null {
+  const hitRadius = HANDLE_SCREEN_RADIUS / zoom; // convert to world coords
   for (const hw of highways) {
-    if (Math.hypot(px - hw.midX, py - hw.midY) <= HANDLE_RADIUS) return hw;
+    if (Math.hypot(px - hw.midX, py - hw.midY) <= hitRadius) return hw;
   }
   return null;
 }
