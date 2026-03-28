@@ -12,6 +12,10 @@ import { highways, highwayEdgeSet, highwayPhase, highwayStartGx, highwayStartGy,
 import { musicEnabled } from './music.ts';
 import { cities } from './cities.ts';
 import { getHouseSprite, getFactorySprite, getStorageSprite, drawSpriteLayer, PinPlacement } from './sprites.ts';
+import splashUrl from '../assets/splashscreen.png';
+
+const splashImg = new Image();
+splashImg.src = splashUrl;
 
 export function render(ctx: CanvasRenderingContext2D, width: number, height: number, preview: RoadPreview | null, fps: number = 0) {
   // Clear entire canvas
@@ -1222,69 +1226,131 @@ function drawToolbar(ctx: CanvasRenderingContext2D, width: number, height: numbe
   }
 }
 
-const MODAL_W = 280;
-const MODAL_H = 150;
-const MODAL_BTN_W = 115;
-const MODAL_BTN_H = 36;
+const MODAL_BTN_W = 130;
+const MODAL_BTN_H = 42;
+const MODAL_RADIUS = 14;
+
+function getModalMetrics(width: number, height: number) {
+  const size = Math.min(width * 0.7, height * 0.8);
+  const mx = (width - size) / 2;
+  const my = (height - size) / 2;
+  return { size, mx, my };
+}
 
 function drawDemoModal(ctx: CanvasRenderingContext2D, width: number, height: number) {
   // Dim overlay
   ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
   ctx.fillRect(0, 0, width, height);
 
-  const mx = (width - MODAL_W) / 2;
-  const my = (height - MODAL_H) / 2;
+  const { size, mx, my } = getModalMetrics(width, height);
 
-  // Modal background
-  ctx.fillStyle = 'rgba(44, 62, 80, 0.97)';
+  // Shadow
+  ctx.save();
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+  ctx.shadowBlur = 32;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 8;
+  ctx.fillStyle = '#000';
   ctx.beginPath();
-  ctx.roundRect(mx, my, MODAL_W, MODAL_H, 12);
+  ctx.roundRect(mx, my, size, size, MODAL_RADIUS);
   ctx.fill();
+  ctx.restore();
 
-  // Border
-  ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-  ctx.lineWidth = 1;
+  // Splash image (is the modal)
+  if (splashImg.complete && splashImg.naturalWidth > 0) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(mx, my, size, size, MODAL_RADIUS);
+    ctx.clip();
+    ctx.drawImage(splashImg, mx, my, size, size);
+    ctx.restore();
+  }
+
+  // White outline
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.roundRect(mx, my, MODAL_W, MODAL_H, 12);
+  ctx.roundRect(mx, my, size, size, MODAL_RADIUS);
   ctx.stroke();
 
-  // Title
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 16px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('Welcome to Claude Motorways', mx + MODAL_W / 2, my + 32);
+  // Close button (top-right)
+  const closeSize = 28;
+  const closePad = 8;
+  const closeX = mx + size - closeSize - closePad;
+  const closeY = my + closePad;
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+  ctx.beginPath();
+  ctx.arc(closeX + closeSize / 2, closeY + closeSize / 2, closeSize / 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
+  const xPad = 8;
+  ctx.beginPath();
+  ctx.moveTo(closeX + xPad, closeY + xPad);
+  ctx.lineTo(closeX + closeSize - xPad, closeY + closeSize - xPad);
+  ctx.moveTo(closeX + closeSize - xPad, closeY + xPad);
+  ctx.lineTo(closeX + xPad, closeY + closeSize - xPad);
+  ctx.stroke();
 
-  // Subtitle
-  ctx.fillStyle = 'rgba(255,255,255,0.6)';
-  ctx.font = '13px sans-serif';
-  ctx.fillText('Try a demo city or start from scratch', mx + MODAL_W / 2, my + 58);
+  // Gradient fade at bottom for button readability
+  const gradH = 100;
+  const grad = ctx.createLinearGradient(0, my + size - gradH, 0, my + size);
+  grad.addColorStop(0, 'rgba(0,0,0,0)');
+  grad.addColorStop(1, 'rgba(0,0,0,0.65)');
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(mx, my, size, size, MODAL_RADIUS);
+  ctx.clip();
+  ctx.fillStyle = grad;
+  ctx.fillRect(mx, my + size - gradH, size, gradH);
+  ctx.restore();
 
-  // Buttons row
-  const btnY = my + MODAL_H - 16 - MODAL_BTN_H;
-  const gap = 16;
+  // Buttons overlaid on bottom of image
+  const gap = 14;
+  const pillRadius = MODAL_BTN_H / 2;
   const totalBtnW = MODAL_BTN_W * 2 + gap;
-  const btnStartX = mx + (MODAL_W - totalBtnW) / 2;
+  const btnStartX = mx + (size - totalBtnW) / 2;
+  const btnY = my + size - MODAL_BTN_H - 18;
 
-  // Open Demo button
-  ctx.fillStyle = '#2980b9';
+  // Demo City button
+  ctx.save();
+  ctx.shadowColor = 'rgba(14, 60, 20, 0.5)';
+  ctx.shadowBlur = 10;
+  ctx.shadowOffsetY = 3;
+  ctx.fillStyle = 'rgba(232, 126, 35, 0.92)';
   ctx.beginPath();
-  ctx.roundRect(btnStartX, btnY, MODAL_BTN_W, MODAL_BTN_H, 8);
+  ctx.roundRect(btnStartX, btnY, MODAL_BTN_W, MODAL_BTN_H, pillRadius);
   ctx.fill();
+  ctx.restore();
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(btnStartX, btnY, MODAL_BTN_W, MODAL_BTN_H, pillRadius);
+  ctx.stroke();
   ctx.fillStyle = '#fff';
-  ctx.font = 'bold 13px sans-serif';
+  ctx.font = 'bold 14px sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('Open Demo', btnStartX + MODAL_BTN_W / 2, btnY + MODAL_BTN_H / 2);
+  ctx.fillText('Demo City', btnStartX + MODAL_BTN_W / 2, btnY + MODAL_BTN_H / 2);
 
-  // Dismiss button
-  ctx.fillStyle = '#34495e';
+  // Start Fresh button
+  ctx.save();
+  ctx.shadowColor = 'rgba(14, 60, 20, 0.5)';
+  ctx.shadowBlur = 10;
+  ctx.shadowOffsetY = 3;
+  ctx.fillStyle = 'rgba(46, 139, 87, 0.88)';
   ctx.beginPath();
-  ctx.roundRect(btnStartX + MODAL_BTN_W + gap, btnY, MODAL_BTN_W, MODAL_BTN_H, 8);
+  ctx.roundRect(btnStartX + MODAL_BTN_W + gap, btnY, MODAL_BTN_W, MODAL_BTN_H, pillRadius);
   ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,0.7)';
-  ctx.font = '13px sans-serif';
-  ctx.fillText('Dismiss', btnStartX + MODAL_BTN_W + gap + MODAL_BTN_W / 2, btnY + MODAL_BTN_H / 2);
+  ctx.restore();
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(btnStartX + MODAL_BTN_W + gap, btnY, MODAL_BTN_W, MODAL_BTN_H, pillRadius);
+  ctx.stroke();
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 14px sans-serif';
+  ctx.fillText('Start Fresh', btnStartX + MODAL_BTN_W + gap + MODAL_BTN_W / 2, btnY + MODAL_BTN_H / 2);
 }
 
 export function getToolbarLayout(_ctx: CanvasRenderingContext2D, width: number, height: number) {
@@ -1361,14 +1427,16 @@ export function getToolbarLayout(_ctx: CanvasRenderingContext2D, width: number, 
   const resetButton = { x: menuX + pad, y: my, w: menuW - pad * 2, h: 32 };
 
   // Demo modal buttons
-  const modalX = (width - MODAL_W) / 2;
-  const modalY = (height - MODAL_H) / 2;
-  const modalBtnY = modalY + MODAL_H - 16 - MODAL_BTN_H;
-  const modalGap = 16;
+  const { size: modalSize, mx: modalX, my: modalY } = getModalMetrics(width, height);
+  const modalGap = 12;
   const modalTotalW = MODAL_BTN_W * 2 + modalGap;
-  const modalBtnStartX = modalX + (MODAL_W - modalTotalW) / 2;
+  const modalBtnStartX = modalX + (modalSize - modalTotalW) / 2;
+  const modalBtnY = modalY + modalSize - MODAL_BTN_H - 16;
   const demoOpenButton = { x: modalBtnStartX, y: modalBtnY, w: MODAL_BTN_W, h: MODAL_BTN_H };
   const demoDismissButton = { x: modalBtnStartX + MODAL_BTN_W + modalGap, y: modalBtnY, w: MODAL_BTN_W, h: MODAL_BTN_H };
+  const closeSize = 28;
+  const closePad = 8;
+  const demoCloseButton = { x: modalX + modalSize - closeSize - closePad, y: modalY + closePad, w: closeSize, h: closeSize };
 
-  return { buttons, colorButton, resetButton, musicButton, speedButtons, gearButton, saveButton, loadButton, cityButtons, demoOpenButton, demoDismissButton };
+  return { buttons, colorButton, resetButton, musicButton, speedButtons, gearButton, saveButton, loadButton, cityButtons, demoOpenButton, demoDismissButton, demoCloseButton };
 }
