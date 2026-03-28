@@ -1,6 +1,6 @@
 <svg width="200" height="160" viewBox="0 0 200 160" fill="none" xmlns="http://www.w3.org/2000/svg">
 <g id="Factory-Top">
-<rect id="PinPlacement" x="48.5" y="48.5" width="33" height="24" stroke="black"/>
+<rect id="PinPlacement" x="48.5" y="87.5" width="33" height="24" stroke="black"/>
 <g id="Ground">
 <rect id="Fill" x="40" y="40" width="120" height="80" fill="#414141"/>
 <rect id="Entrance" x="127" y="47" width="7" height="26" transform="rotate(-90 127 47)" fill="#555555"/>
@@ -12,10 +12,10 @@
 <g id="Building">
 <rect id="RoofMain" x="44" y="83" width="89" height="33" fill="#FF0000"/>
 <path id="RoofShadow" d="M133 101.615V116H110.615L103.793 109.178L122.178 90.793L133 101.615Z" fill="#CC0000"/>
-<rect id="RoofShadow_2" x="77" y="77" width="21" height="6" fill="#FF0000"/>
-<rect id="RoofShadow_3" x="48" y="77" width="21" height="6" fill="#FF0000"/>
-<circle id="RoofMain_2" cx="113" cy="100" r="13" fill="#FF0000"/>
-<circle id="RoofShadow_4" cx="113" cy="100" r="8" fill="#CC0000"/>
+<rect id="RoofMain_2" x="77" y="77" width="21" height="6" fill="#FF0000"/>
+<rect id="RoofMain_3" x="48" y="77" width="21" height="6" fill="#FF0000"/>
+<circle id="RoofMain_4" cx="113" cy="100" r="13" fill="#FF0000"/>
+<circle id="RoofShadow_2" cx="113" cy="100" r="8" fill="#CC0000"/>
 </g>
 </g>
 </svg>
