@@ -107,7 +107,7 @@ A logistics puzzle game where players build road networks connecting residential
   6. Depart → repeat
 - **Factory exclusivity**: Trucks require an empty factory parking lot. Regular cars cannot enter while a truck is inside.
 - **No scoring**: Truck pin transfers don't award points — only final car pickups score.
-- **Visual**: Darker body with a lighter cab at front. Pin count displayed on cargo bed.
+- **Visual**: Darker body with a lighter cab at front. Carried pins shown as colored dots on the cargo bed.
 
 ---
 
@@ -190,6 +190,20 @@ The game auto-saves to `localStorage` every 5 seconds and after every build acti
 
 Cars and trucks are not saved — they respawn naturally after load.
 
+### Download / Upload
+
+The player can export the current city as a JSON file via the gear menu's **Save City** button (downloads `claudemotorways-city.json`). The **Load City** button opens a file picker to import a previously exported city; score resets to 0 on import.
+
+---
+
+## City Presets
+
+Pre-built demo cities are stored as JSON files in `public/cities/`, listed in `cities/manifest.json` (array of `{ name, file }` entries).
+
+- **First-visit demo modal**: If no save data exists in `localStorage` on launch, a modal appears offering to load the first preset city ("Simple City") or dismiss and start with an empty map.
+- **Gear menu selector**: All preset cities from the manifest appear as buttons in the gear menu. Clicking one loads that city (score resets to 0).
+- Adding a new preset: place the `.json` save file in `public/cities/` and add an entry to `manifest.json`.
+
 ---
 
 ## Toolbar
@@ -222,6 +236,9 @@ A gear button (48px diameter) sits in the bottom-right corner. Tapping it opens 
 2. **Speed controls** — row of buttons: ⏸ 1× 2× 3×.
 3. **Music toggle** — On/Off button.
 4. **Reset button** — dark red, reloads the game and clears save data.
+5. **Save City** — downloads the current game state as a `.json` file (`claudemotorways-city.json`).
+6. **Load City** — opens a file picker to upload a previously saved `.json` city file. Score resets to 0 on load.
+7. **City selector** — lists all preset cities from `cities/manifest.json`. Clicking a city loads it (score resets to 0).
 
 Tapping anywhere outside the menu closes it.
 
