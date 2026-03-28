@@ -18,4 +18,4 @@ npm run build      # TypeScript + Vite production build
 - **No test suite** — verify changes by running the game in the browser.
 - Source is organized by domain in `src/` (e.g., `cars.ts`, `buildings.ts`, `roads.ts`, `save.ts`, `cities.ts`).
 - Game state lives in module-level arrays/maps exported from each domain file.
-- Deployed to GitHub Pages at `/claudemotorways/` via the GitHub Actions workflow.
+- Deployed to GitHub Pages at `loomways.com` via the GitHub Actions workflow.
