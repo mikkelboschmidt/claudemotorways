@@ -7,9 +7,10 @@ export interface Highway {
   id: number;
   startGx: number; startGy: number;
   endGx: number; endGy: number;
-  // User-adjustable midpoint (pixel coords) — the curve passes through this point at t=0.5
-  midX: number; midY: number;
-  // Cubic bezier control points (pixel coords) for rendering — derived from midpoint
+  // User-adjustable pass-through points (pixel coords) — curve passes through mid1 at t≈1/3 and mid2 at t≈2/3
+  mid1X: number; mid1Y: number;
+  mid2X: number; mid2Y: number;
+  // Cubic bezier control points (pixel coords) for rendering — derived from mid1/mid2
   p0x: number; p0y: number;
   p1x: number; p1y: number;
   p2x: number; p2y: number;
@@ -32,11 +33,13 @@ export let highwayPreviewEndPy = 0;
 
 // Handle drag state
 export let draggingHighwayId = -1;
+export let draggingHandleIndex: 1 | 2 = 1;
 
 export function setHighwayPhase(phase: 'idle' | 'pickEnd') { highwayPhase = phase; }
 export function setHighwayStart(gx: number, gy: number) { highwayStartGx = gx; highwayStartGy = gy; }
 export function setHighwayPreviewEnd(px: number, py: number) { highwayPreviewEndPx = px; highwayPreviewEndPy = py; }
 export function setDraggingHighwayId(id: number) { draggingHighwayId = id; }
+export function setDraggingHandleIndex(index: 1 | 2) { draggingHandleIndex = index; }
 
 // Cubic bezier sampling
 function cubicBezier(t: number, p0: number, p1: number, p2: number, p3: number): number {
@@ -59,41 +62,41 @@ function approxBezierLength(p0x: number, p0y: number, p1x: number, p1y: number,
   return len;
 }
 
-// Compute default midpoint: chord center + small perpendicular offset
-function defaultMidpoint(p0x: number, p0y: number, p3x: number, p3y: number) {
+// Compute default pass-through points at t=1/3 and t=2/3 with a subtle perpendicular offset
+function defaultMidpoints(p0x: number, p0y: number, p3x: number, p3y: number) {
   const dx = p3x - p0x, dy = p3y - p0y;
   const dist = Math.hypot(dx, dy);
-  if (dist === 0) return { midX: p0x, midY: p0y };
+  if (dist === 0) return { mid1X: p0x, mid1Y: p0y, mid2X: p0x, mid2Y: p0y };
   const perpX = -dy / dist, perpY = dx / dist;
   const offset = dist * 0.08; // subtle default curve
   return {
-    midX: (p0x + p3x) / 2 + perpX * offset,
-    midY: (p0y + p3y) / 2 + perpY * offset,
+    mid1X: p0x + dx / 3 + perpX * offset,
+    mid1Y: p0y + dy / 3 + perpY * offset,
+    mid2X: p0x + dx * 2 / 3 + perpX * offset,
+    mid2Y: p0y + dy * 2 / 3 + perpY * offset,
   };
 }
 
-// Compute bezier control points so the curve passes through midpoint at t=0.5
-// Math: B(0.5) = (P0 + 3P1 + 3P2 + P3)/8 = M
-// With P1 = P0 + (P3-P0)/3 + offset, P2 = P0 + 2(P3-P0)/3 + offset
-// Solving: offset = (4/3) * (M - (P0+P3)/2)
-export function computeBezierFromMid(p0x: number, p0y: number, p3x: number, p3y: number, midX: number, midY: number) {
-  const chordMidX = (p0x + p3x) / 2;
-  const chordMidY = (p0y + p3y) / 2;
-  const offX = (4 / 3) * (midX - chordMidX);
-  const offY = (4 / 3) * (midY - chordMidY);
-  const dx = p3x - p0x, dy = p3y - p0y;
+// Compute bezier control points so the curve passes through mid1 at t=1/3 and mid2 at t=2/3
+// Solving B(1/3) = M1 and B(2/3) = M2 for P1 and P2:
+//   P1 = (18*M1 - 9*M2 - 5*P0 + 2*P3) / 6
+//   P2 = (18*M2 - 9*M1 + 2*P0 - 5*P3) / 6
+export function computeBezierFromMids(
+  p0x: number, p0y: number, p3x: number, p3y: number,
+  mid1X: number, mid1Y: number, mid2X: number, mid2Y: number,
+) {
   return {
-    p1x: p0x + dx / 3 + offX,
-    p1y: p0y + dy / 3 + offY,
-    p2x: p0x + dx * 2 / 3 + offX,
-    p2y: p0y + dy * 2 / 3 + offY,
+    p1x: (18 * mid1X - 9 * mid2X - 5 * p0x + 2 * p3x) / 6,
+    p1y: (18 * mid1Y - 9 * mid2Y - 5 * p0y + 2 * p3y) / 6,
+    p2x: (18 * mid2X - 9 * mid1X + 2 * p0x - 5 * p3x) / 6,
+    p2y: (18 * mid2Y - 9 * mid1Y + 2 * p0y - 5 * p3y) / 6,
   };
 }
 
-// Legacy export for preview (uses default midpoint)
+// Preview (uses default midpoints)
 export function computeBezierControls(p0x: number, p0y: number, p3x: number, p3y: number) {
-  const { midX, midY } = defaultMidpoint(p0x, p0y, p3x, p3y);
-  return computeBezierFromMid(p0x, p0y, p3x, p3y, midX, midY);
+  const m = defaultMidpoints(p0x, p0y, p3x, p3y);
+  return computeBezierFromMids(p0x, p0y, p3x, p3y, m.mid1X, m.mid1Y, m.mid2X, m.mid2Y);
 }
 
 function buildEdges(hw: Highway) {
@@ -154,22 +157,25 @@ function clearEdges(hw: Highway) {
 }
 
 export function createHighway(startGx: number, startGy: number, endGx: number, endGy: number,
-                               savedMidX?: number, savedMidY?: number): Highway | null {
+                               savedMid1X?: number, savedMid1Y?: number,
+                               savedMid2X?: number, savedMid2Y?: number): Highway | null {
   const p0x = startGx * GRID + HALF;
   const p0y = startGy * GRID + HALF;
   const p3x = endGx * GRID + HALF;
   const p3y = endGy * GRID + HALF;
 
-  const mid = (savedMidX !== undefined && savedMidY !== undefined)
-    ? { midX: savedMidX, midY: savedMidY }
-    : defaultMidpoint(p0x, p0y, p3x, p3y);
+  const mids = (savedMid1X !== undefined && savedMid1Y !== undefined &&
+                savedMid2X !== undefined && savedMid2Y !== undefined)
+    ? { mid1X: savedMid1X, mid1Y: savedMid1Y, mid2X: savedMid2X, mid2Y: savedMid2Y }
+    : defaultMidpoints(p0x, p0y, p3x, p3y);
 
-  const { p1x, p1y, p2x, p2y } = computeBezierFromMid(p0x, p0y, p3x, p3y, mid.midX, mid.midY);
+  const { p1x, p1y, p2x, p2y } = computeBezierFromMids(p0x, p0y, p3x, p3y, mids.mid1X, mids.mid1Y, mids.mid2X, mids.mid2Y);
 
   const id = nextHighwayId++;
   const highway: Highway = {
     id, startGx, startGy, endGx, endGy,
-    midX: mid.midX, midY: mid.midY,
+    mid1X: mids.mid1X, mid1Y: mids.mid1Y,
+    mid2X: mids.mid2X, mid2Y: mids.mid2Y,
     p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y,
     nodeKeys: [], edgeIds: [],
   };
@@ -180,11 +186,11 @@ export function createHighway(startGx: number, startGy: number, endGx: number, e
   return highway;
 }
 
-// Update the midpoint visually (during drag) — only updates bezier, NOT the graph edges
-export function updateHighwayMid(hw: Highway, midX: number, midY: number) {
-  hw.midX = midX;
-  hw.midY = midY;
-  const { p1x, p1y, p2x, p2y } = computeBezierFromMid(hw.p0x, hw.p0y, hw.p3x, hw.p3y, midX, midY);
+// Update a control point visually (during drag) — only updates bezier, NOT the graph edges
+export function updateHighwayMid(hw: Highway, handleIndex: 1 | 2, px: number, py: number) {
+  if (handleIndex === 1) { hw.mid1X = px; hw.mid1Y = py; }
+  else { hw.mid2X = px; hw.mid2Y = py; }
+  const { p1x, p1y, p2x, p2y } = computeBezierFromMids(hw.p0x, hw.p0y, hw.p3x, hw.p3y, hw.mid1X, hw.mid1Y, hw.mid2X, hw.mid2Y);
   hw.p1x = p1x; hw.p1y = p1y;
   hw.p2x = p2x; hw.p2y = p2y;
 }
@@ -204,13 +210,13 @@ export function removeHighway(id: number) {
   bumpGraphVersion();
 }
 
-// Find a highway handle (midpoint) near a pixel position
-// Use a screen-space hit radius so the handle stays easy to hit at any zoom level
+// Find a highway handle near a pixel position, returning which handle (1 or 2) was hit
 const HANDLE_SCREEN_RADIUS = 22; // screen pixels — comfortable for both mouse and touch
-export function findHighwayHandleAtPixel(px: number, py: number): Highway | null {
+export function findHighwayHandleAtPixel(px: number, py: number): { highway: Highway; handleIndex: 1 | 2 } | null {
   const hitRadius = HANDLE_SCREEN_RADIUS / zoom; // convert to world coords
   for (const hw of highways) {
-    if (Math.hypot(px - hw.midX, py - hw.midY) <= hitRadius) return hw;
+    if (Math.hypot(px - hw.mid1X, py - hw.mid1Y) <= hitRadius) return { highway: hw, handleIndex: 1 };
+    if (Math.hypot(px - hw.mid2X, py - hw.mid2Y) <= hitRadius) return { highway: hw, handleIndex: 2 };
   }
   return null;
 }
@@ -236,4 +242,5 @@ export function resetHighways() {
   nextHighwayId = 0;
   highwayPhase = 'idle';
   draggingHighwayId = -1;
+  draggingHandleIndex = 1;
 }
