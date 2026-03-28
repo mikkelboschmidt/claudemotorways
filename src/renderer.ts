@@ -51,6 +51,7 @@ export function render(ctx: CanvasRenderingContext2D, width: number, height: num
 
   drawBuildingGrounds(ctx);
   drawRoads(ctx);
+  drawCars(ctx, false);   // Road cars below highways
   drawHighways(ctx);
 
   if (preview) {
@@ -59,7 +60,7 @@ export function render(ctx: CanvasRenderingContext2D, width: number, height: num
 
   drawHighwayPreview(ctx);
   drawHoverGhost(ctx);
-  drawCars(ctx);
+  drawCars(ctx, true);    // Highway cars above highways
   drawBuildingShadows(ctx);
   drawBuildingBodies(ctx);
   drawCollectingPins(ctx);
@@ -579,8 +580,12 @@ function drawBuildingPins(ctx: CanvasRenderingContext2D, fx: number, fy: number,
   }
 }
 
-function drawCars(ctx: CanvasRenderingContext2D) {
+function drawCars(ctx: CanvasRenderingContext2D, onHighway?: boolean) {
   for (const car of cars) {
+    if (onHighway !== undefined) {
+      const isOnHighway = highwayEdgeSet.has(car.edgeId);
+      if (isOnHighway !== onHighway) continue;
+    }
     const carLen = car.isTruck ? TRUCK_LEN : CAR_LEN;
     const carWid = car.isTruck ? TRUCK_WID : CAR_WID;
 
