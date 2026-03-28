@@ -12,16 +12,10 @@ export const FACTORY_H = 2;
 export const STORAGE_W_TILES = STORAGE_W;
 export const STORAGE_H_TILES = STORAGE_H;
 
-export const buildings: Building[] = [
-  { id: 0, gx: 3,  gy: 3,  type: 'house',   color: '#e74c3c', nodeKey: '', connectionSide: 'right', w: HOUSE_W, h: HOUSE_H, pins: 0, maxPins: 0, maxParkedCars: 0, pinCooldown: 0, disabled: false },
-  { id: 1, gx: 18, gy: 3,  type: 'factory', color: '#e74c3c', nodeKey: '', connectionSide: 'left', w: FACTORY_W, h: FACTORY_H, pins: 0, maxPins: FACTORY_MAX_PINS, maxParkedCars: FACTORY_MAX_PARKED, pinCooldown: 0, disabled: false },
-  { id: 2, gx: 3,  gy: 10, type: 'house',   color: '#3498db', nodeKey: '', connectionSide: 'right', w: HOUSE_W, h: HOUSE_H, pins: 0, maxPins: 0, maxParkedCars: 0, pinCooldown: 0, disabled: false },
-  { id: 3, gx: 18, gy: 10, type: 'factory', color: '#3498db', nodeKey: '', connectionSide: 'left', w: FACTORY_W, h: FACTORY_H, pins: 0, maxPins: FACTORY_MAX_PINS, maxParkedCars: FACTORY_MAX_PARKED, pinCooldown: 0, disabled: false },
-];
+export const buildings: Building[] = [];
 
 // Fast building lookup by ID
 export const buildingById = new Map<number, Building>();
-for (const b of buildings) buildingById.set(b.id, b);
 
 let pinSpawnTimer = 0;
 

@@ -1,10 +1,10 @@
-import { initBuildingNodes, updatePins } from './buildings.ts';
+import { updatePins } from './buildings.ts';
 import { initRoadInput, roadPreview, cancelRoadDrag, setTouchCountGetter } from './roads.ts';
 import { spawnCars, updateCars } from './cars.ts';
 import { render, getToolbarLayout } from './renderer.ts';
 import { setActiveTool, setSelectedColor, selectedColor, setSelectedBuildingType, toggleGearMenu, closeGearMenu, gearMenuOpen, demoModalOpen, showDemoModal, closeDemoModal } from './toolbar.ts';
 import { BUILDING_COLORS } from './types.ts';
-import { saveGame, loadGame, clearSave, downloadSave, uploadSave } from './save.ts';
+import { saveGame, loadGame, loadFromData, downloadSave, uploadSave } from './save.ts';
 import { tickPathfindingFrame } from './pathfinding.ts';
 import { gameSpeed, setGameSpeed } from './speed.ts';
 import { pan, zoomAt } from './camera.ts';
@@ -22,10 +22,9 @@ function resize() {
 resize();
 window.addEventListener('resize', resize);
 
-// Load saved game or initialize fresh
+// Load saved game or show start modal
 const hadSave = loadGame();
 if (!hadSave) {
-  initBuildingNodes();
   showDemoModal();
 }
 initRoadInput(canvas);
@@ -67,6 +66,10 @@ canvas.addEventListener('pointerdown', (e) => {
       loadCity('simple-city.json');
     } else if (hitRect(px, py, layout.demoDismissButton)) {
       closeDemoModal();
+      loadFromData({ buildings: [], edges: [], score: 0, nextBuildingId: 0 });
+      saveGame();
+    } else if (hitRect(px, py, layout.demoCloseButton)) {
+      closeDemoModal();
     }
     e.stopImmediatePropagation();
     return;
@@ -82,8 +85,9 @@ canvas.addEventListener('pointerdown', (e) => {
   // Gear menu items (only when open)
   if (gearMenuOpen) {
     if (hitRect(px, py, layout.resetButton)) {
-      clearSave();
-      window.location.reload();
+      closeGearMenu();
+      showDemoModal();
+      e.stopImmediatePropagation();
       return;
     }
     if (hitRect(px, py, layout.musicButton)) {
@@ -246,10 +250,12 @@ function gameLoop() {
     fpsLastTime = now;
   }
 
-  // Run simulation ticks based on speed
-  const ticks = gameSpeed;
-  for (let i = 0; i < ticks; i++) {
-    simulationTick();
+  // Run simulation ticks based on speed (paused while modal is open)
+  if (!demoModalOpen) {
+    const ticks = gameSpeed;
+    for (let i = 0; i < ticks; i++) {
+      simulationTick();
+    }
   }
 
   render(ctx, canvas.width, canvas.height, roadPreview, fps);
