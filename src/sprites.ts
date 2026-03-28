@@ -4,7 +4,8 @@ import houseRightRaw from '../assets/House-Right.svg?raw';
 import houseLeftRaw from '../assets/House-Left.svg?raw';
 import houseTopRaw from '../assets/House-Top.svg?raw';
 import houseBottomRaw from '../assets/House-Bottom.svg?raw';
-import factoryRaw from '../assets/Factory.svg?raw';
+import factoryLeftRaw from '../assets/Factory-Left.svg?raw';
+import factoryRightRaw from '../assets/Factory-Right.svg?raw';
 import storageRightRaw from '../assets/Storage-Right.svg?raw';
 import storageLeftRaw from '../assets/Storage-Left.svg?raw';
 import storageTopRaw from '../assets/Storage-Top.svg?raw';
@@ -92,7 +93,8 @@ const SPRITE_DEFS: Record<string, SpriteDef> = {
   'house:left':   { raw: houseLeftRaw, ...HOUSE_COMMON },
   'house:top':    { raw: houseTopRaw, ...HOUSE_COMMON },
   'house:bottom': { raw: houseBottomRaw, ...HOUSE_COMMON },
-  'factory:left': { raw: factoryRaw, ...FACTORY_COMMON },
+  'factory:left':  { raw: factoryLeftRaw, ...FACTORY_COMMON },
+  'factory:right': { raw: factoryRightRaw, ...FACTORY_COMMON },
   'storage:right':  { raw: storageRightRaw, ...STORAGE_COMMON },
   'storage:left':   { raw: storageLeftRaw, ...STORAGE_COMMON },
   'storage:top':    { raw: storageTopRaw, ...STORAGE_COMMON },

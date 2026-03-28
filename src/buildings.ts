@@ -67,19 +67,13 @@ export function getConnectionPoint(b: Building): [number, number] {
 //   The road direction determines which side becomes the entrance.
 export function getBuildingEdgeAt(gx: number, gy: number, roadDirGx: number, roadDirGy: number): { building: Building; side: ConnectionSide } | null {
   for (const b of buildings) {
+    // All buildings: match if the tile is ON the building itself
+    if (gx < b.gx || gx >= b.gx + b.w || gy < b.gy || gy >= b.gy + b.h) continue;
+    // Factories only support left/right entrances
     if (b.type === 'factory') {
-      // Factory: only match the exact connection tile
-      const [cx, cy] = getConnectionPoint(b);
-      if (gx !== cx || gy !== cy) continue;
-      switch (b.connectionSide) {
-        case 'right':  if (roadDirGx > 0) return { building: b, side: 'right' }; break;
-        case 'left':   if (roadDirGx < 0) return { building: b, side: 'left' }; break;
-        case 'top':    if (roadDirGy < 0) return { building: b, side: 'top' }; break;
-        case 'bottom': if (roadDirGy > 0) return { building: b, side: 'bottom' }; break;
-      }
+      if (roadDirGx > 0 && roadDirGy === 0) return { building: b, side: 'right' };
+      if (roadDirGx < 0 && roadDirGy === 0) return { building: b, side: 'left' };
     } else {
-      // House & Storage: match if the tile is ON the building itself
-      if (gx < b.gx || gx >= b.gx + b.w || gy < b.gy || gy >= b.gy + b.h) continue;
       if (roadDirGx > 0 && roadDirGy === 0) return { building: b, side: 'right' };
       if (roadDirGx < 0 && roadDirGy === 0) return { building: b, side: 'left' };
       if (roadDirGy > 0 && roadDirGx === 0) return { building: b, side: 'bottom' };
@@ -93,9 +87,9 @@ export function getBuildingEdgeAt(gx: number, gy: number, roadDirGx: number, roa
 // (start or end of the road drag landed on the building edge).
 // false when a road was merely placed adjacent to the building.
 export function connectBuildingOnSide(b: Building, side: ConnectionSide, dragGx: number, dragGy: number, isDragEndpoint: boolean) {
-  // Factories: connection side is fixed at creation, never changed by roads.
-  // Houses & Storage: only change side when the user explicitly dragged to/from the building.
-  const canChangeSide = (b.type === 'house' || b.type === 'storage') && isDragEndpoint;
+  // All buildings: change side when the user explicitly dragged to/from the building.
+  // Factories only support left/right.
+  const canChangeSide = isDragEndpoint && (b.type !== 'factory' || side === 'left' || side === 'right');
 
   if (b.connectionSide !== side && canChangeSide) {
     // Just change the connection side — keep existing road edges intact
@@ -180,11 +174,14 @@ export function addBuilding(gx: number, gy: number, type: 'house' | 'factory' | 
     }
   }
 
-  let side: ConnectionSide = type === 'factory' ? 'left' : 'right';
+  let side: ConnectionSide = 'right';
 
-  // For houses and storage, detect nearby roads and orient the entrance toward one
-  if (type === 'house' || type === 'storage') {
-    const candidates: ConnectionSide[] = ['right', 'left', 'bottom', 'top'];
+  // Detect nearby roads and orient the entrance toward one
+  // Factories only support left/right; houses and storage support all 4 sides
+  {
+    const candidates: ConnectionSide[] = type === 'factory'
+      ? ['right', 'left']
+      : ['right', 'left', 'bottom', 'top'];
     const midW = Math.floor(newW / 2);
     const midH = Math.floor(newH / 2);
     for (const s of candidates) {

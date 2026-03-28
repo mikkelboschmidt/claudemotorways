@@ -1,0 +1,25 @@
+<svg width="200" height="160" viewBox="0 0 200 160" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Factory-Right">
+<rect id="PinPlacement" x="48.5" y="48.5" width="33" height="24" stroke="black"/>
+<g id="Ground">
+<rect id="Fill" x="40" y="40" width="120" height="80" fill="#414141"/>
+<rect id="Entrance" x="153" y="87" width="7" height="26" fill="#555555"/>
+<rect id="Parking" x="44" y="44" width="112" height="72" rx="1" fill="#555555"/>
+</g>
+<g id="Shadows">
+<path id="Shadow" d="M153 97V64L133 44H44V77L64 97H153Z" fill="black" fill-opacity="0.1"/>
+<g id="Shadow_2">
+<path d="M160 113H165V125H45L40 120H160V113Z" fill="black" fill-opacity="0.1"/>
+<path d="M165 45V87H160V40L165 45Z" fill="black" fill-opacity="0.1"/>
+</g>
+</g>
+<g id="Building">
+<rect id="RoofMain" x="44" y="44" width="89" height="33" fill="#FF0000"/>
+<path id="RoofShadow" d="M133 62.6152V77H110.615L103.793 70.1777L122.178 51.793L133 62.6152Z" fill="#CC0000"/>
+<rect id="RoofShadow_2" x="77" y="77" width="21" height="6" fill="#CC0000"/>
+<rect id="RoofShadow_3" x="48" y="77" width="21" height="6" fill="#CC0000"/>
+<circle id="RoofMain_2" cx="113" cy="61" r="13" fill="#FF0000"/>
+<circle id="RoofShadow_4" cx="113" cy="61" r="8" fill="#CC0000"/>
+</g>
+</g>
+</svg>
