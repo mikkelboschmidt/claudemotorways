@@ -5,7 +5,7 @@ import { buildings, getBuildingPixelPos, getConnectionPixelPos, getConnectionPoi
 import { hoverGx, hoverGy, pendingRemoveTiles } from './roads.ts';
 import { cars } from './cars.ts';
 import { RoadPreview, ToolType, BUILDING_COLORS } from './types.ts';
-import { activeTool, selectedColor, selectedBuildingType, gearMenuOpen, demoModalOpen } from './toolbar.ts';
+import { activeTool, selectedColor, selectedBuildingType, gearMenuOpen, demoModalOpen, cityModalOpen } from './toolbar.ts';
 import { score } from './score.ts';
 import { gameSpeed, SPEED_OPTIONS, SPEED_LABELS } from './speed.ts';
 import { highways, highwayEdgeSet, highwayPhase, highwayStartGx, highwayStartGy, highwayPreviewEndPx, highwayPreviewEndPy, computeBezierControls, draggingHighwayId } from './highway.ts';
@@ -75,6 +75,7 @@ export function render(ctx: CanvasRenderingContext2D, width: number, height: num
   // Score and toolbar drawn in screen space
   drawScore(ctx, width);
   drawToolbar(ctx, width, height, fps);
+  if (cityModalOpen) drawCityModal(ctx, width, height);
   if (demoModalOpen) drawDemoModal(ctx, width, height);
 }
 
@@ -1106,9 +1107,8 @@ function drawToolbar(ctx: CanvasRenderingContext2D, width: number, height: numbe
   if (gearMenuOpen) {
     const menuW = 180;
     const pad = 10;
-    // Compute dynamic height: base items + save/load row + city buttons
-    const cityCount = cities.length;
-    const menuH = 160 + 42 + (cityCount > 0 ? 24 + cityCount * 34 : 0);
+    // Compute dynamic height: base items + save/load row + cities button
+    const menuH = 160 + 42 + 42;
     const menuX = width - BTN_MARGIN - menuW;
     const menuY = gearCy - gearR - BTN_GAP - menuH;
 
@@ -1190,28 +1190,17 @@ function drawToolbar(ctx: CanvasRenderingContext2D, width: number, height: numbe
     ctx.fillText('Load', menuX + pad + halfW + 6 + halfW / 2, my + 16);
     my += 42;
 
-    // City buttons (if any cities in manifest)
-    if (cityCount > 0) {
-      ctx.fillStyle = 'rgba(255,255,255,0.4)';
-      ctx.font = 'bold 11px sans-serif';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('CITIES', menuX + pad, my + 6);
-      my += 20;
-
-      for (let i = 0; i < cityCount; i++) {
-        ctx.fillStyle = '#34495e';
-        ctx.beginPath();
-        ctx.roundRect(menuX + pad, my, menuW - pad * 2, 28, 6);
-        ctx.fill();
-        ctx.fillStyle = '#fff';
-        ctx.font = '12px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(cities[i].name, menuX + menuW / 2, my + 14);
-        my += 34;
-      }
-    }
+    // Cities button — opens city picker modal
+    ctx.fillStyle = '#2c3e50';
+    ctx.beginPath();
+    ctx.roundRect(menuX + pad, my, menuW - pad * 2, 32, 6);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = '13px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Cities', menuX + menuW / 2, my + 16);
+    my += 42;
 
     // Reset button
     ctx.fillStyle = '#8B0000';
@@ -1359,6 +1348,102 @@ function drawDemoModal(ctx: CanvasRenderingContext2D, width: number, height: num
   ctx.fillText('Start Fresh', btnStartX + MODAL_BTN_W + gap + MODAL_BTN_W / 2, btnY + MODAL_BTN_H / 2);
 }
 
+const CITY_MODAL_W = 320;
+const CITY_MODAL_PAD = 16;
+const CITY_ROW_H = 44;
+const CITY_ROW_GAP = 8;
+
+function getCityModalMetrics(width: number, height: number) {
+  const cityCount = cities.length;
+  const headerH = 48;
+  const contentH = cityCount * (CITY_ROW_H + CITY_ROW_GAP) - CITY_ROW_GAP;
+  const modalH = headerH + contentH + CITY_MODAL_PAD * 2;
+  const mx = (width - CITY_MODAL_W) / 2;
+  const my = (height - modalH) / 2;
+  return { modalH, mx, my, headerH };
+}
+
+function drawCityModal(ctx: CanvasRenderingContext2D, width: number, height: number) {
+  // Dim overlay
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+  ctx.fillRect(0, 0, width, height);
+
+  const cityCount = cities.length;
+  const { modalH, mx, my, headerH } = getCityModalMetrics(width, height);
+
+  // Shadow + background
+  ctx.save();
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+  ctx.shadowBlur = 32;
+  ctx.shadowOffsetY = 8;
+  ctx.fillStyle = 'rgba(44, 62, 80, 0.97)';
+  ctx.beginPath();
+  ctx.roundRect(mx, my, CITY_MODAL_W, modalH, 12);
+  ctx.fill();
+  ctx.restore();
+
+  // White outline
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(mx, my, CITY_MODAL_W, modalH, 12);
+  ctx.stroke();
+
+  // Header
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 16px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('Choose a City', mx + CITY_MODAL_W / 2, my + headerH / 2);
+
+  // Close button (top-right)
+  const closeSize = 28;
+  const closePad = 10;
+  const closeX = mx + CITY_MODAL_W - closeSize - closePad;
+  const closeY = my + closePad;
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+  ctx.beginPath();
+  ctx.arc(closeX + closeSize / 2, closeY + closeSize / 2, closeSize / 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
+  const xInset = 8;
+  ctx.beginPath();
+  ctx.moveTo(closeX + xInset, closeY + xInset);
+  ctx.lineTo(closeX + closeSize - xInset, closeY + closeSize - xInset);
+  ctx.moveTo(closeX + closeSize - xInset, closeY + xInset);
+  ctx.lineTo(closeX + xInset, closeY + closeSize - xInset);
+  ctx.stroke();
+
+  // City rows
+  let rowY = my + headerH;
+  for (let i = 0; i < cityCount; i++) {
+    const rowX = mx + CITY_MODAL_PAD;
+    const rowW = CITY_MODAL_W - CITY_MODAL_PAD * 2;
+
+    ctx.fillStyle = '#34495e';
+    ctx.beginPath();
+    ctx.roundRect(rowX, rowY, rowW, CITY_ROW_H, 8);
+    ctx.fill();
+
+    ctx.fillStyle = '#fff';
+    ctx.font = '14px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(cities[i].name, mx + CITY_MODAL_W / 2, rowY + CITY_ROW_H / 2);
+
+    rowY += CITY_ROW_H + CITY_ROW_GAP;
+  }
+
+  if (cityCount === 0) {
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = '13px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('No cities available', mx + CITY_MODAL_W / 2, my + headerH + 20);
+  }
+}
+
 export function getToolbarLayout(_ctx: CanvasRenderingContext2D, width: number, height: number) {
   const r = BTN_SIZE / 2;
 
@@ -1392,8 +1477,7 @@ export function getToolbarLayout(_ctx: CanvasRenderingContext2D, width: number, 
   // Gear menu items
   const menuW = 180;
   const pad = 10;
-  const cityCount = cities.length;
-  const menuH = 160 + 42 + (cityCount > 0 ? 24 + cityCount * 34 : 0);
+  const menuH = 160 + 42 + 42;
   const menuX = width - BTN_MARGIN - menuW;
   const menuY = gearCy - gearR - BTN_GAP - menuH;
 
@@ -1419,15 +1503,9 @@ export function getToolbarLayout(_ctx: CanvasRenderingContext2D, width: number, 
   const loadButton = { x: menuX + pad + halfW + 6, y: my, w: halfW, h: 32 };
   my += 42;
 
-  // City buttons
-  const cityButtons: { file: string; x: number; y: number; w: number; h: number }[] = [];
-  if (cityCount > 0) {
-    my += 20; // "CITIES" label
-    for (let i = 0; i < cityCount; i++) {
-      cityButtons.push({ file: cities[i].file, x: menuX + pad, y: my, w: menuW - pad * 2, h: 28 });
-      my += 34;
-    }
-  }
+  // Cities button (opens city modal)
+  const citiesButton = { x: menuX + pad, y: my, w: menuW - pad * 2, h: 32 };
+  my += 42;
 
   // Reset button
   const resetButton = { x: menuX + pad, y: my, w: menuW - pad * 2, h: 32 };
@@ -1444,5 +1522,23 @@ export function getToolbarLayout(_ctx: CanvasRenderingContext2D, width: number, 
   const closePad = 8;
   const demoCloseButton = { x: modalX + modalSize - closeSize - closePad, y: modalY + closePad, w: closeSize, h: closeSize };
 
-  return { buttons, colorButton, resetButton, musicButton, speedButtons, gearButton, saveButton, loadButton, cityButtons, demoOpenButton, demoDismissButton, demoCloseButton };
+  // City modal hit areas
+  const { modalH: cityMH, mx: cityMX, my: cityMY, headerH: cityHeaderH } = getCityModalMetrics(width, height);
+  const cityCloseSize = 28;
+  const cityClosePad = 10;
+  const cityCloseButton = { x: cityMX + CITY_MODAL_W - cityCloseSize - cityClosePad, y: cityMY + cityClosePad, w: cityCloseSize, h: cityCloseSize };
+  const cityRowButtons: { file: string; x: number; y: number; w: number; h: number }[] = [];
+  let cityRowY = cityMY + cityHeaderH;
+  for (let ci = 0; ci < cities.length; ci++) {
+    cityRowButtons.push({
+      file: cities[ci].file,
+      x: cityMX + CITY_MODAL_PAD,
+      y: cityRowY,
+      w: CITY_MODAL_W - CITY_MODAL_PAD * 2,
+      h: CITY_ROW_H,
+    });
+    cityRowY += CITY_ROW_H + CITY_ROW_GAP;
+  }
+
+  return { buttons, colorButton, resetButton, musicButton, speedButtons, gearButton, saveButton, loadButton, citiesButton, cityCloseButton, cityRowButtons, demoOpenButton, demoDismissButton, demoCloseButton };
 }

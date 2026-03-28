@@ -4,13 +4,20 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "npm run dev:client & npm run dev:server & wait",
+    "dev:client": "vite",
+    "dev:server": "tsx watch server/index.ts",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },
   "devDependencies": {
+    "@types/express": "^5.0.6",
+    "rollup": "4.45.1",
+    "tsx": "^4.21.0",
     "typescript": "~5.7.2",
-    "vite": "^6.2.0",
-    "rollup": "4.45.1"
+    "vite": "^6.2.0"
+  },
+  "dependencies": {
+    "express": "^5.2.1"
   }
 }

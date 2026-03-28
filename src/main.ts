@@ -2,14 +2,14 @@ import { updatePins } from './buildings.ts';
 import { initRoadInput, roadPreview, cancelRoadDrag, setTouchCountGetter } from './roads.ts';
 import { spawnCars, updateCars } from './cars.ts';
 import { render, getToolbarLayout } from './renderer.ts';
-import { setActiveTool, setSelectedColor, selectedColor, setSelectedBuildingType, toggleGearMenu, closeGearMenu, gearMenuOpen, demoModalOpen, showDemoModal, closeDemoModal } from './toolbar.ts';
+import { setActiveTool, setSelectedColor, selectedColor, setSelectedBuildingType, toggleGearMenu, closeGearMenu, gearMenuOpen, demoModalOpen, showDemoModal, closeDemoModal, cityModalOpen, showCityModal, closeCityModal } from './toolbar.ts';
 import { BUILDING_COLORS } from './types.ts';
 import { saveGame, loadGame, loadFromData, downloadSave, uploadSave } from './save.ts';
 import { tickPathfindingFrame } from './pathfinding.ts';
 import { gameSpeed, setGameSpeed } from './speed.ts';
 import { pan, zoomAt } from './camera.ts';
 import { toggleMusic, ensureMusicStarted } from './music.ts';
-import { fetchCities, loadCity } from './cities.ts';
+import { fetchCities, loadCity, backendAvailable } from './cities.ts';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
@@ -63,13 +63,30 @@ canvas.addEventListener('pointerdown', (e) => {
   if (demoModalOpen) {
     if (hitRect(px, py, layout.demoOpenButton)) {
       closeDemoModal();
-      loadCity('simple-city.json');
+      loadCity('simple-city');
     } else if (hitRect(px, py, layout.demoDismissButton)) {
       closeDemoModal();
       loadFromData({ buildings: [], edges: [], score: 0, nextBuildingId: 0 });
       saveGame();
     } else if (hitRect(px, py, layout.demoCloseButton)) {
       closeDemoModal();
+    }
+    e.stopImmediatePropagation();
+    return;
+  }
+
+  // City modal — blocks other interaction when open
+  if (cityModalOpen) {
+    if (hitRect(px, py, layout.cityCloseButton)) {
+      closeCityModal();
+    } else {
+      for (const btn of layout.cityRowButtons) {
+        if (hitRect(px, py, btn)) {
+          closeCityModal();
+          loadCity(btn.file);
+          break;
+        }
+      }
     }
     e.stopImmediatePropagation();
     return;
@@ -105,13 +122,15 @@ canvas.addEventListener('pointerdown', (e) => {
       e.stopImmediatePropagation();
       return;
     }
-    for (const btn of layout.cityButtons) {
-      if (hitRect(px, py, btn)) {
-        loadCity(btn.file);
-        closeGearMenu();
-        e.stopImmediatePropagation();
-        return;
+    if (hitRect(px, py, layout.citiesButton)) {
+      closeGearMenu();
+      if (!backendAvailable) {
+        alert('Backend server is not running. Start it with: npm run dev:server');
+      } else {
+        showCityModal();
       }
+      e.stopImmediatePropagation();
+      return;
     }
     for (const btn of layout.speedButtons) {
       if (hitRect(px, py, btn)) {
@@ -251,7 +270,7 @@ function gameLoop() {
   }
 
   // Run simulation ticks based on speed (paused while modal is open)
-  if (!demoModalOpen) {
+  if (!demoModalOpen && !cityModalOpen) {
     const ticks = gameSpeed;
     for (let i = 0; i < ticks; i++) {
       simulationTick();
