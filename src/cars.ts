@@ -1039,13 +1039,20 @@ export function updateCars() {
           canDepart = true;
         }
       } else if (car.isTruck && car.nextState === 'toStorage') {
-        // Truck at factory — wait until factory has a full load, then grab all and leave
+        // Truck at factory — pick up pins one at a time, leave when full
         if (parkedBuilding && parkedBuilding.disabled) {
           canDepart = true;
-        } else if (parkedBuilding && parkedBuilding.pins >= TRUCK_CAPACITY) {
-          parkedBuilding.pins -= TRUCK_CAPACITY;
-          car.pinsCarried = TRUCK_CAPACITY;
+        } else if (car.pinsCarried >= TRUCK_CAPACITY) {
           canDepart = true;
+        } else if (parkedBuilding && parkedBuilding.pins > 0 && parkedBuilding.pinCooldown <= 0) {
+          // Pick up one pin with animation (same as regular cars)
+          const pinPos = getPinPixelPos(parkedBuilding, parkedBuilding.pins - 1);
+          parkedBuilding.pins--;
+          addScore(1);
+          car.state = 'collecting';
+          car.collectProgress = 0;
+          car.pinSourceX = pinPos.x;
+          car.pinSourceY = pinPos.y;
         }
       } else if (car.nextState === 'toWork') {
         // Regular car at home (house) — timer-based departure
@@ -1081,9 +1088,15 @@ export function updateCars() {
       car.collectProgress += 0.035;
       if (car.collectProgress >= 1) {
         car.collectProgress = 1;
-        car.state = 'departing';
-        car.parkProgress = 0;
-        setupDepartPath(car);
+        if (car.isTruck) {
+          // Truck: increment carried pins and return to parked to collect more
+          car.pinsCarried++;
+          car.state = 'parked';
+        } else {
+          car.state = 'departing';
+          car.parkProgress = 0;
+          setupDepartPath(car);
+        }
       }
     } else if (car.state === 'departing') {
       car.parkProgress += PARK_ANIM_SPEED;
