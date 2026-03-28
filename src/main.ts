@@ -1,3 +1,6 @@
+import { inject } from '@vercel/analytics';
+inject();
+
 import { updatePins } from './buildings.ts';
 import { initRoadInput, roadPreview, cancelRoadDrag, setTouchCountGetter } from './roads.ts';
 import { spawnCars, updateCars } from './cars.ts';
@@ -9,7 +12,7 @@ import { tickPathfindingFrame } from './pathfinding.ts';
 import { gameSpeed, setGameSpeed } from './speed.ts';
 import { pan, zoomAt } from './camera.ts';
 import { toggleMusic, ensureMusicStarted } from './music.ts';
-import { fetchCities, loadCity, backendAvailable } from './cities.ts';
+import { fetchCities, loadCity } from './cities.ts';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
@@ -124,11 +127,7 @@ canvas.addEventListener('pointerdown', (e) => {
     }
     if (hitRect(px, py, layout.citiesButton)) {
       closeGearMenu();
-      if (!backendAvailable) {
-        alert('Backend server is not running. Start it with: npm run dev:server');
-      } else {
-        showCityModal();
-      }
+      showCityModal();
       e.stopImmediatePropagation();
       return;
     }

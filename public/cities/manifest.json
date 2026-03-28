@@ -1,3 +1,4 @@
 [
-  { "name": "Simple City", "file": "simple-city.json" }
+  { "name": "Simple City", "file": "simple-city" },
+  { "name": "Red City", "file": "red-city" }
 ]
