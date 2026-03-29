@@ -3,6 +3,7 @@ import { nodeKey, nodes, addEdge, bumpGraphVersion } from './graph.ts';
 import { GRID, HALF, PIN_SPAWN_INTERVAL, PIN_COOLDOWN, FACTORY_MAX_PINS, FACTORY_MAX_PARKED, STORAGE_W, STORAGE_H, STORAGE_MAX_PINS, STORAGE_MAX_PARKED } from './constants.ts';
 import { resetSpawnTimer, evictCarsFromFactory, removeCarsForBuilding } from './cars.ts';
 import { addScore } from './score.ts';
+import { recordBuilding, recordBurnout, recordDemolish } from './run.ts';
 import { getFactorySprite, getStorageSprite } from './sprites.ts';
 import { isInsideRoundaboutTile } from './roundabout.ts';
 
@@ -39,6 +40,7 @@ export function updatePins() {
       b.disabled = true;
       b.pins = 0;
       addScore(-20);
+      recordBurnout();
       evictCarsFromFactory(b.id);
     }
   }
@@ -216,6 +218,7 @@ export function addBuilding(gx: number, gy: number, type: 'house' | 'factory' | 
   buildingById.set(building.id, building);
   bumpGraphVersion();
   resetSpawnTimer();
+  recordBuilding(type);
   return building;
 }
 
@@ -230,6 +233,7 @@ export function removeBuilding(id: number): boolean {
   buildingById.delete(b.id);
   buildings.splice(idx, 1);
   bumpGraphVersion();
+  recordDemolish();
   return true;
 }
 
