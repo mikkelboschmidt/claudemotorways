@@ -277,6 +277,34 @@ The game is fully playable on touch devices. The canvas uses pointer events for 
 
 ---
 
+## Analytics (Run-Based)
+
+All analytics are sent to PostHog (anonymous, no user identification). Tracking is organised around **runs** — a run begins when the player starts or loads a game and ends when they reset, load a different city, or close the browser.
+
+### Events
+
+| Event | Trigger | Key Properties |
+|---|---|---|
+| `run-started` | New/loaded game begins | `runId`, `startType` (`fresh`, `demo-city`, `save-restored`, `city-loaded`), `cityName` |
+| `run-milestone` | First-time threshold crossed in a run | `runId`, `milestone` (e.g. `first-factory`, `10-roads`, `first-highway`, `score-100`) |
+| `run-ended` | Run concludes | `runId`, `reason`, `durationSeconds`, `startType`, full summary (see below) |
+
+### Run Summary (`run-ended` properties)
+
+`finalScore`, `peakCars`, `housesPlaced`, `factoriesPlaced`, `storagesPlaced`, `totalBuildings`, `totalRoads`, `narrowRoads`, `highways`, `factoryBurnouts`, `buildingsDemolished`, `narrowRoadRatio`.
+
+### Milestones
+
+`first-house`, `first-factory`, `first-storage`, `first-highway`, `first-burnout`, `5-buildings`, `10-buildings`, `20-buildings`, `10-roads`, `25-roads`, `50-roads`, `score-100`, `score-500`.
+
+### Design Principles
+
+- **Track decisions, not noise** — building/road placements are counted per run, not fired as individual events.
+- **Summarise each run** — the `run-ended` event is the primary data source for comparing player strategies.
+- **Milestones mark progression** — sparse events that show how a run evolves over time.
+
+---
+
 ## Deployment
 
 The game is deployed to **GitHub Pages** with the custom domain **loomways.com**. The `public/CNAME` file maps the GitHub Pages site to `loomways.com`. Deployment is automated via a GitHub Actions workflow on push to `main`.
