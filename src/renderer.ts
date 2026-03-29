@@ -180,11 +180,16 @@ function drawRoads(ctx: CanvasRenderingContext2D) {
   for (const [key, node] of nodes) {
     if (key.startsWith('hw') || key.startsWith('ra')) continue;
     // Use narrow radius if ALL edges on this node are narrow
+    // Skip nodes that only have roundabout/highway edges (no regular road edges)
     let hasWide = false;
+    let hasRoad = false;
     for (const eid of node.edges) {
       const e = edges.get(eid);
-      if (e && !e.narrow && !highwayEdgeSet.has(eid)) { hasWide = true; break; }
+      if (!e || highwayEdgeSet.has(eid) || roundaboutEdgeSet.has(eid)) continue;
+      hasRoad = true;
+      if (!e.narrow) { hasWide = true; break; }
     }
+    if (!hasRoad) continue;
     const r = hasWide ? ROAD_W / 2 : NARROW_ROAD_W / 2;
     ctx.beginPath();
     ctx.arc(node.gx * GRID + HALF, node.gy * GRID + HALF, r, 0, Math.PI * 2);

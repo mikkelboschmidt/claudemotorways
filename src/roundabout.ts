@@ -100,30 +100,30 @@ export function createRoundabout(gx: number, gy: number): Roundabout | null {
   const NUM_POINTS = 12;
   const ringNodes: { key: string; px: number; py: number }[] = [];
 
+  // Main grid nodes at cardinal positions (integer grid coords)
+  const mainNodes: [number, number, number][] = [
+    [0, gx + 2, gy + 1], // Right
+    [3, gx + 1, gy + 2], // Bottom
+    [6, gx,     gy + 1], // Left
+    [9, gx + 1, gy],     // Top
+  ];
+
   for (let i = 0; i < NUM_POINTS; i++) {
     const angle = (i / NUM_POINTS) * Math.PI * 2; // 0° = East, clockwise
     const px = cx + Math.cos(angle) * radius;
     const py = cy + Math.sin(angle) * radius;
 
-    let key: string;
-    if (i === 0) {
-      // Right: grid (gx+2, gy+1)
-      key = nodeKey(gx + 2, gy + 1);
-    } else if (i === 3) {
-      // Bottom: grid (gx+1, gy+2)
-      key = nodeKey(gx + 1, gy + 2);
-    } else if (i === 6) {
-      // Left: grid (gx, gy+1)
-      key = nodeKey(gx, gy + 1);
-    } else if (i === 9) {
-      // Top: grid (gx+1, gy)
-      key = nodeKey(gx + 1, gy);
+    const main = mainNodes.find(m => m[0] === i);
+    if (main) {
+      const [, mgx, mgy] = main;
+      const key = nodeKey(mgx, mgy);
+      ensureNodeRaw(key, mgx, mgy); // integer grid coords for proper joint rendering
+      ringNodes.push({ key, px: mgx * GRID + HALF, py: mgy * GRID + HALF });
     } else {
-      key = `ra${id}_${i}`;
+      const key = `ra${id}_${i}`;
+      ensureNodeRaw(key, px / GRID, py / GRID);
+      ringNodes.push({ key, px, py });
     }
-
-    ensureNodeRaw(key, px / GRID, py / GRID);
-    ringNodes.push({ key, px, py });
   }
 
   // Create 12 one-way edges for counter-clockwise travel.
