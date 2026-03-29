@@ -8,6 +8,7 @@ import { removeCarsForEdge, removeCarsForBuilding } from './cars.ts';
 import { saveGame } from './save.ts';
 import { playSfx } from './sfx.ts';
 import { highwayPhase, highwayStartGx, highwayStartGy, draggingHighwayId, draggingHandleIndex, setHighwayPhase, setHighwayStart, setHighwayPreviewEnd, setDraggingHighwayId, setDraggingHandleIndex, createHighway, findHighwayAtPixel, findHighwayHandleAtPixel, removeHighway, updateHighwayMid, rebuildHighway, highways } from './highway.ts';
+import { createRoundabout, removeRoundabout, findRoundaboutAtPixel, segmentCutsRoundabout, roundaboutEdgeSet } from './roundabout.ts';
 
 let dragging = false;
 let dragStartGx = 0;
@@ -151,7 +152,22 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
           return;
         }
       }
-      // Check if clicking on a highway first
+      // Check if clicking on a roundabout
+      const ra = findRoundaboutAtPixel(px, py);
+      if (ra) {
+        const raId = ra.id;
+        const raEdgeIds = [...ra.edgeIds];
+        pendingTap = () => {
+          for (const eid of raEdgeIds) {
+            removeCarsForEdge(eid);
+          }
+          removeRoundabout(raId);
+          playSfx('demolish');
+          saveGame();
+        };
+        return;
+      }
+      // Check if clicking on a highway
       const hw = findHighwayAtPixel(px, py);
       if (hw) {
         removeHighway(hw.id);
@@ -186,6 +202,15 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
           saveGame();
         };
       }
+    } else if (activeTool === 'addRoundabout') {
+      const gridX = Math.floor(px / GRID) - 1; // center the 3x3 on the clicked tile
+      const gridY = Math.floor(py / GRID) - 1;
+      pendingTap = () => {
+        if (createRoundabout(gridX, gridY)) {
+          playSfx('build');
+          saveGame();
+        }
+      };
     } else if (activeTool === 'addHighway') {
       // Check for handle drag first
       const handle = findHighwayHandleAtPixel(px, py);
@@ -249,6 +274,9 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
       if (activeTool === 'addBuilding') {
         hoverGx = Math.floor(px / GRID);
         hoverGy = Math.floor(py / GRID);
+      } else if (activeTool === 'addRoundabout') {
+        hoverGx = Math.floor(px / GRID) - 1;
+        hoverGy = Math.floor(py / GRID) - 1;
       } else if (activeTool === 'addRoad' || activeTool === 'addNarrow') {
         hoverGx = snapToGrid(px);
         hoverGy = snapToGrid(py);
@@ -312,6 +340,7 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
         for (const tileKey of pendingRemoveTiles) {
           const edgeIds = getNodeEdges(tileKey);
           for (const eid of edgeIds) {
+            if (roundaboutEdgeSet.has(eid)) continue; // don't break roundabouts with drag removal
             removeCarsForEdge(eid);
             removeEdge(eid);
           }
@@ -384,8 +413,9 @@ function createRoadSegments(gx1: number, gy1: number, gx2: number, gy2: number, 
     const x2 = x1 + stepX;
     const y2 = y1 + stepY;
 
-    // Skip if segment cuts through a building interior
+    // Skip if segment cuts through a building or roundabout interior
     if (segmentCutsBuilding(x1, y1, x2, y2)) continue;
+    if (segmentCutsRoundabout(x1, y1, x2, y2)) continue;
 
     if (addEdge(x1, y1, x2, y2, narrow || undefined)) added = true;
   }

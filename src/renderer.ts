@@ -11,6 +11,7 @@ import { gameSpeed, SPEED_OPTIONS, SPEED_LABELS } from './speed.ts';
 import { highways, highwayEdgeSet, highwayPhase, highwayStartGx, highwayStartGy, highwayPreviewEndPx, highwayPreviewEndPy, computeBezierControls, draggingHighwayId, draggingHandleIndex } from './highway.ts';
 import { musicEnabled } from './music.ts';
 import { cities } from './cities.ts';
+import { roundabouts, roundaboutEdgeSet } from './roundabout.ts';
 import { getHouseSprite, getFactorySprite, getStorageSprite, drawSpriteLayer, PinPlacement } from './sprites.ts';
 import splashUrl from '../assets/splashscreen.png';
 import iconRoadNormalRaw from '../assets/Icon-Road-Normal.svg?raw';
@@ -21,6 +22,7 @@ import iconColorRaw from '../assets/Icon-Color.svg?raw';
 import iconHouseRaw from '../assets/Icon-House.svg?raw';
 import iconFactoryRaw from '../assets/Icon-Factory.svg?raw';
 import iconStorageRaw from '../assets/Icon-Storage.svg?raw';
+import iconRoundaboutRaw from '../assets/Icon-Roundabout.svg?raw';
 
 const splashImg = new Image();
 splashImg.src = splashUrl;
@@ -115,6 +117,7 @@ export function render(ctx: CanvasRenderingContext2D, width: number, height: num
 
   drawBuildingGrounds(ctx);
   drawRoads(ctx);
+  drawRoundabouts(ctx);
   drawCars(ctx, 'road');   // Road cars below buildings
 
   if (preview) {
@@ -149,6 +152,7 @@ function drawRoads(ctx: CanvasRenderingContext2D) {
   ctx.beginPath();
   for (const [, edge] of edges) {
     if (highwayEdgeSet.has(edge.id)) continue;
+    if (roundaboutEdgeSet.has(edge.id)) continue;
     if (edge.narrow) continue; // narrow drawn separately
     ctx.moveTo(edge.fx, edge.fy);
     ctx.lineTo(edge.tx, edge.ty);
@@ -164,6 +168,7 @@ function drawRoads(ctx: CanvasRenderingContext2D) {
   ctx.beginPath();
   for (const [, edge] of edges) {
     if (highwayEdgeSet.has(edge.id)) continue;
+    if (roundaboutEdgeSet.has(edge.id)) continue;
     if (!edge.narrow) continue;
     ctx.moveTo(edge.fx, edge.fy);
     ctx.lineTo(edge.tx, edge.ty);
@@ -173,7 +178,7 @@ function drawRoads(ctx: CanvasRenderingContext2D) {
   // Draw round joints at all nodes for smooth corners (skip highway intermediate nodes)
   ctx.fillStyle = ROAD_COLOR;
   for (const [key, node] of nodes) {
-    if (key.startsWith('hw')) continue;
+    if (key.startsWith('hw') || key.startsWith('ra')) continue;
     // Use narrow radius if ALL edges on this node are narrow
     let hasWide = false;
     for (const eid of node.edges) {
@@ -210,6 +215,7 @@ function drawRoads(ctx: CanvasRenderingContext2D) {
   ctx.beginPath();
   for (const [, edge] of edges) {
     if (edge.narrow) continue; // no center dashes on narrow roads
+    if (roundaboutEdgeSet.has(edge.id)) continue;
     ctx.moveTo(edge.fx, edge.fy);
     ctx.lineTo(edge.tx, edge.ty);
   }
@@ -301,6 +307,43 @@ function fillTaperedPoly(ctx: CanvasRenderingContext2D, left: { x: number; y: nu
   for (let i = right.length - 1; i >= 0; i--) ctx.lineTo(right[i].x, right[i].y);
   ctx.closePath();
   ctx.fill();
+}
+
+function drawRoundabouts(ctx: CanvasRenderingContext2D) {
+  for (const ra of roundabouts) {
+    const cx = (ra.gx + 1) * GRID + HALF;
+    const cy = (ra.gy + 1) * GRID + HALF;
+    const ringR = GRID; // ring nodes are 1 tile from center = 40px
+
+    // Road surface (annulus)
+    ctx.fillStyle = ROAD_COLOR;
+    ctx.beginPath();
+    ctx.arc(cx, cy, ringR + ROAD_W / 2, 0, Math.PI * 2);
+    ctx.arc(cx, cy, ringR - ROAD_W / 2, 0, Math.PI * 2, true);
+    ctx.fill();
+
+    // Green island
+    ctx.fillStyle = BG_COLOR;
+    ctx.beginPath();
+    ctx.arc(cx, cy, ringR - ROAD_W / 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Island border
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(cx, cy, ringR - ROAD_W / 2, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Dashed center line (circle)
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([DASH_LEN, DASH_GAP]);
+    ctx.beginPath();
+    ctx.arc(cx, cy, ringR, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
 }
 
 function drawHighways(ctx: CanvasRenderingContext2D) {
@@ -465,7 +508,28 @@ function drawRoadPreview(ctx: CanvasRenderingContext2D, preview: RoadPreview) {
 function drawHoverGhost(ctx: CanvasRenderingContext2D) {
   if (hoverGx === null || hoverGy === null) return;
 
-  if (activeTool === 'addBuilding') {
+  if (activeTool === 'addRoundabout') {
+    const px = hoverGx * GRID;
+    const py = hoverGy * GRID;
+    const pw = 3 * GRID;
+    const ph = 3 * GRID;
+    const cx = (hoverGx + 1) * GRID + HALF;
+    const cy = (hoverGy + 1) * GRID + HALF;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.fillRect(px, py, pw, ph);
+    // Road ring preview
+    ctx.strokeStyle = 'rgba(100,100,100,0.5)';
+    ctx.lineWidth = ROAD_W;
+    ctx.beginPath();
+    ctx.arc(cx, cy, GRID, 0, Math.PI * 2);
+    ctx.stroke();
+    // Island preview
+    ctx.fillStyle = 'rgba(74,124,89,0.5)';
+    ctx.beginPath();
+    ctx.arc(cx, cy, GRID - ROAD_W / 2, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (activeTool === 'addBuilding') {
     const w = selectedBuildingType === 'house' ? HOUSE_W : selectedBuildingType === 'storage' ? STORAGE_W_TILES : FACTORY_W;
     const h = selectedBuildingType === 'house' ? HOUSE_H : selectedBuildingType === 'storage' ? STORAGE_H_TILES : FACTORY_H;
     const px = hoverGx * GRID;
@@ -916,6 +980,10 @@ function iconDemolishIcon(ctx: CanvasRenderingContext2D, cx: number, cy: number,
   drawSvgIcon(ctx, cx, cy, r, iconDemolishRaw);
 }
 
+function iconRoundabout(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
+  drawSvgIcon(ctx, cx, cy, r, iconRoundaboutRaw);
+}
+
 function iconHouse(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
   drawSvgIcon(ctx, cx, cy, r, iconHouseRaw, selectedColor);
 }
@@ -963,14 +1031,15 @@ const TOOL_ICONS: ToolIconDef[] = [
   { type: 'addRoad', icon: iconRoad },
   { type: 'addNarrow', icon: iconNarrow },
   { type: 'addHighway', icon: iconHighway },
-  // Color circle goes here (index 3) — handled separately
+  { type: 'addRoundabout', icon: iconRoundabout },
+  // Color circle goes here (index 4) — handled separately
   { type: 'addBuilding', buildingType: 'house', icon: iconHouse },
   { type: 'addBuilding', buildingType: 'factory', icon: iconFactory },
   { type: 'addBuilding', buildingType: 'storage', icon: iconStorage },
   { type: 'demolish', icon: iconDemolishIcon },
 ];
 
-const COLOR_SLOT_INDEX = 3; // color circle inserted before house
+const COLOR_SLOT_INDEX = 4; // color circle inserted before house
 
 function isToolActive(def: ToolIconDef): boolean {
   if (def.buildingType) {
@@ -1146,6 +1215,7 @@ function drawToolbar(ctx: CanvasRenderingContext2D, width: number, height: numbe
     case 'addRoad': label = 'Road'; break;
     case 'addNarrow': label = 'Narrow Road'; break;
     case 'addHighway': label = 'Highway'; break;
+    case 'addRoundabout': label = 'Roundabout'; break;
     case 'demolish': label = 'Demolish'; break;
     case 'addBuilding':
       switch (selectedBuildingType) {

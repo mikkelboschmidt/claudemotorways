@@ -4,6 +4,7 @@ import { score, setScore } from './score.ts';
 import { Building } from './types.ts';
 import { highways, highwayEdgeSet, createHighway, resetHighways } from './highway.ts';
 import { cars } from './cars.ts';
+import { roundabouts, roundaboutEdgeSet, createRoundabout, resetRoundabouts } from './roundabout.ts';
 
 const SAVE_KEY = 'claudemotorways_save';
 
@@ -12,6 +13,7 @@ export interface SaveData {
   buildings: Building[];
   edges: [number, number, number, number, boolean?][]; // [gx1, gy1, gx2, gy2, narrow?]
   highways?: { startGx: number; startGy: number; endGx: number; endGy: number; midX?: number; midY?: number; mid1X?: number; mid1Y?: number; mid2X?: number; mid2Y?: number }[];
+  roundabouts?: { gx: number; gy: number }[];
   score: number;
   nextBuildingId: number;
 }
@@ -20,6 +22,7 @@ export function serializeState(): SaveData {
   const edgeList: [number, number, number, number, boolean?][] = [];
   for (const [, edge] of edges) {
     if (highwayEdgeSet.has(edge.id)) continue; // highway edges are recreated from highway data
+    if (roundaboutEdgeSet.has(edge.id)) continue; // roundabout edges are recreated from roundabout data
     const [gx1, gy1] = parseKey(edge.fromKey);
     const [gx2, gy2] = parseKey(edge.toKey);
     if (edge.narrow) {
@@ -36,10 +39,13 @@ export function serializeState(): SaveData {
     mid2X: hw.mid2X, mid2Y: hw.mid2Y,
   }));
 
+  const raList = roundabouts.map(ra => ({ gx: ra.gx, gy: ra.gy }));
+
   return {
     buildings: buildings.map(b => ({ ...b })),
     edges: edgeList,
     highways: hwList,
+    roundabouts: raList,
     score,
     nextBuildingId: Math.max(...buildings.map(b => b.id), 0) + 1,
   };
@@ -55,6 +61,7 @@ export function loadFromData(data: SaveData): boolean {
   edges.clear();
   cars.length = 0;
   resetHighways();
+  resetRoundabouts();
 
   // Restore buildings
   for (const b of data.buildings) {
@@ -72,6 +79,13 @@ export function loadFromData(data: SaveData): boolean {
   if (data.highways) {
     for (const hw of data.highways) {
       createHighway(hw.startGx, hw.startGy, hw.endGx, hw.endGy, hw.mid1X, hw.mid1Y, hw.mid2X, hw.mid2Y);
+    }
+  }
+
+  // Restore roundabouts (creates ring nodes + edges from saved positions)
+  if (data.roundabouts) {
+    for (const ra of data.roundabouts) {
+      createRoundabout(ra.gx, ra.gy);
     }
   }
 
