@@ -82,7 +82,7 @@ export function addEdge(gx1: number, gy1: number, gx2: number, gy2: number, narr
   return true;
 }
 
-export function addEdgeRaw(fromKey: string, toKey: string, fx: number, fy: number, tx: number, ty: number): Edge | null {
+export function addEdgeRaw(fromKey: string, toKey: string, fx: number, fy: number, tx: number, ty: number, oneway?: string): Edge | null {
   // Canonical ID: sort by string comparison
   const id = fromKey < toKey ? `${fromKey}-${toKey}` : `${toKey}-${fromKey}`;
   if (edges.has(id)) return edges.get(id)!;
@@ -98,6 +98,7 @@ export function addEdgeRaw(fromKey: string, toKey: string, fx: number, fy: numbe
     id, fromKey: canonFrom, toKey: canonTo,
     length: Math.hypot(ctx_ - cfx, cty - cfy),
     fx: cfx, fy: cfy, tx: ctx_, ty: cty,
+    oneway: oneway || undefined,
   };
   edges.set(id, edge);
 
@@ -149,6 +150,8 @@ export function getNeighbors(key: string): string[] {
   const neighbors: string[] = [];
   for (const eid of node.edges) {
     const edge = edges.get(eid)!;
+    // One-way edge: can only traverse if entering from the allowed direction
+    if (edge.oneway && edge.oneway !== key) continue;
     neighbors.push(edge.fromKey === key ? edge.toKey : edge.fromKey);
   }
   return neighbors;

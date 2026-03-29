@@ -32,6 +32,7 @@ export interface Edge {
   fx: number; fy: number; // from pixel center
   tx: number; ty: number; // to pixel center
   narrow?: boolean; // narrow single-lane road
+  oneway?: string; // if set, node key that traffic must come FROM (one-way edge)
 }
 
 export interface Car {
@@ -81,6 +82,6 @@ export interface RoadPreview {
   endGy: number;
 }
 
-export type ToolType = 'addRoad' | 'addNarrow' | 'removeRoad' | 'addBuilding' | 'removeBuilding' | 'addHighway' | 'addStorage' | 'demolish';
+export type ToolType = 'addRoad' | 'addNarrow' | 'removeRoad' | 'addBuilding' | 'removeBuilding' | 'addHighway' | 'addRoundabout' | 'addStorage' | 'demolish';
 
 export const BUILDING_COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6'];

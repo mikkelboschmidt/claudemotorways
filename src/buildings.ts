@@ -5,6 +5,7 @@ import { resetSpawnTimer, evictCarsFromFactory, removeCarsForBuilding } from './
 import { addScore } from './score.ts';
 import { recordBuilding, recordBurnout, recordDemolish } from './run.ts';
 import { getFactorySprite, getStorageSprite } from './sprites.ts';
+import { isInsideRoundaboutTile } from './roundabout.ts';
 
 export const HOUSE_W = 1;
 export const HOUSE_H = 1;
@@ -163,9 +164,10 @@ export function addBuilding(gx: number, gy: number, type: 'house' | 'factory' | 
     if (overlapX && overlapY) return null;
   }
 
-  // Reject placement if any tile in the footprint has a road node with edges
+  // Reject placement if any tile in the footprint has a road node with edges or is inside a roundabout
   for (let tx = gx; tx < gx + newW; tx++) {
     for (let ty = gy; ty < gy + newH; ty++) {
+      if (isInsideRoundaboutTile(tx, ty)) return null;
       const node = nodes.get(nodeKey(tx, ty));
       if (node && node.edges.size > 0) return null;
     }

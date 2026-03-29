@@ -68,6 +68,17 @@ A logistics puzzle game where players build road networks connecting residential
 - **Visual**: Elevated look with shadow, gray surface (#666), yellow dashed center line.
 - **Pathfinding bonus**: Highways are weighted at 0.65× cost, making them strongly preferred routes.
 
+### Roundabout (3×3 tiles)
+
+- **Size**: Occupies a 3×3 tile area on the grid.
+- **Placement**: Single click places the roundabout centered on the clicked tile. All 9 tiles must be clear of buildings, other roundabouts, and road nodes (except at the 4 ring node positions).
+- **Ring nodes**: 4 main nodes at the midpoints of each side — top (gx+1, gy), right (gx+2, gy+1), bottom (gx+1, gy+2), left (gx, gy+1) — plus 8 synthetic intermediate nodes placed along a circular arc (radius = GRID). The 12 points are evenly spaced at 30° intervals, creating smooth curved paths.
+- **Connections**: External roads connect to the 4 main ring nodes from outside. Roads cannot be placed through the roundabout's interior tiles.
+- **Traffic flow**: One-way counter-clockwise. All 12 ring edges have a `oneway` constraint so cars can only travel R→T→L→B→R. The short arc segments (~20.7px) combined with the existing corner smoothing system produce smooth bezier curves automatically.
+- **Visual**: Circular road surface (30px wide annulus at 40px radius) with a green island in the center and a white dashed center line circle.
+- **Demolish**: Click on the roundabout with the demolish tool to remove it as a whole unit. Drag-removal of road tiles does not break roundabout ring edges.
+- **Persistence**: Saved as `{ gx, gy }` positions. Ring edges are recreated on load.
+
 ### Road–Building Connections
 
 - **Houses**: The connection tile is the house tile itself. Dragging a road onto a house automatically connects it. The drag direction determines which side becomes the entrance (drag right → right entrance, etc.). Only pure horizontal/vertical drags are matched.
@@ -186,6 +197,7 @@ The game auto-saves to `localStorage` every 5 seconds and after every build acti
 - All buildings (type, position, color, pins, disabled state, connection side)
 - All road edges (coordinates, narrow flag)
 - All highways (start, end, two control points)
+- All roundabouts (grid position)
 - Score and next building ID
 
 Cars and trucks are not saved — they respawn naturally after load.
@@ -241,11 +253,12 @@ Floating circular buttons (44px diameter) arranged in a vertical column on the l
 | Road SVG | `addRoad` | Drag to place two-lane roads |
 | Narrow SVG | `addNarrow` | Drag to place single-lane roads |
 | Highway SVG | `addHighway` | Two-click placement + two draggable control handles |
-| Demolish SVG | `demolish` | Tap a building to remove it, or drag across road tiles to delete edges/highways |
+| Roundabout SVG | `addRoundabout` | Click to place a 3×3 roundabout centered on the clicked tile |
 | **Color SVG** | — | Shows the selected building color via `CurrentColor` layer. Tap to cycle to the next color |
 | House SVG | `addBuilding` (house) | Place a house |
 | Factory SVG | `addBuilding` (factory) | Place a factory |
 | Storage SVG | `addBuilding` (storage) | Place a storage depot |
+| Demolish SVG | `demolish` | Tap a building/roundabout to remove it, or drag across road tiles to delete edges/highways |
 
 - All toolbar icons are loaded from `assets/Icon-*.svg` files and rendered onto the canvas. SVGs with a layer `id="CurrentColor"` have their fill dynamically replaced with the selected building color.
 - The active tool has a black background with a white ring outline; inactive tools use a semi-transparent dark background (`rgba(44, 62, 80, 0.85)`).
