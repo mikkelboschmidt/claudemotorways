@@ -8,6 +8,7 @@ import { removeCarsForEdge, removeCarsForBuilding } from './cars.ts';
 import { saveGame } from './save.ts';
 import { playSfx } from './sfx.ts';
 import { highwayPhase, highwayStartGx, highwayStartGy, draggingHighwayId, draggingHandleIndex, setHighwayPhase, setHighwayStart, setHighwayPreviewEnd, setDraggingHighwayId, setDraggingHandleIndex, createHighway, findHighwayAtPixel, findHighwayHandleAtPixel, removeHighway, updateHighwayMid, rebuildHighway, highways } from './highway.ts';
+import { recordRoad, recordHighway } from './run.ts';
 
 let dragging = false;
 let dragStartGx = 0;
@@ -210,6 +211,7 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
           const dist = Math.hypot(gx - highwayStartGx, gy - highwayStartGy);
           if (dist >= 3) {
             createHighway(highwayStartGx, highwayStartGy, gx, gy);
+            recordHighway();
             playSfx('road');
             saveGame();
           }
@@ -392,6 +394,7 @@ function createRoadSegments(gx1: number, gy1: number, gx2: number, gy2: number, 
 
   if (added) {
     bumpGraphVersion();
+    recordRoad(narrow);
   }
 
   // isDragEndpoint=true: the user dragged directly to/from this building

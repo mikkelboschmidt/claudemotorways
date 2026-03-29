@@ -1,6 +1,6 @@
 import { updatePins } from './buildings.ts';
 import { initRoadInput, roadPreview, cancelRoadDrag, setTouchCountGetter } from './roads.ts';
-import { spawnCars, updateCars } from './cars.ts';
+import { spawnCars, updateCars, cars } from './cars.ts';
 import { render, getToolbarLayout } from './renderer.ts';
 import { setActiveTool, setSelectedColor, selectedColor, setSelectedBuildingType, toggleGearMenu, closeGearMenu, gearMenuOpen, demoModalOpen, showDemoModal, closeDemoModal, cityModalOpen, showCityModal, closeCityModal } from './toolbar.ts';
 import { BUILDING_COLORS } from './types.ts';
@@ -10,7 +10,8 @@ import { gameSpeed, setGameSpeed } from './speed.ts';
 import { pan, zoomAt } from './camera.ts';
 import { toggleMusic, ensureMusicStarted } from './music.ts';
 import { fetchCities, loadCity } from './cities.ts';
-import { track } from './analytics.ts';
+import { startRun, endRun, updatePeaks } from './run.ts';
+import { score } from './score.ts';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
@@ -25,12 +26,17 @@ window.addEventListener('resize', resize);
 
 // Load saved game or show start modal
 const hadSave = loadGame();
-if (!hadSave) {
+if (hadSave) {
+  startRun('save-restored');
+} else {
   showDemoModal();
 }
 initRoadInput(canvas);
 setTouchCountGetter(() => activeTouchCount);
 fetchCities();
+
+// End run when browser tab closes
+window.addEventListener('beforeunload', () => endRun('browser-close'));
 
 // Auto-save every 5 seconds (counted in sim ticks)
 let saveTimer = 0;
@@ -65,12 +71,12 @@ canvas.addEventListener('pointerdown', (e) => {
     if (hitRect(px, py, layout.demoOpenButton)) {
       closeDemoModal();
       loadCity('simple-city');
-      track('demo-modal', { choice: 'demo-city' });
+      startRun('demo-city', 'simple-city');
     } else if (hitRect(px, py, layout.demoDismissButton)) {
       closeDemoModal();
       loadFromData({ buildings: [], edges: [], score: 0, nextBuildingId: 0 });
       saveGame();
-      track('demo-modal', { choice: 'start-from-scratch' });
+      startRun('fresh');
     } else if (hitRect(px, py, layout.demoCloseButton)) {
       closeDemoModal();
     }
@@ -87,7 +93,7 @@ canvas.addEventListener('pointerdown', (e) => {
         if (hitRect(px, py, btn)) {
           closeCityModal();
           loadCity(btn.file);
-          track('city-selected', { city: btn.file });
+          startRun('city-loaded', btn.file);
           break;
         }
       }
@@ -107,6 +113,7 @@ canvas.addEventListener('pointerdown', (e) => {
   if (gearMenuOpen) {
     if (hitRect(px, py, layout.resetButton)) {
       closeGearMenu();
+      endRun('reset');
       showDemoModal();
       e.stopImmediatePropagation();
       return;
@@ -256,6 +263,7 @@ function simulationTick() {
   if (saveTimer >= 300) {
     saveTimer = 0;
     saveGame();
+    updatePeaks(score, cars.length);
   }
 }
 
