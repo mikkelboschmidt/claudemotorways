@@ -1,6 +1,3 @@
-import { inject } from '@vercel/analytics';
-inject();
-
 import { updatePins } from './buildings.ts';
 import { initRoadInput, roadPreview, cancelRoadDrag, setTouchCountGetter } from './roads.ts';
 import { spawnCars, updateCars } from './cars.ts';
@@ -13,6 +10,7 @@ import { gameSpeed, setGameSpeed } from './speed.ts';
 import { pan, zoomAt } from './camera.ts';
 import { toggleMusic, ensureMusicStarted } from './music.ts';
 import { fetchCities, loadCity } from './cities.ts';
+import { track } from './analytics.ts';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
@@ -67,10 +65,12 @@ canvas.addEventListener('pointerdown', (e) => {
     if (hitRect(px, py, layout.demoOpenButton)) {
       closeDemoModal();
       loadCity('simple-city');
+      track('demo-modal', { choice: 'demo-city' });
     } else if (hitRect(px, py, layout.demoDismissButton)) {
       closeDemoModal();
       loadFromData({ buildings: [], edges: [], score: 0, nextBuildingId: 0 });
       saveGame();
+      track('demo-modal', { choice: 'start-from-scratch' });
     } else if (hitRect(px, py, layout.demoCloseButton)) {
       closeDemoModal();
     }
@@ -87,6 +87,7 @@ canvas.addEventListener('pointerdown', (e) => {
         if (hitRect(px, py, btn)) {
           closeCityModal();
           loadCity(btn.file);
+          track('city-selected', { city: btn.file });
           break;
         }
       }
