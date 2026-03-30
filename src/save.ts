@@ -4,7 +4,7 @@ import { score, setScore } from './score.ts';
 import { Building } from './types.ts';
 import { highways, highwayEdgeSet, createHighway, resetHighways } from './highway.ts';
 import { cars } from './cars.ts';
-import { roundabouts, roundaboutEdgeSet, createRoundabout, resetRoundabouts } from './roundabout.ts';
+import { roundabouts, roundaboutEdgeSet, roundaboutConnectionEdgeSet, createRoundabout, resetRoundabouts, addRoundaboutConnectionEdge, getRoundaboutConnections } from './roundabout.ts';
 
 const SAVE_KEY = 'claudemotorways_save';
 
@@ -14,6 +14,7 @@ export interface SaveData {
   edges: [number, number, number, number, boolean?][]; // [gx1, gy1, gx2, gy2, narrow?]
   highways?: { startGx: number; startGy: number; endGx: number; endGy: number; midX?: number; midY?: number; mid1X?: number; mid1Y?: number; mid2X?: number; mid2Y?: number }[];
   roundabouts?: { gx: number; gy: number }[];
+  roundaboutConnections?: { raGx: number; raGy: number; outerGx: number; outerGy: number; ringIndex: number }[];
   score: number;
   nextBuildingId: number;
 }
@@ -23,6 +24,7 @@ export function serializeState(): SaveData {
   for (const [, edge] of edges) {
     if (highwayEdgeSet.has(edge.id)) continue; // highway edges are recreated from highway data
     if (roundaboutEdgeSet.has(edge.id)) continue; // roundabout edges are recreated from roundabout data
+    if (roundaboutConnectionEdgeSet.has(edge.id)) continue; // connection edges saved separately
     const [gx1, gy1] = parseKey(edge.fromKey);
     const [gx2, gy2] = parseKey(edge.toKey);
     if (edge.narrow) {
@@ -40,12 +42,14 @@ export function serializeState(): SaveData {
   }));
 
   const raList = roundabouts.map(ra => ({ gx: ra.gx, gy: ra.gy }));
+  const raConns = getRoundaboutConnections();
 
   return {
     buildings: buildings.map(b => ({ ...b })),
     edges: edgeList,
     highways: hwList,
     roundabouts: raList,
+    roundaboutConnections: raConns.length > 0 ? raConns : undefined,
     score,
     nextBuildingId: Math.max(...buildings.map(b => b.id), 0) + 1,
   };
@@ -86,6 +90,16 @@ export function loadFromData(data: SaveData): boolean {
   if (data.roundabouts) {
     for (const ra of data.roundabouts) {
       createRoundabout(ra.gx, ra.gy);
+    }
+  }
+
+  // Restore roundabout connection edges
+  if (data.roundaboutConnections) {
+    for (const conn of data.roundaboutConnections) {
+      const ra = roundabouts.find(r => r.gx === conn.raGx && r.gy === conn.raGy);
+      if (ra) {
+        addRoundaboutConnectionEdge(ra, conn.outerGx, conn.outerGy, conn.ringIndex);
+      }
     }
   }
 
