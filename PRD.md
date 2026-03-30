@@ -71,13 +71,13 @@ A logistics puzzle game where players build road networks connecting residential
 ### Roundabout (3×3 tiles)
 
 - **Size**: Occupies a 3×3 tile area on the grid.
-- **Placement**: Single click places the roundabout centered on the clicked tile. All 9 tiles must be clear of buildings, other roundabouts, and road nodes (except at the 4 ring node positions).
-- **Ring nodes**: 4 main nodes at the midpoints of each side — top (gx+1, gy), right (gx+2, gy+1), bottom (gx+1, gy+2), left (gx, gy+1) — plus 8 synthetic intermediate nodes placed along a circular arc (radius = GRID). The 12 points are evenly spaced at 30° intervals, creating smooth curved paths.
-- **Connections**: External roads connect to the 4 main ring nodes from outside. Roads cannot be placed through the roundabout's interior tiles.
-- **Traffic flow**: One-way counter-clockwise. All 12 ring edges have a `oneway` constraint so cars can only travel R→T→L→B→R. The short arc segments (~20.7px) combined with the existing corner smoothing system produce smooth bezier curves automatically.
+- **Placement**: Single click places the roundabout centered on the clicked tile. All 9 tiles must be clear of buildings, other roundabouts, and road nodes (except at the 4 cardinal ring node positions).
+- **Ring nodes**: 8 nodes spaced at 45° intervals around a circular arc (radius = GRID). 4 cardinal nodes at integer grid positions — E (gx+2, gy+1), S (gx+1, gy+2), W (gx, gy+1), N (gx+1, gy) — and 4 diagonal nodes at synthetic positions (SE, SW, NW, NE).
+- **8-way connections**: External roads can connect to any of the 8 ring nodes. When dragging a road to or from a roundabout tile, the system auto-detects the best of 8 connection points (every 45°) based on approach angle. A connecting edge bridges from the nearest road tile outside the roundabout to the chosen ring node. Roads that stop just outside a roundabout (because interior segments are blocked) also auto-connect if the next tile along the drag direction is inside the roundabout's 3×3 area. Roads cannot be placed through the roundabout's interior tiles.
+- **Traffic flow**: One-way counter-clockwise. All 8 ring edges have a `oneway` constraint. Each arc segment is ~48.3px.
 - **Visual**: Circular road surface (30px wide annulus at 40px radius) with a green island in the center and a white dashed center line circle.
 - **Demolish**: Click on the roundabout with the demolish tool to remove it as a whole unit. Drag-removal of road tiles does not break roundabout ring edges.
-- **Persistence**: Saved as `{ gx, gy }` positions. Ring edges are recreated on load.
+- **Persistence**: Saved as `{ gx, gy }` positions plus connection edges `{ outerGx, outerGy, ringIndex }`. Ring edges are recreated on load; connection edges are restored separately.
 
 ### Road–Building Connections
 
@@ -197,7 +197,7 @@ The game auto-saves to `localStorage` every 5 seconds and after every build acti
 - All buildings (type, position, color, pins, disabled state, connection side)
 - All road edges (coordinates, narrow flag)
 - All highways (start, end, two control points)
-- All roundabouts (grid position)
+- All roundabouts (grid position) and their connection edges (outer tile, ring index)
 - Score and next building ID
 
 Cars and trucks are not saved — they respawn naturally after load.
