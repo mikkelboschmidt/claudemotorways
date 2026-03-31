@@ -292,14 +292,27 @@ The game is fully playable on touch devices. The canvas uses pointer events for 
 
 ## Analytics (Run-Based)
 
-All analytics are sent to PostHog (anonymous, no user identification). Tracking is organised around **runs** — a run begins when the player starts or loads a game and ends when they reset, load a different city, or close the browser.
+All analytics are sent to PostHog (anonymous, no user identification). Tracking is organised around **runs** — a run begins when the player starts or loads a game and ends when they reset, load a different city, close the browser, or background the tab.
+
+### Run Lifecycle
+
+A run ends (`run-ended`) on any of the following triggers:
+
+| Reason | Source |
+|---|---|
+| `reset` | Player clicks Reset in the gear menu |
+| `new-run` | `startRun()` called while a run is already active (e.g. loading a city) |
+| `browser-close` | `beforeunload` event |
+| `tab-hidden` | `visibilitychange` → `hidden` (reliable on mobile) |
+
+When a hidden tab becomes visible again, a new run starts with `startType: save-restored`.
 
 ### Events
 
 | Event | Trigger | Key Properties |
 |---|---|---|
 | `run-started` | New/loaded game begins | `runId`, `startType` (`fresh`, `demo-city`, `save-restored`, `city-loaded`), `cityName` |
-| `run-milestone` | First-time threshold crossed in a run | `runId`, `milestone` (e.g. `first-factory`, `10-roads`, `first-highway`, `score-100`) |
+| `run-milestone` | First-time threshold crossed in a run | `runId`, `milestone` |
 | `run-ended` | Run concludes | `runId`, `reason`, `durationSeconds`, `startType`, full summary (see below) |
 
 ### Run Summary (`run-ended` properties)
@@ -308,13 +321,54 @@ All analytics are sent to PostHog (anonymous, no user identification). Tracking 
 
 ### Milestones
 
-`first-house`, `first-factory`, `first-storage`, `first-highway`, `first-burnout`, `5-buildings`, `10-buildings`, `20-buildings`, `10-roads`, `25-roads`, `50-roads`, `score-100`, `score-500`.
+Milestones use consistent `first-building-*` and `first-road-*` prefixes for easy PostHog filtering.
+
+`first-building-house`, `first-building-factory`, `first-building-storage`, `first-road-normal`, `first-road-narrow`, `first-road-highway`, `first-road-roundabout`, `first-burnout`, `5-buildings`, `10-buildings`, `20-buildings`, `10-roads`, `25-roads`, `50-roads`, `score-100`, `score-500`.
 
 ### Design Principles
 
 - **Track decisions, not noise** — building/road placements are counted per run, not fired as individual events.
 - **Summarise each run** — the `run-ended` event is the primary data source for comparing player strategies.
 - **Milestones mark progression** — sparse events that show how a run evolves over time.
+- **Mobile-reliable end detection** — `visibilitychange` is preferred over `beforeunload` for capturing run-end on iOS/Android.
+
+### PostHog Dashboard Widgets
+
+#### Engagement & Retention
+| Widget | Type | Query |
+|---|---|---|
+| Daily/weekly active players | Trend | Unique users firing `run-started` |
+| Runs per day | Trend | Total `run-started` count |
+| Session start type breakdown | Pie | `run-started` by `startType` |
+| Return rate | Retention | Users who fired `run-started` → fired `run-started` again |
+
+#### Run Quality (from `run-ended`)
+| Widget | Type | Query |
+|---|---|---|
+| Median run duration | Trend | `durationSeconds` (median) over time |
+| Run duration distribution | Histogram | `durationSeconds` bucketed |
+| Average final score | Trend | `finalScore` (mean) over time |
+| Score distribution | Histogram | `finalScore` bucketed |
+| Peak cars per run | Trend | `peakCars` (mean/p90) |
+| Buildings per run | Stacked bar | `housesPlaced`, `factoriesPlaced`, `storagesPlaced` averages |
+| Narrow road ratio | Trend | `narrowRoadRatio` average |
+| Highway adoption | Trend | % of runs with `highways > 0` |
+| Burnout rate | Trend | `factoryBurnouts` (mean per run) |
+| Run end reasons | Pie | `run-ended` by `reason` |
+
+#### Player Progression (from `run-milestone`)
+| Widget | Type | Query |
+|---|---|---|
+| Milestone funnel | Funnel | `first-building-house` → `first-building-factory` → `first-building-storage` → `first-road-highway` → `score-100` → `score-500` |
+| Milestone reach rates | Bar | % of runs hitting each milestone |
+| Road type discovery | Bar | % of runs hitting each `first-road-*` milestone |
+
+#### Start Type Comparison
+| Widget | Type | Query |
+|---|---|---|
+| Score by start type | Bar | `finalScore` average by `startType` |
+| Duration by start type | Bar | `durationSeconds` by `startType` |
+| Demo → Fresh conversion | Funnel | `run-started` with `demo-city` → later `run-started` with `fresh` |
 
 ---
 

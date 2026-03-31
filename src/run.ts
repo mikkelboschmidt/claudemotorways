@@ -95,9 +95,9 @@ export function recordBuilding(type: 'house' | 'factory' | 'storage') {
   else if (type === 'storage') run.storagesPlaced++;
 
   const total = run.housesPlaced + run.factoriesPlaced + run.storagesPlaced;
-  if (type === 'house' && run.housesPlaced === 1) checkMilestone('first-house');
-  if (type === 'factory' && run.factoriesPlaced === 1) checkMilestone('first-factory');
-  if (type === 'storage' && run.storagesPlaced === 1) checkMilestone('first-storage');
+  if (type === 'house' && run.housesPlaced === 1) checkMilestone('first-building-house');
+  if (type === 'factory' && run.factoriesPlaced === 1) checkMilestone('first-building-factory');
+  if (type === 'storage' && run.storagesPlaced === 1) checkMilestone('first-building-storage');
   if (total === 5) checkMilestone('5-buildings');
   if (total === 10) checkMilestone('10-buildings');
   if (total === 20) checkMilestone('20-buildings');
@@ -105,8 +105,13 @@ export function recordBuilding(type: 'house' | 'factory' | 'storage') {
 
 export function recordRoad(narrow: boolean) {
   if (!run) return;
-  if (narrow) run.narrowRoadsPlaced++;
-  else run.roadsPlaced++;
+  if (narrow) {
+    run.narrowRoadsPlaced++;
+    if (run.narrowRoadsPlaced === 1) checkMilestone('first-road-narrow');
+  } else {
+    run.roadsPlaced++;
+    if (run.roadsPlaced === 1) checkMilestone('first-road-normal');
+  }
 
   const total = run.roadsPlaced + run.narrowRoadsPlaced;
   if (total === 10) checkMilestone('10-roads');
@@ -117,7 +122,12 @@ export function recordRoad(narrow: boolean) {
 export function recordHighway() {
   if (!run) return;
   run.highwaysPlaced++;
-  if (run.highwaysPlaced === 1) checkMilestone('first-highway');
+  if (run.highwaysPlaced === 1) checkMilestone('first-road-highway');
+}
+
+export function recordRoundabout() {
+  if (!run) return;
+  checkMilestone('first-road-roundabout');
 }
 
 export function recordDemolish() {

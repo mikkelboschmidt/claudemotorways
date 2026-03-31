@@ -9,7 +9,7 @@ import { saveGame } from './save.ts';
 import { playSfx } from './sfx.ts';
 import { highwayPhase, highwayStartGx, highwayStartGy, draggingHighwayId, draggingHandleIndex, setHighwayPhase, setHighwayStart, setHighwayPreviewEnd, setDraggingHighwayId, setDraggingHandleIndex, createHighway, findHighwayAtPixel, findHighwayHandleAtPixel, removeHighway, updateHighwayMid, rebuildHighway, highways } from './highway.ts';
 import { createRoundabout, removeRoundabout, findRoundaboutAtPixel, segmentCutsRoundabout, roundaboutEdgeSet, roundaboutConnectionEdgeSet, findRoundaboutAtTile, findBestRoundaboutEntry, addRoundaboutConnectionEdge, Roundabout } from './roundabout.ts';
-import { recordRoad, recordHighway } from './run.ts';
+import { recordRoad, recordHighway, recordRoundabout } from './run.ts';
 
 let dragging = false;
 let dragStartGx = 0;
@@ -208,6 +208,7 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
       const gridY = Math.floor(py / GRID) - 1;
       pendingTap = () => {
         if (createRoundabout(gridX, gridY)) {
+          recordRoundabout();
           playSfx('build');
           saveGame();
         }
