@@ -22,11 +22,67 @@
       color: white; font-family: sans-serif; font-size: 14px;
       pointer-events: none; text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
     }
+    #password-gate {
+      position: fixed; inset: 0; background: #2c3e50;
+      display: flex; align-items: center; justify-content: center;
+      z-index: 9999; font-family: sans-serif;
+    }
+    #password-gate form {
+      display: flex; flex-direction: column; align-items: center; gap: 16px;
+    }
+    #password-gate h1 {
+      color: #fff; font-size: 24px; font-weight: 600; letter-spacing: 0.05em;
+    }
+    #password-gate input {
+      padding: 10px 16px; font-size: 16px; border: none; border-radius: 6px;
+      background: rgba(255,255,255,0.15); color: #fff; outline: none;
+      text-align: center; width: 220px; letter-spacing: 0.1em;
+    }
+    #password-gate input::placeholder { color: rgba(255,255,255,0.4); }
+    #password-gate button {
+      padding: 10px 28px; font-size: 15px; border: none; border-radius: 6px;
+      background: #e67e22; color: #fff; cursor: pointer; font-weight: 600;
+    }
+    #password-gate button:hover { background: #cf6d17; }
+    #password-gate .error {
+      color: #e74c3c; font-size: 13px; min-height: 18px;
+    }
   </style>
 </head>
 <body>
+  <div id="password-gate">
+    <form id="password-form">
+      <h1>LoomWays</h1>
+      <input id="password-input" type="password" placeholder="Enter code" autocomplete="off" />
+      <button type="submit">Enter</button>
+      <span class="error" id="password-error"></span>
+    </form>
+  </div>
   <div id="ui"></div>
   <canvas id="game"></canvas>
+  <script>
+    (function () {
+      var gate = document.getElementById('password-gate');
+      var form = document.getElementById('password-form');
+      var input = document.getElementById('password-input');
+      var error = document.getElementById('password-error');
+      if (sessionStorage.getItem('lw_unlocked') === '1') {
+        gate.style.display = 'none';
+        return;
+      }
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        if (input.value.trim().toLowerCase() === 'rabbit') {
+          sessionStorage.setItem('lw_unlocked', '1');
+          gate.style.display = 'none';
+        } else {
+          error.textContent = 'Incorrect code';
+          input.value = '';
+          input.focus();
+        }
+      });
+    })();
+  </script>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>
