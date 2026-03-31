@@ -8,7 +8,7 @@ import { removeCarsForEdge, removeCarsForBuilding } from './cars.ts';
 import { saveGame } from './save.ts';
 import { playSfx } from './sfx.ts';
 import { highwayPhase, highwayStartGx, highwayStartGy, draggingHighwayId, draggingHandleIndex, setHighwayPhase, setHighwayStart, setHighwayPreviewEnd, setDraggingHighwayId, setDraggingHandleIndex, createHighway, findHighwayAtPixel, findHighwayHandleAtPixel, removeHighway, updateHighwayMid, rebuildHighway, highways } from './highway.ts';
-import { createRoundabout, removeRoundabout, findRoundaboutAtPixel, segmentCutsRoundabout, roundaboutEdgeSet } from './roundabout.ts';
+import { createRoundabout, removeRoundabout, findRoundaboutAtPixel, segmentCutsRoundabout, roundaboutEdgeSet, roundaboutConnectionEdgeSet, findRoundaboutAtTile, findBestRoundaboutEntry, addRoundaboutConnectionEdge, Roundabout } from './roundabout.ts';
 import { recordRoad, recordHighway, recordRoundabout } from './run.ts';
 
 let dragging = false;
@@ -344,6 +344,7 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
           const edgeIds = getNodeEdges(tileKey);
           for (const eid of edgeIds) {
             if (roundaboutEdgeSet.has(eid)) continue; // don't break roundabouts with drag removal
+            roundaboutConnectionEdgeSet.delete(eid); // clean up if it was a connection edge
             removeCarsForEdge(eid);
             removeEdge(eid);
           }
@@ -393,6 +394,10 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
   });
 }
 
+function connectRoadToRoundabout(ra: Roundabout, outerGx: number, outerGy: number, ringIndex: number) {
+  addRoundaboutConnectionEdge(ra, outerGx, outerGy, ringIndex);
+}
+
 function createRoadSegments(gx1: number, gy1: number, gx2: number, gy2: number, narrow: boolean = false) {
   const dx = gx2 - gx1;
   const dy = gy2 - gy1;
@@ -402,13 +407,23 @@ function createRoadSegments(gx1: number, gy1: number, gx2: number, gy2: number, 
   const stepX = Math.sign(dx);
   const stepY = Math.sign(dy);
 
+  // Check if start or end is on a roundabout — auto-snap to best entry
+  let startRa = findRoundaboutAtTile(gx1, gy1);
+  let endRa = findRoundaboutAtTile(gx2, gy2);
+  let startEntry = startRa ? findBestRoundaboutEntry(startRa, gx2, gy2) : null;
+  let endEntry = endRa ? findBestRoundaboutEntry(endRa, gx1, gy1) : null;
+
   // Direction for building edge detection
   const dirGx = stepX;
   const dirGy = stepY;
-  const startHit = getBuildingEdgeAt(gx1, gy1, dirGx, dirGy);
-  const endHit = getBuildingEdgeAt(gx2, gy2, -dirGx, -dirGy);
+  const startHit = !startRa ? getBuildingEdgeAt(gx1, gy1, dirGx, dirGy) : null;
+  const endHit = !endRa ? getBuildingEdgeAt(gx2, gy2, -dirGx, -dirGy) : null;
 
   let added = false;
+
+  // Track the first and last successfully placed tile for roundabout connections
+  let firstPlacedGx = -1, firstPlacedGy = -1;
+  let lastPlacedGx = -1, lastPlacedGy = -1;
 
   for (let i = 0; i < steps; i++) {
     const x1 = gx1 + stepX * i;
@@ -421,6 +436,41 @@ function createRoadSegments(gx1: number, gy1: number, gx2: number, gy2: number, 
     if (segmentCutsRoundabout(x1, y1, x2, y2)) continue;
 
     if (addEdge(x1, y1, x2, y2, narrow || undefined)) added = true;
+
+    // Track endpoints of placed segments
+    if (firstPlacedGx === -1) {
+      firstPlacedGx = x1;
+      firstPlacedGy = y1;
+    }
+    lastPlacedGx = x2;
+    lastPlacedGy = y2;
+  }
+
+  // If endpoints weren't on a roundabout, check if the road's next segment
+  // would enter one (i.e., road stopped just outside a roundabout because
+  // segments were blocked by segmentCutsRoundabout)
+  if (!startRa && firstPlacedGx !== -1) {
+    const prevGx = firstPlacedGx - stepX;
+    const prevGy = firstPlacedGy - stepY;
+    startRa = findRoundaboutAtTile(prevGx, prevGy);
+    if (startRa) startEntry = findBestRoundaboutEntry(startRa, gx2, gy2);
+  }
+  if (!endRa && lastPlacedGx !== -1) {
+    const nextGx = lastPlacedGx + stepX;
+    const nextGy = lastPlacedGy + stepY;
+    endRa = findRoundaboutAtTile(nextGx, nextGy);
+    if (endRa) endEntry = findBestRoundaboutEntry(endRa, gx1, gy1);
+  }
+
+  // Connect road endpoints to roundabout ring nodes
+  // Use the nearest placed tile as the connection point
+  if (startEntry && startRa && firstPlacedGx !== -1) {
+    connectRoadToRoundabout(startRa, firstPlacedGx, firstPlacedGy, startEntry.ringIndex);
+    added = true;
+  }
+  if (endEntry && endRa && lastPlacedGx !== -1) {
+    connectRoadToRoundabout(endRa, lastPlacedGx, lastPlacedGy, endEntry.ringIndex);
+    added = true;
   }
 
   if (added) {
