@@ -308,7 +308,7 @@ All analytics are sent to PostHog (anonymous, no user identification). Tracking 
 
 ### Milestones
 
-`first-house`, `first-factory`, `first-storage`, `first-highway`, `first-burnout`, `5-buildings`, `10-buildings`, `20-buildings`, `10-roads`, `25-roads`, `50-roads`, `score-100`, `score-500`.
+`first-building-house`, `first-building-factory`, `first-building-storage`, `first-road-normal`, `first-road-narrow`, `first-road-highway`, `first-road-roundabout`, `first-burnout`, `5-buildings`, `10-buildings`, `20-buildings`, `10-roads`, `25-roads`, `50-roads`, `score-100`, `score-500`.
 
 ### Design Principles
 

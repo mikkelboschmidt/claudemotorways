@@ -35,8 +35,15 @@ initRoadInput(canvas);
 setTouchCountGetter(() => activeTouchCount);
 fetchCities();
 
-// End run when browser tab closes
+// End run when browser closes or tab is hidden (visibilitychange is more reliable on mobile)
 window.addEventListener('beforeunload', () => endRun('browser-close'));
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    endRun('tab-hidden');
+  } else {
+    startRun('save-restored');
+  }
+});
 
 // Auto-save every 5 seconds (counted in sim ticks)
 let saveTimer = 0;
