@@ -21,6 +21,12 @@ const splashCache = new Map<string, HTMLImageElement>();
 const trackWideNodeKeys = new Set<string>();
 const trackConnectorCache: { x: number; y: number; wide: boolean }[] = [];
 let trackCacheGraphVersion = -1;
+let spaceSurfacePattern: CanvasPattern | null = null;
+let spaceSurfacePatternCtx: CanvasRenderingContext2D | null = null;
+let spaceSurfaceGradient: CanvasGradient | null = null;
+let spaceSurfaceGradientHeight = 0;
+let spaceSurfaceTexture: HTMLCanvasElement | null = null;
+const SPACE_PATTERN_SIZE = 256;
 
 function darkenHex(hex: string, factor: number): string {
   const r = Math.round(parseInt(hex.slice(1, 3), 16) * factor);
@@ -66,6 +72,143 @@ function getSplashImage(): HTMLImageElement {
   return img;
 }
 
+function fract(n: number): number {
+  return n - Math.floor(n);
+}
+
+function noise2(x: number, y: number, seed: number): number {
+  return fract(Math.sin(x * 127.1 + y * 311.7 + seed * 74.7) * 43758.5453123);
+}
+
+function smoothNoise2(x: number, y: number, seed: number): number {
+  const ix = Math.floor(x);
+  const iy = Math.floor(y);
+  const fx = x - ix;
+  const fy = y - iy;
+
+  const a = noise2(ix, iy, seed);
+  const b = noise2(ix + 1, iy, seed);
+  const c = noise2(ix, iy + 1, seed);
+  const d = noise2(ix + 1, iy + 1, seed);
+
+  const ux = fx * fx * (3 - 2 * fx);
+  const uy = fy * fy * (3 - 2 * fy);
+  const top = a + (b - a) * ux;
+  const bottom = c + (d - c) * ux;
+  return top + (bottom - top) * uy;
+}
+
+function mod(n: number, m: number): number {
+  return ((n % m) + m) % m;
+}
+
+function periodicSmoothNoise2(x: number, y: number, period: number, seed: number): number {
+  const ix = Math.floor(x);
+  const iy = Math.floor(y);
+  const fx = x - ix;
+  const fy = y - iy;
+
+  const x0 = mod(ix, period);
+  const y0 = mod(iy, period);
+  const x1 = mod(ix + 1, period);
+  const y1 = mod(iy + 1, period);
+
+  const a = noise2(x0, y0, seed);
+  const b = noise2(x1, y0, seed);
+  const c = noise2(x0, y1, seed);
+  const d = noise2(x1, y1, seed);
+
+  const ux = fx * fx * (3 - 2 * fx);
+  const uy = fy * fy * (3 - 2 * fy);
+  const top = a + (b - a) * ux;
+  const bottom = c + (d - c) * ux;
+  return top + (bottom - top) * uy;
+}
+
+function ensureSpaceSurfaceTexture(): HTMLCanvasElement {
+  if (spaceSurfaceTexture) return spaceSurfaceTexture;
+
+  const texture = document.createElement('canvas');
+  texture.width = SPACE_PATTERN_SIZE;
+  texture.height = SPACE_PATTERN_SIZE;
+  const textureCtx = texture.getContext('2d');
+  if (!textureCtx) return texture;
+
+  const image = textureCtx.createImageData(SPACE_PATTERN_SIZE, SPACE_PATTERN_SIZE);
+  const data = image.data;
+
+  for (let y = 0; y < SPACE_PATTERN_SIZE; y++) {
+    for (let x = 0; x < SPACE_PATTERN_SIZE; x++) {
+      const fine = periodicSmoothNoise2(x / 8, y / 8, SPACE_PATTERN_SIZE / 8, 1.37);
+      const medium = periodicSmoothNoise2(x / 20, y / 20, SPACE_PATTERN_SIZE / 20, 2.41);
+      const broad = periodicSmoothNoise2(x / 68, y / 68, SPACE_PATTERN_SIZE / 68, 3.19);
+      const fleck = noise2(x / 2, y / 2, 5.73);
+      const shadow = noise2(x / 3.5, y / 3.5, 8.11);
+
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      let a = 0;
+
+      if (fleck > 0.91) {
+        r = 224 + Math.floor(broad * 18);
+        g = 186 + Math.floor(medium * 16);
+        b = 142 + Math.floor(fine * 10);
+        a = Math.max(a, 26 + Math.floor((fleck - 0.91) * 150));
+      } else if (shadow > 0.92) {
+        r = 16 + Math.floor(broad * 12);
+        g = 6 + Math.floor(medium * 8);
+        b = 22 + Math.floor(fine * 10);
+        a = Math.max(a, 22 + Math.floor((shadow - 0.92) * 150));
+      }
+
+      const offset = (y * SPACE_PATTERN_SIZE + x) * 4;
+      data[offset] = r;
+      data[offset + 1] = g;
+      data[offset + 2] = b;
+      data[offset + 3] = a;
+    }
+  }
+
+  textureCtx.putImageData(image, 0, 0);
+  spaceSurfaceTexture = texture;
+  return texture;
+}
+
+function ensureSpaceSurfacePattern(ctx: CanvasRenderingContext2D): CanvasPattern | null {
+  if (spaceSurfacePattern && spaceSurfacePatternCtx === ctx) return spaceSurfacePattern;
+  const texture = ensureSpaceSurfaceTexture();
+  spaceSurfacePattern = ctx.createPattern(texture, 'repeat');
+  spaceSurfacePatternCtx = ctx;
+  return spaceSurfacePattern;
+}
+
+function ensureSpaceSurfaceGradient(ctx: CanvasRenderingContext2D, height: number): CanvasGradient {
+  if (!spaceSurfaceGradient || spaceSurfaceGradientHeight !== height) {
+    const gradient = ctx.createLinearGradient(0, 0, 0, height);
+    gradient.addColorStop(0, 'rgba(255,228,182,0.03)');
+    gradient.addColorStop(0.4, 'rgba(107,71,42,0.045)');
+    gradient.addColorStop(1, 'rgba(24,10,8,0.3)');
+    spaceSurfaceGradient = gradient;
+    spaceSurfaceGradientHeight = height;
+  }
+  return spaceSurfaceGradient;
+}
+
+function drawSpaceSurface(ctx: CanvasRenderingContext2D, width: number, height: number, worldLeft: number, worldTop: number, worldRight: number, worldBottom: number) {
+  const pattern = ensureSpaceSurfacePattern(ctx);
+  if (!pattern) return;
+
+  ctx.save();
+  if ('setTransform' in pattern) {
+    pattern.setTransform(new DOMMatrix());
+  }
+  ctx.globalAlpha = 0.95;
+  ctx.fillStyle = pattern;
+  ctx.fillRect(worldLeft, worldTop, worldRight - worldLeft, worldBottom - worldTop);
+  ctx.restore();
+}
+
 function drawSvgIcon(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, rawSvg: string, colorOverride?: string) {
   const img = getIconImage(rawSvg, colorOverride);
   if (!img.complete) return;
@@ -93,11 +236,16 @@ export function render(ctx: CanvasRenderingContext2D, width: number, height: num
   ctx.scale(zoom, zoom);
   ctx.translate(-camX, -camY);
 
-  // Faint grid — only draw visible lines
   const worldLeft = camX;
   const worldTop = camY;
   const worldRight = camX + width / zoom;
   const worldBottom = camY + height / zoom;
+
+  if (currentThemeId === 'space') {
+    drawSpaceSurface(ctx, width, height, worldLeft, worldTop, worldRight, worldBottom);
+  }
+
+  // Faint grid — only draw visible lines
 
   ctx.strokeStyle = theme.gridLine;
   ctx.lineWidth = 1 / zoom; // keep 1px on screen
@@ -133,6 +281,11 @@ export function render(ctx: CanvasRenderingContext2D, width: number, height: num
 
   // Restore from camera transform + clip
   ctx.restore();
+
+  if (currentThemeId === 'space') {
+    ctx.fillStyle = ensureSpaceSurfaceGradient(ctx, height);
+    ctx.fillRect(0, 0, width, height);
+  }
 
   // Score and toolbar drawn in screen space
   drawScore(ctx, width);

@@ -137,6 +137,7 @@ interface ThemeConfig {
 }
 
 const LEGACY_SPACE_COLORS = ['#e06040', '#4aa8d8', '#50d890', '#d4a030', '#b060d0'];
+const PREVIOUS_SPACE_COLORS = ['#FF009D', '#FFD428', '#2A7BFF', '#A1FF00', '#FFE7D3'];
 
 // ─── Classic (original green motorways) ───
 
@@ -249,8 +250,8 @@ export const classicTheme: GameTheme = {
 // ─── Lunar (dark space mining) ───
 
 export const lunarTheme: GameTheme = {
-  pageBg: '#1a0e08',
-  bg: '#59412F',
+  pageBg: '#361A59',
+  bg: '#361A59',
   gridLine: 'rgba(255,255,255,0.03)',
 
   road: '#59412F',
@@ -285,7 +286,7 @@ export const lunarTheme: GameTheme = {
   storageBgTintAmount: 0.6,
   storageStripeTintAmount: 0.3,
 
-  buildingColors: ['#FF009D', '#FFD428', '#2A7BFF', '#A1FF00', '#FFE7D3'],
+  buildingColors: ['#FF009D', '#FFF34E', '#4BAEFF', '#55FF2F', '#FFE7D3'],
 
   donutEmptyRing: 'rgba(255,255,255,0.2)',
   donutFill: '#fff',
@@ -364,7 +365,7 @@ const themeConfigs: Record<ThemeId, ThemeConfig> = {
 export const THEME_OPTIONS = [themeConfigs.earth, themeConfigs.space] as const;
 const THEME_COLOR_SETS: Record<ThemeId, string[][]> = {
   earth: [themeConfigs.earth.palette.buildingColors],
-  space: [themeConfigs.space.palette.buildingColors, LEGACY_SPACE_COLORS],
+  space: [themeConfigs.space.palette.buildingColors, PREVIOUS_SPACE_COLORS, LEGACY_SPACE_COLORS],
 };
 
 function readStoredThemeId(): ThemeId {
