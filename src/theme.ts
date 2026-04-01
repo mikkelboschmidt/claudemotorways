@@ -368,15 +368,31 @@ const THEME_COLOR_SETS: Record<ThemeId, string[][]> = {
   space: [themeConfigs.space.palette.buildingColors, PREVIOUS_SPACE_COLORS, LEGACY_SPACE_COLORS],
 };
 
+function getDefaultThemeIdForHostname(hostname: string): ThemeId {
+  const normalizedHostname = hostname.toLowerCase();
+  if (normalizedHostname === 'loomways.com' || normalizedHostname.endsWith('.loomways.com')) {
+    return 'earth';
+  }
+  if (normalizedHostname === 'mineloops.com' || normalizedHostname.endsWith('.mineloops.com')) {
+    return 'space';
+  }
+  return 'space';
+}
+
+function getDefaultThemeId(): ThemeId {
+  if (typeof window === 'undefined') return 'space';
+  return getDefaultThemeIdForHostname(window.location.hostname);
+}
+
 function readStoredThemeId(): ThemeId {
   try {
-    if (typeof localStorage === 'undefined') return 'space';
+    if (typeof localStorage === 'undefined') return getDefaultThemeId();
     const stored = localStorage.getItem(THEME_STORAGE_KEY);
     if (stored === 'earth' || stored === 'space') return stored;
   } catch {
     // localStorage may be unavailable in some embedded contexts
   }
-  return 'space';
+  return getDefaultThemeId();
 }
 
 function persistThemeId(themeId: ThemeId) {
