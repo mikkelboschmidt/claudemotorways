@@ -279,8 +279,8 @@ export function getBuildingCenter(b: Building): { x: number; y: number } {
   };
 }
 
-// Get the pixel position of a specific pin slot in a building
-export function getPinPixelPos(b: Building, pinIndex: number): { x: number; y: number } {
+// Get the pixel position of the donut center for a building (used for collecting animation source)
+export function getPinPixelPos(b: Building, _pinIndex: number): { x: number; y: number } {
   const pos = getBuildingPixelPos(b);
 
   // Try to get pin placement from sprite
@@ -292,46 +292,23 @@ export function getPinPixelPos(b: Building, pinIndex: number): { x: number; y: n
   const pp = sprite?.pinPlacement;
 
   if (pp) {
-    const rows = b.type === 'storage' ? 4 : 2;
-    const cols = Math.ceil(b.maxPins / rows);
-    const spacing = Math.min(pp.w / cols, pp.h / rows);
-    const gridW = cols * spacing;
-    const gridH = rows * spacing;
-    const startX = pos.x + pp.x + (pp.w - gridW) / 2;
-    const startY = pos.y + pp.y + (pp.h - gridH) / 2;
-    const col = pinIndex % cols;
-    const row = Math.floor(pinIndex / cols);
     return {
-      x: startX + col * spacing + spacing / 2,
-      y: startY + row * spacing + spacing / 2,
+      x: pos.x + pp.x + pp.w / 2,
+      y: pos.y + pp.y + pp.h / 2,
     };
   }
 
-  // Fallback: hardcoded layouts
-  const spacing = 10;
+  // Fallback: donut center positions
   if (b.type === 'storage') {
-    const cols = 4;
-    const areaW = cols * spacing;
-    const areaH = cols * spacing;
-    const startX = pos.x + (pos.w - areaW) / 2;
-    const startY = pos.y + (pos.h - areaH) / 2;
-    const col = pinIndex % cols;
-    const row = Math.floor(pinIndex / cols);
     return {
-      x: startX + col * spacing + spacing / 2,
-      y: startY + row * spacing + spacing / 2,
+      x: pos.x + pos.w / 2,
+      y: pos.y + pos.h / 2,
     };
   }
-  // Factory: 3-column top-right layout
-  const cols = 3;
-  const areaW = cols * spacing;
-  const startX = pos.x + pos.w - areaW - 8;
-  const startY = pos.y + 8;
-  const col = pinIndex % cols;
-  const row = Math.floor(pinIndex / cols);
+  // Factory
   return {
-    x: startX + col * spacing + spacing / 2,
-    y: startY + row * spacing + spacing / 2,
+    x: pos.x + pos.w - 22,
+    y: pos.y + 18,
   };
 }
 

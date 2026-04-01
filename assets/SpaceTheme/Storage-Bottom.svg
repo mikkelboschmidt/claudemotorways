@@ -1,0 +1,17 @@
+<svg width="160" height="160" viewBox="0 0 160 160" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Storage-Bottom">
+<g id="Ground">
+<rect id="Fill" x="40" y="40" width="80" height="80" fill="#555555"/>
+<path id="Polygon 1" d="M100.5 101.5L106.562 107.5L94.4378 107.5L100.5 101.5Z" fill="white" fill-opacity="0.39"/>
+<path id="Polygon 2" d="M100.5 116.5L94.4378 110.5L106.562 110.5L100.5 116.5Z" fill="white" fill-opacity="0.39"/>
+</g>
+<g id="Shadows">
+<path id="Shadow" d="M105 55V105H55L40 90V40H90L105 55Z" fill="black" fill-opacity="0.1"/>
+</g>
+<rect id="PinPlacement" x="44.5" y="44.5" width="41" height="41" stroke="black"/>
+<g id="Building">
+<rect id="RoofMain" x="40" y="40" width="50" height="50" fill="#FF0000"/>
+<path id="RoofShadow" d="M86 47H47V86H44V44H86V47Z" fill="#CC0000"/>
+</g>
+</g>
+</svg>

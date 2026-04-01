@@ -1,17 +1,6 @@
 import { GRID } from './constants.ts';
 import { ConnectionSide } from './types.ts';
-import houseRightRaw from '../assets/House-Right.svg?raw';
-import houseLeftRaw from '../assets/House-Left.svg?raw';
-import houseTopRaw from '../assets/House-Top.svg?raw';
-import houseBottomRaw from '../assets/House-Bottom.svg?raw';
-import factoryLeftRaw from '../assets/Factory-Left.svg?raw';
-import factoryRightRaw from '../assets/Factory-Right.svg?raw';
-import factoryTopRaw from '../assets/Factory-Top.svg?raw';
-import factoryBottomRaw from '../assets/Factory-Bottom.svg?raw';
-import storageRightRaw from '../assets/Storage-Right.svg?raw';
-import storageLeftRaw from '../assets/Storage-Left.svg?raw';
-import storageTopRaw from '../assets/Storage-Top.svg?raw';
-import storageBottomRaw from '../assets/Storage-Bottom.svg?raw';
+import { currentThemeId, themeAssets } from './theme.ts';
 
 interface SpriteLayer {
   image: HTMLImageElement;
@@ -90,26 +79,68 @@ const STORAGE_COMMON: Omit<SpriteDef, 'raw'> = {
   buildingIds: ['Building'],
 };
 
-const SPRITE_DEFS: Record<string, SpriteDef> = {
-  'house:right':  { raw: houseRightRaw, ...HOUSE_COMMON },
-  'house:left':   { raw: houseLeftRaw, ...HOUSE_COMMON },
-  'house:top':    { raw: houseTopRaw, ...HOUSE_COMMON },
-  'house:bottom': { raw: houseBottomRaw, ...HOUSE_COMMON },
-  'factory:left':   { raw: factoryLeftRaw, ...FACTORY_COMMON },
-  'factory:right':  { raw: factoryRightRaw, ...FACTORY_COMMON },
-  'factory:top':    { raw: factoryTopRaw, ...FACTORY_COMMON },
-  'factory:bottom': { raw: factoryBottomRaw, ...FACTORY_COMMON },
-  'storage:right':  { raw: storageRightRaw, ...STORAGE_COMMON },
-  'storage:left':   { raw: storageLeftRaw, ...STORAGE_COMMON },
-  'storage:top':    { raw: storageTopRaw, ...STORAGE_COMMON },
-  'storage:bottom': { raw: storageBottomRaw, ...STORAGE_COMMON },
-};
+function getSpriteDef(type: 'house' | 'factory' | 'storage', side: ConnectionSide): SpriteDef | null {
+  if (type === 'house') {
+    return { raw: themeAssets.sprites.house[side], ...HOUSE_COMMON };
+  }
+  if (type === 'factory') {
+    return { raw: themeAssets.sprites.factory[side], ...FACTORY_COMMON };
+  }
+  return { raw: themeAssets.sprites.storage[side], ...STORAGE_COMMON };
+}
 
 function darkenColor(hex: string, factor: number): string {
   const r = Math.round(parseInt(hex.slice(1, 3), 16) * factor);
   const g = Math.round(parseInt(hex.slice(3, 5), 16) * factor);
   const b = Math.round(parseInt(hex.slice(5, 7), 16) * factor);
   return `rgb(${r},${g},${b})`;
+}
+
+// Replace all fill attributes on direct and nested elements within a group id.
+// Handles id="RoofShadow", id="RoofShadow_2", etc. Skips fill="none".
+function replaceGroupFills(svg: string, groupId: string, fillColor: string): string {
+  const idPattern = new RegExp(`id="${groupId}(?:_\\d+)?"`, 'g');
+  const matches = [...svg.matchAll(idPattern)];
+  if (matches.length === 0) return svg;
+
+  // Collect [groupContentStart, groupContentEnd] ranges for all matching groups
+  // Process in reverse order so slice offsets stay valid
+  const ranges: Array<[number, number]> = [];
+
+  for (const match of matches) {
+    const tagStart = svg.lastIndexOf('<', match.index!);
+    const openTagEnd = svg.indexOf('>', tagStart);
+    if (openTagEnd === -1) continue;
+    // Self-closing element (rect, circle, path) — not a group container
+    if (svg[openTagEnd - 1] === '/') continue;
+
+    // Find matching closing </g> by depth
+    let depth = 1;
+    let pos = openTagEnd + 1;
+    let closeStart = -1;
+    while (pos < svg.length && depth > 0) {
+      const nextOpen = svg.indexOf('<g', pos);
+      const nextClose = svg.indexOf('</g>', pos);
+      if (nextClose === -1) break;
+      if (nextOpen !== -1 && nextOpen < nextClose) {
+        depth++;
+        pos = nextOpen + 2;
+      } else {
+        depth--;
+        if (depth === 0) closeStart = nextClose;
+        pos = nextClose + 4;
+      }
+    }
+    if (closeStart !== -1) ranges.push([openTagEnd + 1, closeStart]);
+  }
+
+  // Apply replacements in reverse order to preserve offsets
+  let result = svg;
+  for (const [start, end] of ranges.reverse()) {
+    const inner = result.slice(start, end).replace(/fill="(?!none")[^"]*"/g, `fill="${fillColor}"`);
+    result = result.slice(0, start) + inner + result.slice(end);
+  }
+  return result;
 }
 
 function colorize(svgRaw: string, def: SpriteDef, color: string): string {
@@ -121,12 +152,13 @@ function colorize(svgRaw: string, def: SpriteDef, color: string): string {
     const fillColor = c.role === 'main' ? color : darkenColor(color, 0.7);
     // Match id="RoofMain" or id="RoofMain_2" etc (Figma appends _N for duplicates)
     const idPattern = `${c.id}(?:_\\d+)?`;
-    // property after id
+    // Try replacing fill directly on the element with this id (for leaf elements like <rect>)
     const regex = new RegExp(`(id="${idPattern}"[^>]*${c.property}=")([^"]*)(")`, 'g');
     svg = svg.replace(regex, `$1${fillColor}$3`);
-    // property before id
     const regex2 = new RegExp(`(${c.property}=")([^"]*)("[^>]*id="${idPattern}")`, 'g');
     svg = svg.replace(regex2, `$1${fillColor}$3`);
+    // Also replace fills within the group subtree (for <g> containers whose children have hardcoded fills)
+    svg = replaceGroupFills(svg, c.id, fillColor);
   }
   return svg;
 }
@@ -200,11 +232,10 @@ function buildSprite(def: SpriteDef, color: string): LayeredSprite {
 }
 
 export function getHouseSprite(side: ConnectionSide, color: string): LayeredSprite | null {
-  const defKey = `house:${side}`;
-  const def = SPRITE_DEFS[defKey];
+  const def = getSpriteDef('house', side);
   if (!def) return null;
 
-  const cacheKey = `${defKey}:${color}`;
+  const cacheKey = `${currentThemeId}:house:${side}:${color}`;
   const cached = spriteCache.get(cacheKey);
   if (cached) return cached;
 
@@ -214,11 +245,10 @@ export function getHouseSprite(side: ConnectionSide, color: string): LayeredSpri
 }
 
 export function getFactorySprite(side: ConnectionSide, color: string): LayeredSprite | null {
-  const defKey = `factory:${side}`;
-  const def = SPRITE_DEFS[defKey];
+  const def = getSpriteDef('factory', side);
   if (!def) return null;
 
-  const cacheKey = `${defKey}:${color}`;
+  const cacheKey = `${currentThemeId}:factory:${side}:${color}`;
   const cached = spriteCache.get(cacheKey);
   if (cached) return cached;
 
@@ -228,11 +258,10 @@ export function getFactorySprite(side: ConnectionSide, color: string): LayeredSp
 }
 
 export function getStorageSprite(side: ConnectionSide, color: string): LayeredSprite | null {
-  const defKey = `storage:${side}`;
-  const def = SPRITE_DEFS[defKey];
+  const def = getSpriteDef('storage', side);
   if (!def) return null;
 
-  const cacheKey = `${defKey}:${color}`;
+  const cacheKey = `${currentThemeId}:storage:${side}:${color}`;
   const cached = spriteCache.get(cacheKey);
   if (cached) return cached;
 

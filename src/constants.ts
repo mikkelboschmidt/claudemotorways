@@ -19,8 +19,7 @@ export const MAX_CARS_PER_HOUSE = 2;
 export const PARK_DURATION = 120; // frames (~2s at 60fps)
 export const PARK_ANIM_SPEED = 0.012; // progress per frame for parking/departing
 export const TURN_LERP = 0.10; // angle interpolation speed per frame (0-1)
-export const BG_COLOR = '#4a7c59';
-export const ROAD_COLOR = '#555';
+// Colors moved to src/theme.ts — import { theme } from './theme.ts' instead
 export const TOOLBAR_HEIGHT = 60;
 export const PIN_SPAWN_INTERVAL = 900; // frames (~15s at 60fps)
 export const PIN_COOLDOWN = 60; // frames (~1s at 60fps) before a new pin can be picked up
@@ -38,5 +37,5 @@ export const TRUCK_CAPACITY = 6; // pins per truck load
 export const MAX_TRUCKS_PER_STORAGE = 1;
 export const TRUCK_SPAWN_INTERVAL = 300; // frames (~5s at 60fps)
 export const HIGHWAY_SPEED = CAR_SPEED * 1.5;
-export const HIGHWAY_COLOR = '#666';
+// HIGHWAY_COLOR moved to src/theme.ts
 export const HIGHWAY_ROAD_W = ROAD_W + 6;

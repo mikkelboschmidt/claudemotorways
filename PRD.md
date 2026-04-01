@@ -22,6 +22,7 @@ A logistics puzzle game where players build road networks connecting residential
 - **Pin spawning**: Every ~15s (900 frames), the factory produces one pin if below capacity.
 - **Pin cooldown**: A freshly spawned pin cannot be picked up for ~1s (60 frames).
 - **Capacity**: 6 pins, 3 parking slots.
+- **Donut indicator**: Pin count is displayed as a single donut (circle with variable stroke width). Empty = thin ring, full = solid disc. Each pin adds 1/6 of the fill. New pin steps animate in with a fade. The donut replaces the earlier dot grid.
 - **Overflow / Burn-out**: If the factory is at max pins when a new pin would spawn, it **burns out** — all pins are lost, all parked cars are evicted, and the player loses 20 points. The building turns gray and stops producing. A burned-out factory can be demolished or replaced by placing a new building on top.
 - **Parking layout**: Cars enter along a driving lane on one side, then pull into parking slots via cubic bezier curves. Slot 0 is nearest the entrance, slot 2 is deepest. Departure order is FIFO (earliest parked car leaves first). Only one car may be mid-animation (parking, collecting, or departing) at a time.
 - **Truck exclusivity**: A truck can only enter a factory with a completely empty parking lot. While a truck is inside, regular cars are blocked from entering.
@@ -30,7 +31,8 @@ A logistics puzzle game where players build road networks connecting residential
 
 - Bulk pin buffer between factories and houses. Does not produce pins.
 - **Entrance**: Auto-orients toward the nearest road, same as houses. Fixed after placement.
-- **Capacity**: 18 pins, 1 parking slot (truck only for delivery; regular cars also park to collect).
+- **Capacity**: 16 pins, 1 parking slot (truck only for delivery; regular cars also park to collect).
+- **Donut indicator**: Same as factory — a single donut whose stroke width represents fill level (each pin = 1/16 of fill).
 - **Receives pins from trucks**: A truck arrives, deposits all carried pins (capped at storage max).
 - **Serves regular cars**: Cars can collect pins from storage the same way they collect from factories (+1 score per pin).
 - **Cannot be disabled.**
@@ -39,7 +41,7 @@ A logistics puzzle game where players build road networks connecting residential
 
 - Buildings cannot overlap. Buildings cannot be placed on tiles that contain road segments. Disabled (burned) buildings can be replaced — placing a new building on a burned-out one removes the old building but preserves its road edges.
 - All building types auto-orient their entrance toward the nearest adjacent road node. If no road is nearby, they default to `right`.
-- All building types come in 5 colors: red (`#e74c3c`), blue (`#3498db`), green (`#2ecc71`), orange (`#f39c12`), purple (`#9b59b6`). Cars, trucks, and buildings are color-matched — a red car only visits red factories/storages.
+- All building types come in 5 colors: rust (`#e06040`), cyan (`#4aa8d8`), mint (`#50d890`), amber (`#d4a030`), violet (`#b060d0`). Cars, trucks, and buildings are color-matched — a rust car only visits rust factories/storages.
 
 ---
 
@@ -50,7 +52,7 @@ A logistics puzzle game where players build road networks connecting residential
 - **Width**: 30px visual, two lanes (15px each).
 - **Speed**: 1.5 px/frame.
 - **Placement**: Click-and-drag between grid intersections. Supports 8 directions (horizontal, vertical, 4 diagonals). The path is decomposed into tile-to-tile edge segments.
-- **Visual**: Dark gray surface with white dashed center line.
+- **Visual**: Theme-dependent. Classic: solid dark surface with white dashed center line. Lunar: two parallel cyan track rails (`#4CFFF9`, 2px each).
 
 ### Narrow Road
 
@@ -65,7 +67,7 @@ A logistics puzzle game where players build road networks connecting residential
 - **Speed**: 2.25 px/frame (150% of regular). Trucks get 1.3× their base speed on highways.
 - **Placement**: Two-click placement (start node, then end node, both must be on existing roads, ≥3 tiles apart). Creates a cubic bezier curve between them.
 - **Control handles**: After placement, two draggable handles at t≈1/3 and t≈2/3 along the curve allow precise shaping of the highway path.
-- **Visual**: Elevated look with shadow, gray surface (#666), yellow dashed center line.
+- **Visual**: Elevated look with shadow, lavender surface (`#6a6a8a`), cyan dashed center line (`#6ab0c0`).
 - **Pathfinding bonus**: Highways are weighted at 0.65× cost, making them strongly preferred routes.
 
 ### Roundabout (3×3 tiles)
@@ -75,7 +77,7 @@ A logistics puzzle game where players build road networks connecting residential
 - **Ring nodes**: 8 nodes spaced at 45° intervals around a circular arc (radius = GRID). 4 cardinal nodes at integer grid positions — E (gx+2, gy+1), S (gx+1, gy+2), W (gx, gy+1), N (gx+1, gy) — and 4 diagonal nodes at synthetic positions (SE, SW, NW, NE).
 - **8-way connections**: External roads can connect to any of the 8 ring nodes. When dragging a road to or from a roundabout tile, the system auto-detects the best of 8 connection points (every 45°) based on approach angle. A connecting edge bridges from the nearest road tile outside the roundabout to the chosen ring node. Roads that stop just outside a roundabout (because interior segments are blocked) also auto-connect if the next tile along the drag direction is inside the roundabout's 3×3 area. Roads cannot be placed through the roundabout's interior tiles.
 - **Traffic flow**: One-way counter-clockwise. All 8 ring edges have a `oneway` constraint. Each arc segment is ~48.3px.
-- **Visual**: Circular road surface (30px wide annulus at 40px radius) with a green island in the center and a white dashed center line circle.
+- **Visual**: Theme-dependent. Classic: solid annulus with island and dashed center line. Lunar: two concentric cyan track circles (inner + outer rails).
 - **Demolish**: Click on the roundabout with the demolish tool to remove it as a whole unit. Drag-removal of road tiles does not break roundabout ring edges.
 - **Persistence**: Saved as `{ gx, gy }` positions plus connection edges `{ outerGx, outerGy, ringIndex }`. Ring edges are recreated on load; connection edges are restored separately.
 
@@ -94,6 +96,8 @@ A logistics puzzle game where players build road networks connecting residential
 - **Size**: 16×10 px.
 - **Speed**: 1.5 px/frame base, 0.04 acceleration, 0.06 deceleration.
 - **Spawning**: One spawn check every ~3s (180 frames). Each house can have up to 2 cars on the map. Cars are created heading toward the best available pin source (factory or storage of the same color), weighted by pin need and distance.
+- **Cargo marker**: After a car picks up a pin from a factory or storage, it shows a filled white circle on its roof until it finishes parking back at its house.
+- **Rotation**: Cars and trucks render rotated around their visual center rather than around the rear axle.
 - **Lifecycle**:
   1. Spawn at house → drive to factory/storage (`toWork`)
   2. Park at factory/storage → collect 1 pin (animated fly from building to car, ~30 frames)
@@ -193,7 +197,7 @@ Four speed settings: Pause (0×), Normal (1×), Fast (2×), Turbo (3×). The gam
 
 ## Save / Load
 
-The game auto-saves to `localStorage` every 5 seconds and after every build action. Saved data includes:
+The game auto-saves to `localStorage` every 5 seconds and after every build action. The active theme selection is stored separately in `localStorage`. Saved data includes:
 - All buildings (type, position, color, pins, disabled state, connection side)
 - All road edges (coordinates, narrow flag)
 - All highways (start, end, two control points)
@@ -214,7 +218,7 @@ A canvas-rendered modal shown on first visit (no `localStorage` save data). The 
 
 | Property | Value |
 |---|---|
-| Splash image | `assets/splashscreen.png` — branded "LoomWays" artwork with tagline "Connect. Collect. Construct." |
+| Splash image | Theme-specific `assets/EarthTheme/splashscreen.png` or `assets/SpaceTheme/splashscreen.png` — branded "LoomWays" artwork with tagline "Connect. Collect. Construct." |
 | Modal size | `min(70% viewport width, 80% viewport height)`, centered |
 | Overlay | Semi-transparent black (`rgba(0,0,0,0.5)`) covering full canvas |
 | Background | Dark rounded rectangle (14 px radius) with drop shadow |
@@ -260,7 +264,7 @@ Floating circular buttons (44px diameter) arranged in a vertical column on the l
 | Storage SVG | `addBuilding` (storage) | Place a storage depot |
 | Demolish SVG | `demolish` | Tap a building/roundabout to remove it, or drag across road tiles to delete edges/highways |
 
-- All toolbar icons are loaded from `assets/Icon-*.svg` files and rendered onto the canvas. SVGs with a layer `id="CurrentColor"` have their fill dynamically replaced with the selected building color.
+- All toolbar icons are loaded from the active theme asset bundle (`assets/EarthTheme/` or `assets/SpaceTheme/`) and rendered onto the canvas. SVGs with a layer `id="CurrentColor"` have their fill dynamically replaced with the selected building color.
 - The active tool has a black background with a white ring outline; inactive tools use a semi-transparent dark background (`rgba(44, 62, 80, 0.85)`).
 
 ### Gear Menu (bottom-right)
@@ -270,10 +274,11 @@ A gear button (48px diameter) sits in the bottom-right corner. Tapping it opens 
 1. **FPS counter** — color-coded: green (≥50), yellow (≥30), red (<30).
 2. **Speed controls** — row of buttons: ⏸ 1× 2× 3×.
 3. **Music toggle** — On/Off button.
-4. **Reset button** — dark red, reloads the game and clears save data.
-5. **Save City** — downloads the current game state as a `.json` file (`loomways-city.json`).
-6. **Load City** — opens a file picker to upload a previously saved `.json` city file. Score resets to 0 on load.
-7. **City selector** — lists all preset cities from `cities/manifest.json`. Clicking a city loads it (score resets to 0).
+4. **Theme switcher** — segmented `Earth` / `Space` buttons. Switching themes swaps both the UI color palette and the active asset bundle, and remaps existing building/vehicle colors by palette index so the current city updates immediately.
+5. **Reset button** — dark red, reloads the game and clears save data.
+6. **Save City** — downloads the current game state as a `.json` file (`loomways-city.json`).
+7. **Load City** — opens a file picker to upload a previously saved `.json` city file. Score resets to 0 on load.
+8. **City selector** — lists all preset cities from `cities/manifest.json`. Clicking a city loads it (score resets to 0).
 
 Tapping anywhere outside the menu closes it.
 
@@ -372,6 +377,54 @@ Milestones use consistent `first-building-*` and `first-road-*` prefixes for eas
 
 ---
 
+## Theme System
+
+All colors are defined in `src/theme.ts` via the `GameTheme` interface. Two themes ship out of the box:
+
+| Theme | Key | Description |
+|---|---|---|
+| Classic | `classicTheme` | Original green motorways look (`#4a7c59` terrain, solid gray roads) |
+| Lunar | `lunarTheme` | Planet mining aesthetic (active by default) |
+
+Switch themes by calling `setTheme(classicTheme)` or `setTheme(lunarTheme)`.
+
+### Runtime Theme Switching
+
+- The gear menu exposes `Earth` and `Space` theme buttons.
+- Switching themes updates the active palette and asset bundle immediately.
+- Existing buildings and vehicles are recolored by palette index so an in-progress city flips coherently between themes.
+- Loaded saves and imported cities normalize their stored building colors to the currently active theme palette on load.
+
+### Theme Asset Bundles
+
+- **Earth theme assets** live in `assets/EarthTheme/` and pair with the classic palette.
+- **Space theme assets** live in `assets/SpaceTheme/` and pair with the lunar palette.
+- Each bundle includes the splash image, toolbar SVG icons, and all house/factory/storage sprites.
+
+### Road Rendering Styles
+
+The theme controls how roads are drawn via `roadStyle`:
+
+- **`solid`** (classic) — Filled road surface with dashed white center lines and round node joints.
+- **`tracks`** (lunar) — Two parallel rail lines per lane, each `trackWidth` px wide in `trackColor`. No filled road surface or dashed center lines. Roundabouts draw two concentric track circles instead of a filled annulus.
+
+### Lunar Theme Colors
+
+| Element | Color | Hex |
+|---|---|---|
+| Background (terrain) | Dusty brown | `#59412F` |
+| Page background | Dark brown | `#1a0e08` |
+| Track rails | Bright cyan | `#4CFFF9` |
+| Track width | — | 2 px per rail |
+| Highway center line | Bright cyan | `#4CFFF9` |
+| Grid lines | Very faint white | `rgba(255,255,255,0.03)` |
+| UI panels | Near-black | `rgba(15,15,30,0.95)` |
+| Disabled buildings | Muted dark | `#3a3a50` |
+
+Building colors are high-contrast neon tones that pop against the dark background: pink `#FF009D`, yellow `#FFD428`, blue `#2A7BFF`, lime `#A1FF00`, and pale peach `#FFE7D3`. Fallback building renderers use `darkenColor()` for backgrounds (not `lightenColor()`) to maintain the dark palette.
+
+---
+
 ## Deployment
 
 The game is deployed to **GitHub Pages** with the custom domain **loomways.com**. The `public/CNAME` file maps the GitHub Pages site to `loomways.com`. Deployment is automated via a GitHub Actions workflow on push to `main`.
@@ -380,16 +433,16 @@ The game is deployed to **GitHub Pages** with the custom domain **loomways.com**
 
 ## Visual Layers (Render Order)
 
-1. **Background**: Green grass grid with faint lines.
+1. **Background**: Theme terrain fill (lunar: dusty brown `#59412F`, classic: green `#4a7c59`) with very faint grid lines.
 2. **Building grounds**: SVG ground layer (driveways, pads) drawn below roads.
-3. **Roads**: Regular → narrow → highway surfaces and dashes.
+3. **Roads**: Regular → narrow → highway. Solid surfaces + dashes (classic) or parallel track rails (lunar).
 4. **Road preview / hover ghost**: Shown during placement.
 5. **Cars and trucks**: All vehicles.
 6. **Building shadows**: SVG shadow layer drawn above vehicles.
-7. **Building bodies**: SVG building layer drawn on top. Pins rendered over buildings.
+7. **Building bodies**: SVG building layer drawn on top. Donut fill indicators rendered over buildings.
 8. **Collecting pin animations**: Flying pin dots from building to car.
 9. **UI**: Score display and toolbar (screen-space, not affected by camera).
 
-Buildings use an SVG sprite system with programmatic color replacement. Each SVG has three layer groups (`Ground`, `Shadows`, `Building`) filtered by hiding non-target groups. Colors are replaced by matching element IDs (`RoofMain` → building color, `RoofShadow` → darkened variant). Disabled buildings render in gray (`#555555`).
+Buildings use an SVG sprite system with programmatic color replacement. Each SVG has three layer groups (`Ground`, `Shadows`, `Building`) filtered by hiding non-target groups. Colors are replaced by matching element IDs (`RoofMain` → building color, `RoofShadow` → darkened variant). Disabled buildings render in muted dark (`#3a3a50`).
 
 **SVG assets are manually authored and must never be modified programmatically.** All SVG files in `assets/` are hand-crafted — changes to sprites should be made by the designer, not by code or automation.

@@ -1,0 +1,7 @@
+<svg width="50" height="50" viewBox="0 0 50 50" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Icon-Color">
+<rect id="IconBackground" width="50" height="50" fill="#34413A"/>
+<circle id="RoofMain" cx="25" cy="25" r="15" fill="#FF0000"/>
+<path id="RoofShadow" d="M35.6064 14.3936C38.3209 17.108 40 20.8579 40 25C40 33.2843 33.2843 40 25 40C20.8579 40 17.108 38.3209 14.3936 35.6064L35.6064 14.3936Z" fill="#CC0000"/>
+</g>
+</svg>

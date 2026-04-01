@@ -675,6 +675,7 @@ function createCar(homeId: number, workId: number, color: string, path: string[]
     stuckFrames: 0,
     nextState: 'toHome',
     collectProgress: 0,
+    carryingPin: false,
     pinSourceX: 0,
     pinSourceY: 0,
     isTruck: false,
@@ -1011,6 +1012,9 @@ export function updateCars() {
         car.state = 'parked';
         car.parkedAt = frameCount;
         car.parkTimer = PARK_DURATION;
+        if (!car.isTruck && car.nextState === 'toWork') {
+          car.carryingPin = false;
+        }
         car.angle = car.parkEndAngle;
       }
       // Cubic bezier position
@@ -1073,6 +1077,7 @@ export function updateCars() {
             addScore(1);
             car.state = 'collecting';
             car.collectProgress = 0;
+            car.carryingPin = true;
             car.pinSourceX = pinPos.x;
             car.pinSourceY = pinPos.y;
           }

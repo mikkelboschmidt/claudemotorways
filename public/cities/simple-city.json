@@ -1,12 +1,12 @@
 {
   "buildings": [
     {
-      "id": 0,
-      "gx": 3,
-      "gy": 3,
+      "id": 1,
+      "gx": 7,
+      "gy": 7,
       "type": "house",
-      "color": "#e74c3c",
-      "nodeKey": "4,3",
+      "color": "#FF009D",
+      "nodeKey": "8,7",
       "connectionSide": "right",
       "w": 1,
       "h": 1,
@@ -17,28 +17,12 @@
       "disabled": false
     },
     {
-      "id": 1,
-      "gx": 18,
-      "gy": 3,
-      "type": "factory",
-      "color": "#e74c3c",
-      "nodeKey": "17,4",
-      "connectionSide": "left",
-      "w": 3,
-      "h": 2,
-      "pins": 0,
-      "maxPins": 6,
-      "maxParkedCars": 3,
-      "pinCooldown": 0,
-      "disabled": false
-    },
-    {
       "id": 2,
-      "gx": 3,
-      "gy": 10,
+      "gx": 7,
+      "gy": 9,
       "type": "house",
-      "color": "#3498db",
-      "nodeKey": "4,10",
+      "color": "#FF009D",
+      "nodeKey": "8,9",
       "connectionSide": "right",
       "w": 1,
       "h": 1,
@@ -51,10 +35,10 @@
     {
       "id": 3,
       "gx": 18,
-      "gy": 10,
+      "gy": 3,
       "type": "factory",
-      "color": "#3498db",
-      "nodeKey": "17,11",
+      "color": "#FF009D",
+      "nodeKey": "17,4",
       "connectionSide": "left",
       "w": 3,
       "h": 2,
@@ -66,15 +50,15 @@
     },
     {
       "id": 4,
-      "gx": 33,
-      "gy": 5,
+      "gx": 23,
+      "gy": 3,
       "type": "factory",
-      "color": "#2ecc71",
-      "nodeKey": "32,6",
+      "color": "#FF009D",
+      "nodeKey": "22,4",
       "connectionSide": "left",
       "w": 3,
       "h": 2,
-      "pins": 0,
+      "pins": 1,
       "maxPins": 6,
       "maxParkedCars": 3,
       "pinCooldown": 0,
@@ -82,27 +66,27 @@
     },
     {
       "id": 5,
-      "gx": 18,
-      "gy": 6,
-      "type": "storage",
-      "color": "#2ecc71",
-      "nodeKey": "19,8",
-      "connectionSide": "bottom",
-      "w": 2,
-      "h": 2,
-      "pins": 6,
-      "maxPins": 16,
-      "maxParkedCars": 1,
+      "gx": 11,
+      "gy": -1,
+      "type": "house",
+      "color": "#f39c12",
+      "nodeKey": "12,-1",
+      "connectionSide": "right",
+      "w": 1,
+      "h": 1,
+      "pins": 0,
+      "maxPins": 0,
+      "maxParkedCars": 0,
       "pinCooldown": 0,
       "disabled": false
     },
     {
       "id": 6,
-      "gx": 14,
-      "gy": 8,
+      "gx": 12,
+      "gy": -2,
       "type": "house",
-      "color": "#2ecc71",
-      "nodeKey": "14,9",
+      "color": "#f39c12",
+      "nodeKey": "12,-1",
       "connectionSide": "bottom",
       "w": 1,
       "h": 1,
@@ -115,11 +99,11 @@
     {
       "id": 7,
       "gx": 13,
-      "gy": 8,
+      "gy": -1,
       "type": "house",
-      "color": "#2ecc71",
-      "nodeKey": "13,9",
-      "connectionSide": "bottom",
+      "color": "#f39c12",
+      "nodeKey": "12,-1",
+      "connectionSide": "left",
       "w": 1,
       "h": 1,
       "pins": 0,
@@ -130,12 +114,12 @@
     },
     {
       "id": 8,
-      "gx": 18,
-      "gy": 1,
+      "gx": 14,
+      "gy": 15,
       "type": "factory",
-      "color": "#e74c3c",
-      "nodeKey": "17,2",
-      "connectionSide": "left",
+      "color": "#f39c12",
+      "nodeKey": "16,14",
+      "connectionSide": "top",
       "w": 3,
       "h": 2,
       "pins": 0,
@@ -145,60 +129,12 @@
       "disabled": false
     },
     {
-      "id": 9,
-      "gx": 4,
-      "gy": 2,
-      "type": "house",
-      "color": "#e74c3c",
-      "nodeKey": "4,3",
-      "connectionSide": "bottom",
-      "w": 1,
-      "h": 1,
-      "pins": 0,
-      "maxPins": 0,
-      "maxParkedCars": 0,
-      "pinCooldown": 0,
-      "disabled": false
-    },
-    {
-      "id": 10,
-      "gx": 4,
-      "gy": 4,
-      "type": "house",
-      "color": "#e74c3c",
-      "nodeKey": "4,3",
-      "connectionSide": "top",
-      "w": 1,
-      "h": 1,
-      "pins": 0,
-      "maxPins": 0,
-      "maxParkedCars": 0,
-      "pinCooldown": 0,
-      "disabled": false
-    },
-    {
-      "id": 11,
-      "gx": 5,
-      "gy": 14,
-      "type": "house",
-      "color": "#f39c12",
-      "nodeKey": "6,14",
-      "connectionSide": "right",
-      "w": 1,
-      "h": 1,
-      "pins": 0,
-      "maxPins": 0,
-      "maxParkedCars": 0,
-      "pinCooldown": 0,
-      "disabled": false
-    },
-    {
       "id": 12,
-      "gx": 5,
-      "gy": 15,
+      "gx": 2,
+      "gy": 0,
       "type": "house",
-      "color": "#f39c12",
-      "nodeKey": "6,15",
+      "color": "#3498db",
+      "nodeKey": "3,0",
       "connectionSide": "right",
       "w": 1,
       "h": 1,
@@ -210,12 +146,12 @@
     },
     {
       "id": 13,
-      "gx": 7,
-      "gy": 15,
+      "gx": 3,
+      "gy": -1,
       "type": "house",
-      "color": "#f39c12",
-      "nodeKey": "6,15",
-      "connectionSide": "left",
+      "color": "#3498db",
+      "nodeKey": "3,0",
+      "connectionSide": "bottom",
       "w": 1,
       "h": 1,
       "pins": 0,
@@ -226,11 +162,11 @@
     },
     {
       "id": 14,
-      "gx": 7,
-      "gy": 14,
+      "gx": 4,
+      "gy": 0,
       "type": "house",
-      "color": "#f39c12",
-      "nodeKey": "6,14",
+      "color": "#3498db",
+      "nodeKey": "3,0",
       "connectionSide": "left",
       "w": 1,
       "h": 1,
@@ -242,11 +178,11 @@
     },
     {
       "id": 15,
-      "gx": 14,
-      "gy": 1,
+      "gx": 26,
+      "gy": 8,
       "type": "factory",
-      "color": "#f39c12",
-      "nodeKey": "13,2",
+      "color": "#3498db",
+      "nodeKey": "25,9",
       "connectionSide": "left",
       "w": 3,
       "h": 2,
@@ -255,344 +191,977 @@
       "maxParkedCars": 3,
       "pinCooldown": 0,
       "disabled": false
+    },
+    {
+      "id": 16,
+      "gx": 26,
+      "gy": 10,
+      "type": "factory",
+      "color": "#3498db",
+      "nodeKey": "25,11",
+      "connectionSide": "left",
+      "w": 3,
+      "h": 2,
+      "pins": 0,
+      "maxPins": 6,
+      "maxParkedCars": 3,
+      "pinCooldown": 0,
+      "disabled": false
+    },
+    {
+      "id": 17,
+      "gx": 11,
+      "gy": 9,
+      "type": "house",
+      "color": "#2ecc71",
+      "nodeKey": "12,9",
+      "connectionSide": "right",
+      "w": 1,
+      "h": 1,
+      "pins": 0,
+      "maxPins": 0,
+      "maxParkedCars": 0,
+      "pinCooldown": 0,
+      "disabled": false
+    },
+    {
+      "id": 18,
+      "gx": 12,
+      "gy": 8,
+      "type": "house",
+      "color": "#2ecc71",
+      "nodeKey": "12,9",
+      "connectionSide": "bottom",
+      "w": 1,
+      "h": 1,
+      "pins": 0,
+      "maxPins": 0,
+      "maxParkedCars": 0,
+      "pinCooldown": 0,
+      "disabled": false
+    },
+    {
+      "id": 19,
+      "gx": 12,
+      "gy": 10,
+      "type": "house",
+      "color": "#2ecc71",
+      "nodeKey": "12,9",
+      "connectionSide": "top",
+      "w": 1,
+      "h": 1,
+      "pins": 0,
+      "maxPins": 0,
+      "maxParkedCars": 0,
+      "pinCooldown": 0,
+      "disabled": false
+    },
+    {
+      "id": 20,
+      "gx": 23,
+      "gy": 15,
+      "type": "factory",
+      "color": "#2ecc71",
+      "nodeKey": "25,14",
+      "connectionSide": "top",
+      "w": 3,
+      "h": 2,
+      "pins": 2,
+      "maxPins": 6,
+      "maxParkedCars": 3,
+      "pinCooldown": 0,
+      "disabled": false
+    },
+    {
+      "id": 21,
+      "gx": 20,
+      "gy": 15,
+      "type": "factory",
+      "color": "#2ecc71",
+      "nodeKey": "22,14",
+      "connectionSide": "top",
+      "w": 3,
+      "h": 2,
+      "pins": 0,
+      "maxPins": 6,
+      "maxParkedCars": 3,
+      "pinCooldown": 0,
+      "disabled": false
+    },
+    {
+      "id": 22,
+      "gx": 33,
+      "gy": -2,
+      "type": "factory",
+      "color": "#2ecc71",
+      "nodeKey": "32,-1",
+      "connectionSide": "left",
+      "w": 3,
+      "h": 2,
+      "pins": 1,
+      "maxPins": 6,
+      "maxParkedCars": 3,
+      "pinCooldown": 0,
+      "disabled": false
+    },
+    {
+      "id": 23,
+      "gx": 27,
+      "gy": 3,
+      "type": "storage",
+      "color": "#2ecc71",
+      "nodeKey": "29,4",
+      "connectionSide": "right",
+      "w": 2,
+      "h": 2,
+      "pins": 0,
+      "maxPins": 16,
+      "maxParkedCars": 1,
+      "pinCooldown": 0,
+      "disabled": false
+    },
+    {
+      "id": 24,
+      "gx": 12,
+      "gy": 12,
+      "type": "house",
+      "color": "#2ecc71",
+      "nodeKey": "13,12",
+      "connectionSide": "right",
+      "w": 1,
+      "h": 1,
+      "pins": 0,
+      "maxPins": 0,
+      "maxParkedCars": 0,
+      "pinCooldown": 0,
+      "disabled": false
+    },
+    {
+      "id": 25,
+      "gx": 14,
+      "gy": 12,
+      "type": "house",
+      "color": "#2ecc71",
+      "nodeKey": "13,12",
+      "connectionSide": "left",
+      "w": 1,
+      "h": 1,
+      "pins": 0,
+      "maxPins": 0,
+      "maxParkedCars": 0,
+      "pinCooldown": 0,
+      "disabled": false
+    },
+    {
+      "id": 26,
+      "gx": 13,
+      "gy": 13,
+      "type": "house",
+      "color": "#2ecc71",
+      "nodeKey": "13,12",
+      "connectionSide": "top",
+      "w": 1,
+      "h": 1,
+      "pins": 0,
+      "maxPins": 0,
+      "maxParkedCars": 0,
+      "pinCooldown": 0,
+      "disabled": false
+    },
+    {
+      "id": 27,
+      "gx": 33,
+      "gy": 0,
+      "type": "factory",
+      "color": "#2ecc71",
+      "nodeKey": "32,1",
+      "connectionSide": "left",
+      "w": 3,
+      "h": 2,
+      "pins": 0,
+      "maxPins": 6,
+      "maxParkedCars": 3,
+      "pinCooldown": 0,
+      "disabled": false
+    },
+    {
+      "id": 28,
+      "gx": 10,
+      "gy": 19,
+      "type": "storage",
+      "color": "#2ecc71",
+      "nodeKey": "11,18",
+      "connectionSide": "top",
+      "w": 2,
+      "h": 2,
+      "pins": 0,
+      "maxPins": 16,
+      "maxParkedCars": 1,
+      "pinCooldown": 0,
+      "disabled": false
     }
   ],
   "edges": [
     [
-      6,
-      6,
-      7,
-      6
+      8,
+      8,
+      8,
+      9
     ],
     [
+      8,
       7,
+      8,
+      8
+    ],
+    [
+      8,
       6,
+      8,
+      7
+    ],
+    [
+      8,
+      5,
       8,
       6
     ],
     [
       8,
-      6,
+      4,
+      8,
+      5
+    ],
+    [
+      8,
+      4,
       9,
-      6
+      4
     ],
     [
       9,
-      6,
+      4,
       10,
-      6
+      4
     ],
     [
       10,
-      6,
+      4,
       11,
-      6
+      4
     ],
     [
       11,
-      6,
+      4,
       12,
-      6
+      4
     ],
     [
       12,
-      6,
+      4,
       13,
-      6
+      4
     ],
     [
       13,
-      6,
+      4,
       14,
-      6
+      4
     ],
     [
       14,
-      6,
+      4,
       15,
-      6
+      4
     ],
     [
       15,
-      6,
+      4,
       16,
+      4
+    ],
+    [
+      16,
+      4,
+      17,
+      4
+    ],
+    [
+      22,
+      4,
+      22,
+      5
+    ],
+    [
+      21,
+      5,
+      22,
+      5
+    ],
+    [
+      20,
+      5,
+      21,
+      5
+    ],
+    [
+      19,
+      5,
+      20,
+      5
+    ],
+    [
+      18,
+      5,
+      19,
+      5
+    ],
+    [
+      17,
+      5,
+      18,
       5
     ],
     [
       16,
       5,
       17,
-      4
+      5
     ],
     [
-      17,
+      16,
       4,
-      17,
-      4
+      16,
+      5
     ],
     [
-      15,
+      16,
+      7,
+      16,
+      8
+    ],
+    [
+      16,
       6,
       16,
       7
     ],
     [
       16,
-      7,
-      17,
-      8
+      5,
+      16,
+      6
     ],
     [
-      17,
-      8,
-      17,
-      9
+      12,
+      3,
+      12,
+      4
     ],
     [
-      17,
-      9,
-      17,
-      10
+      12,
+      2,
+      12,
+      3,
+      true
     ],
     [
-      17,
+      12,
+      1,
+      12,
+      2,
+      true
+    ],
+    [
+      12,
+      0,
+      12,
+      1,
+      true
+    ],
+    [
+      12,
+      -1,
+      12,
+      0
+    ],
+    [
+      16,
       10,
-      17,
+      16,
       11
     ],
     [
-      4,
-      10,
-      5,
-      10
-    ],
-    [
-      5,
-      10,
-      6,
-      9
-    ],
-    [
-      6,
-      8,
-      6,
-      9
-    ],
-    [
-      6,
-      7,
-      6,
-      8
-    ],
-    [
-      6,
-      6,
-      6,
-      7
-    ],
-    [
-      4,
-      3,
-      5,
-      3
-    ],
-    [
-      5,
-      3,
-      6,
-      3
-    ],
-    [
-      6,
-      5,
-      6,
-      6
-    ],
-    [
-      6,
-      4,
-      6,
-      5
-    ],
-    [
-      6,
-      3,
-      6,
-      4
-    ],
-    [
-      17,
-      8,
-      18,
-      8
-    ],
-    [
-      18,
-      8,
-      19,
-      8
-    ],
-    [
-      19,
-      8,
-      20,
-      8
-    ],
-    [
-      20,
-      8,
-      21,
-      8
-    ],
-    [
-      21,
-      8,
-      22,
-      8
-    ],
-    [
-      22,
-      8,
-      23,
-      8
-    ],
-    [
-      23,
-      8,
-      24,
-      8
-    ],
-    [
-      24,
-      8,
-      25,
-      8
-    ],
-    [
-      31,
-      6,
-      32,
-      6
-    ],
-    [
-      30,
-      6,
-      31,
-      6
-    ],
-    [
-      29,
-      6,
-      30,
-      6
-    ],
-    [
-      28,
-      6,
-      29,
-      6
-    ],
-    [
-      27,
-      6,
-      28,
-      6
-    ],
-    [
-      26,
-      6,
-      27,
-      6
-    ],
-    [
-      25,
-      6,
-      26,
-      6
-    ],
-    [
-      32,
-      6,
-      32,
-      6
-    ],
-    [
-      25,
-      6,
-      25,
-      7
-    ],
-    [
-      25,
-      7,
-      25,
-      8
+      16,
+      11,
+      16,
+      12
     ],
     [
       16,
-      9,
-      17,
-      9
-    ],
-    [
-      15,
-      9,
+      12,
       16,
-      9
+      13
     ],
     [
-      14,
-      9,
-      15,
-      9
-    ],
-    [
+      16,
       13,
-      9,
-      14,
-      9
-    ],
-    [
-      17,
-      3,
-      17,
-      4
-    ],
-    [
-      17,
-      2,
-      17,
-      3
-    ],
-    [
-      6,
-      14,
-      6,
-      15
-    ],
-    [
-      6,
-      13,
-      6,
+      16,
       14
     ],
     [
+      14,
+      9,
+      15,
+      9
+    ],
+    [
       13,
+      9,
+      14,
+      9
+    ],
+    [
+      12,
+      9,
+      13,
+      9
+    ],
+    [
+      3,
+      0,
+      3,
+      1
+    ],
+    [
+      3,
+      1,
+      3,
+      2
+    ],
+    [
+      17,
+      9,
+      18,
+      9
+    ],
+    [
+      18,
+      9,
+      19,
+      9
+    ],
+    [
+      19,
+      9,
+      20,
+      9
+    ],
+    [
+      20,
+      9,
+      21,
+      9
+    ],
+    [
+      21,
+      9,
+      22,
+      9
+    ],
+    [
+      22,
+      9,
+      23,
+      9
+    ],
+    [
+      23,
+      9,
+      24,
+      9
+    ],
+    [
+      24,
+      9,
+      25,
+      9
+    ],
+    [
+      25,
+      10,
+      25,
+      11
+    ],
+    [
+      25,
+      9,
+      25,
+      10
+    ],
+    [
+      22,
+      8,
+      22,
+      9
+    ],
+    [
+      22,
+      9,
+      22,
+      10
+    ],
+    [
+      22,
+      10,
+      22,
+      11
+    ],
+    [
+      22,
+      11,
+      22,
+      12
+    ],
+    [
+      22,
+      12,
+      22,
+      13
+    ],
+    [
+      22,
+      13,
+      22,
+      14
+    ],
+    [
+      22,
+      14,
+      23,
+      14
+    ],
+    [
+      23,
+      14,
+      24,
+      14
+    ],
+    [
+      24,
+      14,
+      25,
+      14
+    ],
+    [
+      29,
+      4,
+      30,
+      4
+    ],
+    [
+      30,
+      3,
+      30,
+      4
+    ],
+    [
+      30,
       2,
-      13,
+      30,
       3
+    ],
+    [
+      30,
+      1,
+      30,
+      2
+    ],
+    [
+      30,
+      0,
+      30,
+      1
+    ],
+    [
+      30,
+      -1,
+      30,
+      0
+    ],
+    [
+      30,
+      -1,
+      31,
+      -1
+    ],
+    [
+      31,
+      -1,
+      32,
+      -1
+    ],
+    [
+      18,
+      7,
+      19,
+      6
+    ],
+    [
+      19,
+      6,
+      20,
+      6
+    ],
+    [
+      20,
+      6,
+      21,
+      6
+    ],
+    [
+      21,
+      6,
+      22,
+      6
+    ],
+    [
+      22,
+      6,
+      23,
+      6
+    ],
+    [
+      23,
+      6,
+      24,
+      6
+    ],
+    [
+      24,
+      6,
+      25,
+      6
+    ],
+    [
+      25,
+      6,
+      26,
+      6
+    ],
+    [
+      26,
+      6,
+      27,
+      6
+    ],
+    [
+      27,
+      6,
+      28,
+      6
+    ],
+    [
+      28,
+      6,
+      29,
+      6
+    ],
+    [
+      29,
+      6,
+      30,
+      6
+    ],
+    [
+      30,
+      5,
+      30,
+      6
+    ],
+    [
+      30,
+      4,
+      30,
+      5
+    ],
+    [
+      13,
+      9,
+      13,
+      10
+    ],
+    [
+      13,
+      10,
+      13,
+      11
+    ],
+    [
+      13,
+      11,
+      13,
+      12
+    ],
+    [
+      32,
+      0,
+      32,
+      1
+    ],
+    [
+      32,
+      -1,
+      32,
+      0
+    ],
+    [
+      12,
+      11,
+      13,
+      11,
+      true
+    ],
+    [
+      11,
+      11,
+      12,
+      11,
+      true
+    ],
+    [
+      10,
+      11,
+      11,
+      11,
+      true
+    ],
+    [
+      9,
+      11,
+      10,
+      11,
+      true
+    ],
+    [
+      8,
+      11,
+      9,
+      11,
+      true
+    ],
+    [
+      8,
+      11,
+      8,
+      12,
+      true
+    ],
+    [
+      8,
+      12,
+      8,
+      13,
+      true
+    ],
+    [
+      8,
+      13,
+      8,
+      14,
+      true
+    ],
+    [
+      8,
+      14,
+      8,
+      15,
+      true
+    ],
+    [
+      8,
+      15,
+      8,
+      16,
+      true
+    ],
+    [
+      8,
+      16,
+      8,
+      17,
+      true
+    ],
+    [
+      8,
+      17,
+      8,
+      18
+    ],
+    [
+      21,
+      14,
+      22,
+      14
+    ],
+    [
+      20,
+      14,
+      21,
+      14
+    ],
+    [
+      19,
+      14,
+      20,
+      14
+    ],
+    [
+      19,
+      14,
+      19,
+      15
+    ],
+    [
+      19,
+      15,
+      19,
+      16
+    ],
+    [
+      19,
+      16,
+      19,
+      17
+    ],
+    [
+      19,
+      17,
+      19,
+      18
+    ],
+    [
+      18,
+      18,
+      19,
+      18
+    ],
+    [
+      17,
+      18,
+      18,
+      18
+    ],
+    [
+      16,
+      18,
+      17,
+      18
+    ],
+    [
+      15,
+      18,
+      16,
+      18
+    ],
+    [
+      14,
+      18,
+      15,
+      18
+    ],
+    [
+      13,
+      18,
+      14,
+      18
+    ],
+    [
+      12,
+      18,
+      13,
+      18
+    ],
+    [
+      11,
+      18,
+      12,
+      18
+    ],
+    [
+      10,
+      18,
+      11,
+      18
+    ],
+    [
+      9,
+      18,
+      10,
+      18
+    ],
+    [
+      8,
+      18,
+      9,
+      18
     ]
   ],
   "highways": [
     {
-      "startGx": 13,
-      "startGy": 3,
-      "endGx": 6,
-      "endGy": 13,
-      "midX": 465.46875,
-      "midY": 310.96484375
+      "startGx": 3,
+      "startGy": 2,
+      "endGx": 22,
+      "endGy": 8,
+      "mid1X": 332.6796875,
+      "mid1Y": 231.92578125,
+      "mid2X": 700.29296875,
+      "mid2Y": 268.05078125
     }
   ],
-  "score": 25,
-  "nextBuildingId": 16
+  "roundabouts": [
+    {
+      "gx": 15,
+      "gy": 8
+    }
+  ],
+  "roundaboutConnections": [
+    {
+      "raGx": 15,
+      "raGy": 8,
+      "outerGx": 16,
+      "outerGy": 8,
+      "ringIndex": 6
+    },
+    {
+      "raGx": 15,
+      "raGy": 8,
+      "outerGx": 16,
+      "outerGy": 10,
+      "ringIndex": 2
+    },
+    {
+      "raGx": 15,
+      "raGy": 8,
+      "outerGx": 15,
+      "outerGy": 9,
+      "ringIndex": 4
+    },
+    {
+      "raGx": 15,
+      "raGy": 8,
+      "outerGx": 17,
+      "outerGy": 9,
+      "ringIndex": 0
+    },
+    {
+      "raGx": 15,
+      "raGy": 8,
+      "outerGx": 18,
+      "outerGy": 7,
+      "ringIndex": 7
+    }
+  ],
+  "score": 166,
+  "nextBuildingId": 29
 }

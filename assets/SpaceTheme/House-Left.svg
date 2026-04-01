@@ -1,0 +1,32 @@
+<svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="House-Left">
+<g id="Ground">
+<rect id="Fill" x="40" y="40" width="40" height="40" rx="2" fill="#3F2A1A"/>
+<g id="Entrance">
+<path d="M49 62.6571C45.1429 62.6571 43.8571 64.6286 40 64.6286V66.5714C43.8571 66.5714 45.1428 68 49 68V62.6571Z" fill="url(#paint0_linear_92_180)"/>
+<path d="M40 54.9143C43.8571 54.9143 45.1428 57.3429 49 57.3429V52C45.1429 52 43.8571 52.9714 40 52.9714V54.9143Z" fill="url(#paint1_linear_92_180)"/>
+</g>
+</g>
+<g id="Shadows">
+<path id="Shadow" d="M97 64V96H71L50 76L50 46C50 44.8954 50.8954 44 52 44L77 44L97 64Z" fill="black" fill-opacity="0.1"/>
+</g>
+<g id="Building">
+<rect id="RoofMain" x="50" y="44" width="27" height="32" rx="2" fill="#FF009D"/>
+<rect id="RoofShadow" x="71" y="46" width="4" height="4" rx="2" fill="#C10077"/>
+<rect id="RoofShadow_2" x="71" y="52" width="4" height="4" rx="2" fill="#C10077"/>
+<rect id="RoofShadow_3" x="71" y="58" width="4" height="4" rx="2" fill="#C10077"/>
+<rect id="RoofShadow_4" x="71" y="64" width="4" height="4" rx="2" fill="#C10077"/>
+<rect id="RoofShadow_5" x="71" y="70" width="4" height="4" rx="2" fill="#C10077"/>
+</g>
+</g>
+<defs>
+<linearGradient id="paint0_linear_92_180" x1="49" y1="60.5" x2="40" y2="60.5" gradientUnits="userSpaceOnUse">
+<stop stop-color="#4CFFF9" stop-opacity="0"/>
+<stop offset="1" stop-color="#4CFFF9"/>
+</linearGradient>
+<linearGradient id="paint1_linear_92_180" x1="49" y1="60.5" x2="40" y2="60.5" gradientUnits="userSpaceOnUse">
+<stop stop-color="#4CFFF9" stop-opacity="0"/>
+<stop offset="1" stop-color="#4CFFF9"/>
+</linearGradient>
+</defs>
+</svg>
