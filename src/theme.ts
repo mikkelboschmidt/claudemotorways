@@ -1,4 +1,4 @@
-import { ThemeAssetBundle, earthAssets, spaceAssets } from './themeAssets.ts';
+import { ThemeAssetBundle, ThemeColorBundle, earthAssets, earthThemeColors, spaceAssets, spaceThemeColors } from './themeAssets.ts';
 
 export interface GameTheme {
   // Core surfaces
@@ -138,6 +138,46 @@ interface ThemeConfig {
 
 const LEGACY_SPACE_COLORS = ['#e06040', '#4aa8d8', '#50d890', '#d4a030', '#b060d0'];
 const PREVIOUS_SPACE_COLORS = ['#FF009D', '#FFD428', '#2A7BFF', '#A1FF00', '#FFE7D3'];
+
+function hexToRgb(hex: string): [number, number, number] | null {
+  const normalized = hex.trim();
+  const match = normalized.match(/^#([0-9a-f]{6})$/i);
+  if (!match) return null;
+  const value = match[1];
+  return [
+    parseInt(value.slice(0, 2), 16),
+    parseInt(value.slice(2, 4), 16),
+    parseInt(value.slice(4, 6), 16),
+  ];
+}
+
+function withAlpha(hex: string, alpha: number, fallback: string): string {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return fallback;
+  return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`;
+}
+
+function applyThemeColorsFromSvg(baseTheme: GameTheme, colorBundle: ThemeColorBundle | null): GameTheme {
+  if (!colorBundle) return baseTheme;
+
+  const nextTheme: GameTheme = {
+    ...baseTheme,
+    bg: colorBundle.ground,
+    previewIsland: withAlpha(colorBundle.ground, 0.5, baseTheme.previewIsland),
+    buildingColors: colorBundle.buildingColors,
+  };
+
+  if (baseTheme.roadStyle === 'tracks') {
+    nextTheme.trackColor = colorBundle.road;
+    nextTheme.highwayDash = colorBundle.road;
+  } else {
+    nextTheme.road = colorBundle.road;
+    nextTheme.highwaySurface = colorBundle.road;
+  }
+
+  nextTheme.previewRoad = withAlpha(colorBundle.road, 0.5, baseTheme.previewRoad);
+  return nextTheme;
+}
 
 // ─── Classic (original green motorways) ───
 
@@ -358,8 +398,8 @@ export const lunarTheme: GameTheme = {
 const THEME_STORAGE_KEY = 'claudemotorways_theme';
 
 const themeConfigs: Record<ThemeId, ThemeConfig> = {
-  earth: { id: 'earth', label: 'Earth', palette: classicTheme, assets: earthAssets },
-  space: { id: 'space', label: 'Space', palette: lunarTheme, assets: spaceAssets },
+  earth: { id: 'earth', label: 'Earth', palette: applyThemeColorsFromSvg(classicTheme, earthThemeColors), assets: earthAssets },
+  space: { id: 'space', label: 'Space', palette: applyThemeColorsFromSvg(lunarTheme, spaceThemeColors), assets: spaceAssets },
 };
 
 export const THEME_OPTIONS = [themeConfigs.earth, themeConfigs.space] as const;
