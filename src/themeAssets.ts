@@ -20,6 +20,8 @@ import earthStorageRight from '../assets/EarthTheme/Storage-Right.svg?raw';
 import earthStorageLeft from '../assets/EarthTheme/Storage-Left.svg?raw';
 import earthStorageTop from '../assets/EarthTheme/Storage-Top.svg?raw';
 import earthStorageBottom from '../assets/EarthTheme/Storage-Bottom.svg?raw';
+import earthCar from '../assets/EarthTheme/Car.svg?raw';
+import earthTruck from '../assets/EarthTheme/Truck.svg?raw';
 
 import spaceSplashUrl from '../assets/SpaceTheme/splashscreen.png';
 import spaceIconRoadNormal from '../assets/SpaceTheme/Icon-Road-Normal.svg?raw';
@@ -43,6 +45,8 @@ import spaceStorageRight from '../assets/SpaceTheme/Storage-Right.svg?raw';
 import spaceStorageLeft from '../assets/SpaceTheme/Storage-Left.svg?raw';
 import spaceStorageTop from '../assets/SpaceTheme/Storage-Top.svg?raw';
 import spaceStorageBottom from '../assets/SpaceTheme/Storage-Bottom.svg?raw';
+import spaceCar from '../assets/SpaceTheme/Car.svg?raw';
+import spaceTruck from '../assets/SpaceTheme/Truck.svg?raw';
 
 type Side = 'right' | 'left' | 'top' | 'bottom';
 
@@ -63,6 +67,8 @@ export interface ThemeAssetBundle {
     house: Record<Side, string>;
     factory: Record<Side, string>;
     storage: Record<Side, string>;
+    car: string;
+    truck: string;
   };
 }
 
@@ -98,6 +104,8 @@ export const earthAssets: ThemeAssetBundle = {
       top: earthStorageTop,
       bottom: earthStorageBottom,
     },
+    car: earthCar,
+    truck: earthTruck,
   },
 };
 
@@ -133,5 +141,7 @@ export const spaceAssets: ThemeAssetBundle = {
       top: spaceStorageTop,
       bottom: spaceStorageBottom,
     },
+    car: spaceCar,
+    truck: spaceTruck,
   },
 };
