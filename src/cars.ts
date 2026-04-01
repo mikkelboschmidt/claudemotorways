@@ -43,6 +43,8 @@ let spawnTimer = 0;
 let lastGraphVersion = -1;
 let frameCount = 0;
 
+type BuildingCarIndex = Map<number, Set<Car>>;
+
 export function resetSpawnTimer() {
   spawnTimer = SPAWN_INTERVAL - 30;
 }
@@ -112,26 +114,79 @@ function getParkedBuildingId(c: Car): number {
   return c.workBuildingId;       // car at factory/storage (nextState=toHome)
 }
 
-function countParkedCars(buildingId: number): number {
-  let count = 0;
-  for (const c of cars) {
-    if ((c.state === 'parking' || c.state === 'parked' || c.state === 'collecting' || c.state === 'departing') && getParkedBuildingId(c) === buildingId) {
-      count++;
-    }
-  }
-  return count;
+function isBuildingOccupantState(state: Car['state']): boolean {
+  return state === 'parking' || state === 'parked' || state === 'collecting' || state === 'departing';
 }
 
-function getFactoryParkSlot(buildingId: number, car: Car): number {
+function getBuildingCarSet(index: BuildingCarIndex, buildingId: number): Set<Car> {
+  let set = index.get(buildingId);
+  if (!set) {
+    set = new Set<Car>();
+    index.set(buildingId, set);
+  }
+  return set;
+}
+
+function buildBuildingCarIndex(): BuildingCarIndex {
+  const index: BuildingCarIndex = new Map();
+  for (const car of cars) {
+    if (!isBuildingOccupantState(car.state)) continue;
+    getBuildingCarSet(index, getParkedBuildingId(car)).add(car);
+  }
+  return index;
+}
+
+function addBuildingOccupant(index: BuildingCarIndex | undefined, car: Car) {
+  if (!index || !isBuildingOccupantState(car.state)) return;
+  getBuildingCarSet(index, getParkedBuildingId(car)).add(car);
+}
+
+function removeBuildingOccupant(index: BuildingCarIndex | undefined, car: Car) {
+  if (!index || !isBuildingOccupantState(car.state)) return;
+  const set = index.get(getParkedBuildingId(car));
+  if (!set) return;
+  set.delete(car);
+  if (set.size === 0) index.delete(getParkedBuildingId(car));
+}
+
+function countParkedCars(buildingCars: Set<Car> | undefined): number {
+  return buildingCars?.size ?? 0;
+}
+
+function hasAnimatingCar(buildingCars: Set<Car> | undefined, includeTrucks = true): boolean {
+  if (!buildingCars) return false;
+  for (const car of buildingCars) {
+    if (!includeTrucks && car.isTruck) continue;
+    if (car.state === 'parking' || car.state === 'collecting' || car.state === 'departing') return true;
+  }
+  return false;
+}
+
+function hasTruckInside(buildingCars: Set<Car> | undefined, exclude?: Car): boolean {
+  if (!buildingCars) return false;
+  for (const car of buildingCars) {
+    if (car === exclude) continue;
+    if (car.isTruck) return true;
+  }
+  return false;
+}
+
+function hasAnyOccupant(buildingCars: Set<Car> | undefined, exclude?: Car): boolean {
+  if (!buildingCars) return false;
+  for (const car of buildingCars) {
+    if (car !== exclude) return true;
+  }
+  return false;
+}
+
+function getFactoryParkSlot(buildingCars: Set<Car> | undefined, buildingId: number, car: Car): number {
   // Find the farthest available slot. Slot 0 = nearest entrance, higher = deeper.
   const b = buildingById.get(buildingId);
   const maxSlots = b ? b.maxParkedCars : 3;
   const takenSlots = new Set<number>();
-  for (const c of cars) {
+  if (buildingCars) for (const c of buildingCars) {
     if (c === car) continue;
-    if ((c.state === 'parking' || c.state === 'parked' || c.state === 'collecting' || c.state === 'departing') && getParkedBuildingId(c) === buildingId) {
-      takenSlots.add(c.parkSlot);
-    }
+    takenSlots.add(c.parkSlot);
   }
   // Pick the deepest (highest index) available slot
   for (let s = maxSlots - 1; s >= 0; s--) {
@@ -142,10 +197,10 @@ function getFactoryParkSlot(buildingId: number, car: Car): number {
 
 // FIFO: the car that parked earliest gets to depart first.
 // Also block if another car is currently parking or departing (avoid collisions).
-function canDepartBuilding(buildingId: number, car: Car): boolean {
-  for (const c of cars) {
+function canDepartBuilding(buildingCars: Set<Car> | undefined, car: Car): boolean {
+  if (!buildingCars) return true;
+  for (const c of buildingCars) {
     if (c === car) continue;
-    if (!((c.state === 'parking' || c.state === 'parked' || c.state === 'collecting' || c.state === 'departing') && getParkedBuildingId(c) === buildingId)) continue;
     // Block if any car is mid-animation in this building
     if (c.state === 'parking' || c.state === 'collecting' || c.state === 'departing') return false;
     // Block if another parked car arrived earlier (FIFO)
@@ -157,7 +212,7 @@ function canDepartBuilding(buildingId: number, car: Car): boolean {
 // Returns cubic bezier control points for factory parking path.
 // Layout: a driving lane runs along one side of the factory, parking spots on the opposite side.
 // Cars drive into the lane, travel along it, then pull into their spot.
-function getFactoryParkPath(buildingId: number, car: Car): {
+function getFactoryParkPath(buildingCars: Set<Car> | undefined, buildingId: number, car: Car): {
   p0x: number; p0y: number; // start (road)
   p1x: number; p1y: number; // control 1 (into lane)
   p2x: number; p2y: number; // control 2 (above/beside spot)
@@ -167,7 +222,7 @@ function getFactoryParkPath(buildingId: number, car: Car): {
 } {
   const b = buildingById.get(buildingId)!;
   const pos = getBuildingPixelPos(b);
-  const slot = getFactoryParkSlot(buildingId, car);
+  const slot = getFactoryParkSlot(buildingCars, buildingId, car);
   const spotSpacing = CAR_WID + 8;
   const margin = 6;
 
@@ -469,8 +524,13 @@ export function spawnCars() {
     // Spawn regular cars from houses → factories or storages
     if (carReady) {
       const pinSources = [...factories, ...storages];
+      const houseCarCounts = new Map<number, number>();
+      for (const car of cars) {
+        if (car.isTruck) continue;
+        houseCarCounts.set(car.homeBuildingId, (houseCarCounts.get(car.homeBuildingId) ?? 0) + 1);
+      }
       for (const house of houses) {
-        const houseCars = cars.filter(c => c.homeBuildingId === house.id && !c.isTruck).length;
+        const houseCars = houseCarCounts.get(house.id) ?? 0;
         if (houseCars >= MAX_CARS_PER_HOUSE) continue;
 
         const result = pickBestPinSource(house.nodeKey, pinSources);
@@ -481,16 +541,24 @@ export function spawnCars() {
         if (!isEdgeEntryClear(firstEdge.id, result.path[0], result.path[1])) continue;
 
         const car = createCar(house.id, result.building.id, house.color, result.path);
-        if (car) cars.push(car);
+        if (car) {
+          cars.push(car);
+          houseCarCounts.set(house.id, houseCars + 1);
+        }
       }
     }
 
     // Spawn trucks from storages → factories
     if (truckReady) {
+      const storageTruckCounts = new Map<number, number>();
+      for (const car of cars) {
+        if (!car.isTruck) continue;
+        storageTruckCounts.set(car.storageBuildingId, (storageTruckCounts.get(car.storageBuildingId) ?? 0) + 1);
+      }
       for (const storage of storages) {
         if (storage.disabled) continue;
         // Count existing trucks for this storage
-        const truckCount = cars.filter(c => c.isTruck && c.storageBuildingId === storage.id).length;
+        const truckCount = storageTruckCounts.get(storage.id) ?? 0;
         if (truckCount >= MAX_TRUCKS_PER_STORAGE) continue;
 
         // Find a factory that needs pickup (has pins)
@@ -510,6 +578,7 @@ export function spawnCars() {
           truck.nextState = 'toStorage';
           truck.speed = TRUCK_SPEED;
           cars.push(truck);
+          storageTruckCounts.set(storage.id, truckCount + 1);
         }
       }
     }
@@ -999,6 +1068,9 @@ export function updateCars() {
     }
   }
 
+  const buildingCarIndex = buildBuildingCarIndex();
+  ensureNarrowChains();
+
   // Parking/departing angle is now handled inline with bezier tangent below.
 
   // Update parking/parked/departing cars
@@ -1031,11 +1103,12 @@ export function updateCars() {
     } else if (car.state === 'parked') {
       const parkedAtId = getParkedBuildingId(car);
       const parkedBuilding = buildingById.get(parkedAtId);
+      const buildingCars = buildingCarIndex.get(parkedAtId);
       let canDepart = false;
 
       if (car.isTruck && car.nextState === 'toFactory') {
         // Truck at storage — deposit pins then head to factory
-        if (canDepartBuilding(parkedAtId, car)) {
+        if (canDepartBuilding(buildingCars, car)) {
           if (car.pinsCarried > 0 && parkedBuilding) {
             parkedBuilding.pins = Math.min(parkedBuilding.pins + car.pinsCarried, parkedBuilding.maxPins);
             car.pinsCarried = 0;
@@ -1069,7 +1142,7 @@ export function updateCars() {
         } else if (parkedBuilding && parkedBuilding.type === 'storage' && parkedBuilding.pins === 0) {
           // Storage is empty — leave immediately so we don't block the truck
           canDepart = true;
-        } else if (canDepartBuilding(parkedAtId, car)) {
+        } else if (canDepartBuilding(buildingCars, car)) {
           if (parkedBuilding && parkedBuilding.pins > 0 && parkedBuilding.pinCooldown <= 0) {
             // Start collecting animation — pin flies to car
             const pinPos = getPinPixelPos(parkedBuilding, parkedBuilding.pins - 1);
@@ -1107,7 +1180,7 @@ export function updateCars() {
       car.parkProgress += PARK_ANIM_SPEED;
       if (car.parkProgress >= 1) {
         car.parkProgress = 1;
-        startDriving(car, i);
+        startDriving(car, i, buildingCarIndex);
       } else {
         const t = car.parkProgress;
         // Both house and factory departures now use a forward bezier exit path
@@ -1123,6 +1196,56 @@ export function updateCars() {
         }
       }
     }
+  }
+
+  const narrowChainCars = new Map<Set<string>, Car[]>();
+  for (const car of cars) {
+    if (!isDriving(car.state)) continue;
+    const edge = edges.get(car.edgeId);
+    if (!edge || !edge.narrow) continue;
+    const chain = narrowChainMap.get(car.edgeId);
+    if (!chain) continue;
+    let chainCars = narrowChainCars.get(chain);
+    if (!chainCars) {
+      chainCars = [];
+      narrowChainCars.set(chain, chainCars);
+    }
+    chainCars.push(car);
+  }
+  const narrowBlockedCache = new Map<Set<string>, Map<string, boolean>>();
+
+  function isNarrowBlockedCached(edgeId: string, dir: 1 | -1, currentEdgeId?: string): boolean {
+    ensureNarrowChains();
+    const edge = edges.get(edgeId)!;
+    const entryNode = dir === 1 ? edge.fromKey : edge.toKey;
+    const chain = narrowChainMap.get(edgeId);
+    if (!chain) return false;
+    if (currentEdgeId && chain.has(currentEdgeId)) return false;
+
+    const frameLock = chainFrameLock.get(chain);
+    if (frameLock !== undefined && frameLock !== entryNode) return true;
+
+    let cache = narrowBlockedCache.get(chain);
+    if (!cache) {
+      cache = new Map<string, boolean>();
+      narrowBlockedCache.set(chain, cache);
+    }
+    const cached = cache.get(entryNode);
+    if (cached !== undefined) return cached;
+
+    const chainCars = narrowChainCars.get(chain) ?? [];
+    for (const c of chainCars) {
+      const cEdge = edges.get(c.edgeId);
+      if (!cEdge) continue;
+      const carExitNode = c.edgeDir === 1 ? cEdge.toKey : cEdge.fromKey;
+      if (carExitNode === entryNode || reachableThroughNarrow(carExitNode, entryNode, chain, c.edgeId)) {
+        cache.set(entryNode, true);
+        return true;
+      }
+    }
+
+    cache.set(entryNode, false);
+    return false;
   }
 
   // ============ COLLISION AVOIDANCE ============
@@ -1243,7 +1366,7 @@ export function updateCars() {
     const nextDir: 1 | -1 = nextEdge.fromKey === nextNodeKey ? 1 : -1;
 
     // Narrow road locked to opposite direction — brake to stop before entering
-    if (nextEdge.narrow && isNarrowBlocked(nextEdge.id, nextDir, car.edgeId)) {
+    if (nextEdge.narrow && isNarrowBlockedCached(nextEdge.id, nextDir, car.edgeId)) {
       const stopDist = MIN_GAP;
       if (distToEnd <= stopDist) {
         targetSpeeds.set(car.id, 0);
@@ -1439,17 +1562,16 @@ export function updateCars() {
             } else {
               // Check if building is full or has a car mid-animation
               let blocked = false;
+              const targetBuildingCars = buildingCarIndex.get(targetBuildingId);
               if ((targetBuilding.type === 'factory' || targetBuilding.type === 'storage') && targetBuilding.maxParkedCars > 0) {
                 if (targetBuilding.type === 'storage' && !car.isTruck) {
                   // Storage: cars can enter freely (one at a time via animation check),
                   // but trucks don't block car entry
-                  const carAnimating = cars.some(c =>
-                    !c.isTruck && (c.state === 'parking' || c.state === 'collecting' || c.state === 'departing') && getParkedBuildingId(c) === targetBuildingId);
+                  const carAnimating = hasAnimatingCar(targetBuildingCars, false);
                   if (carAnimating) blocked = true;
                 } else {
-                  const parkedCount = countParkedCars(targetBuildingId);
-                  const hasAnimating = cars.some(c =>
-                    (c.state === 'parking' || c.state === 'collecting' || c.state === 'departing') && getParkedBuildingId(c) === targetBuildingId);
+                  const parkedCount = countParkedCars(targetBuildingCars);
+                  const hasAnimating = hasAnimatingCar(targetBuildingCars);
                   if (parkedCount >= targetBuilding.maxParkedCars || hasAnimating) {
                     blocked = true;
                   }
@@ -1458,14 +1580,10 @@ export function updateCars() {
               // Trucks can only enter factories when the parking lot is completely empty
               // Regular cars cannot enter a factory while a truck is inside
               if (targetBuilding.type === 'factory') {
-                const truckInside = cars.some(c => c !== car && c.isTruck &&
-                  (c.state === 'parking' || c.state === 'parked' || c.state === 'collecting' || c.state === 'departing') &&
-                  getParkedBuildingId(c) === targetBuildingId);
+                const truckInside = hasTruckInside(targetBuildingCars, car);
                 if (car.isTruck) {
                   // Truck needs empty lot
-                  const anyoneInside = cars.some(c => c !== car &&
-                    (c.state === 'parking' || c.state === 'parked' || c.state === 'collecting' || c.state === 'departing') &&
-                    getParkedBuildingId(c) === targetBuildingId);
+                  const anyoneInside = hasAnyOccupant(targetBuildingCars, car);
                   if (anyoneInside) blocked = true;
                 } else if (truckInside) {
                   blocked = true;
@@ -1481,9 +1599,11 @@ export function updateCars() {
                 car.parkStartY = car.y;
                 car.parkProgress = 0;
                 car.state = 'parking';
+                addBuildingOccupant(buildingCarIndex, car);
+                const updatedTargetBuildingCars = buildingCarIndex.get(targetBuildingId);
 
                 if (targetBuilding.type === 'factory' || targetBuilding.type === 'storage') {
-                  const bp = getFactoryParkPath(targetBuildingId, car);
+                  const bp = getFactoryParkPath(updatedTargetBuildingCars, targetBuildingId, car);
                   car.parkStartX = bp.p0x;
                   car.parkStartY = bp.p0y;
                   car.parkCx1 = bp.p1x;
@@ -1571,7 +1691,9 @@ function rerouteCar(car: Car) {
   updateCarPosition(car);
 }
 
-function startDriving(car: Car, carIndex: number) {
+function startDriving(car: Car, carIndex: number, buildingCarIndex?: BuildingCarIndex) {
+  removeBuildingOccupant(buildingCarIndex, car);
+
   // Determine origin building (where the car is departing from)
   const parkedAtId = getParkedBuildingId(car);
   const origin = buildingById.get(parkedAtId);
@@ -1634,14 +1756,21 @@ function startDriving(car: Car, carIndex: number) {
   if (!path || path.length < 2) {
     car.state = 'parked';
     car.parkTimer = 60;
+    addBuildingOccupant(buildingCarIndex, car);
     return;
   }
 
   const edge = getEdgeBetween(path[0], path[1]);
-  if (!edge) return;
+  if (!edge) {
+    car.state = 'parked';
+    car.parkTimer = 10;
+    addBuildingOccupant(buildingCarIndex, car);
+    return;
+  }
   if (!isEdgeEntryClear(edge.id, path[0], path[1])) {
     car.state = 'parked';
     car.parkTimer = 10;
+    addBuildingOccupant(buildingCarIndex, car);
     return;
   }
 
