@@ -12,7 +12,7 @@ import { gameSpeed, SPEED_OPTIONS, SPEED_LABELS } from './speed.ts';
 import { highways, highwayEdgeSet, highwayPhase, highwayStartGx, highwayStartGy, highwayPreviewEndPx, highwayPreviewEndPy, computeBezierControls, draggingHighwayId, draggingHandleIndex } from './highway.ts';
 import { musicEnabled } from './music.ts';
 import { cities } from './cities.ts';
-import { roundabouts, roundaboutEdgeSet } from './roundabout.ts';
+import { roundabouts, roundaboutConnectionEdgeSet, roundaboutEdgeSet } from './roundabout.ts';
 import { getHouseSprite, getFactorySprite, getStorageSprite, drawSpriteLayer, PinPlacement } from './sprites.ts';
 
 // SVG icon image cache — keyed by (rawSvg + colorOverride)
@@ -41,9 +41,10 @@ function getIconImage(rawSvg: string, colorOverride?: string): HTMLImageElement 
   if (img) return img;
   let svg = rawSvg;
   if (colorOverride) {
-    // Replace fill on RoofMain (main color) and RoofShadow (darkened)
-    svg = svg.replace(/(id="RoofMain(?:_\d+)?"[^>]*fill=")([^"]*)(")/, `$1${colorOverride}$3`);
-    svg = svg.replace(/(id="RoofShadow(?:_\d+)?"[^>]*fill=")([^"]*)(")/, `$1${darkenHex(colorOverride, 0.7)}$3`);
+    // Replace themed color layers exported from SVGs.
+    svg = svg.replace(/(id="RoofMain(?:_\d+)?"[^>]*fill=")([^"]*)(")/g, `$1${colorOverride}$3`);
+    svg = svg.replace(/(id="RoofShadow(?:_\d+)?"[^>]*fill=")([^"]*)(")/g, `$1${darkenHex(colorOverride, 0.7)}$3`);
+    svg = svg.replace(/(id="RoofDarkest(?:_\d+)?"[^>]*fill=")([^"]*)(")/g, `$1${darkenHex(colorOverride, 0.55)}$3`);
   }
   img = new Image();
   img.src = 'data:image/svg+xml,' + encodeURIComponent(svg);
@@ -265,6 +266,7 @@ export function render(ctx: CanvasRenderingContext2D, width: number, height: num
   drawBuildingGrounds(ctx);
   drawRoads(ctx);
   drawRoundabouts(ctx);
+  drawRoundaboutConnectionNodes(ctx);
   drawCars(ctx, 'road');   // Road cars below buildings
 
   if (preview) {
@@ -317,6 +319,7 @@ function rebuildTrackRenderCache() {
 
     let edgeCount = 0;
     let wideCount = 0;
+    let narrowCount = 0;
     let onlyAngle = 0;
     let hasMultipleDirections = false;
     let ncx = 0;
@@ -334,7 +337,8 @@ function rebuildTrackRenderCache() {
         gotCenter = true;
       }
 
-      if (!e.narrow) wideCount++;
+      if (e.narrow) narrowCount++;
+      else wideCount++;
 
       const isFrom = e.fromKey === key;
       const awayDx = isFrom ? e.tx - e.fx : e.fx - e.tx;
@@ -364,10 +368,12 @@ function rebuildTrackRenderCache() {
 
     const hasBuildingStub = buildingNodeKeys.has(key);
     const isRA = key.startsWith('ra');
+    const hasMixedWidths = wideCount > 0 && narrowCount > 0;
     const needsCircle = hasBuildingStub
       || edgeCount === 1
       || edgeCount >= 3
       || hasMultipleDirections
+      || hasMixedWidths
       || isRA;
 
     if (needsCircle) {
@@ -751,6 +757,35 @@ function drawRoundabouts(ctx: CanvasRenderingContext2D) {
       ctx.stroke();
       ctx.setLineDash([]);
     }
+  }
+}
+
+function drawRoundaboutConnectionNodes(ctx: CanvasRenderingContext2D) {
+  if (roundaboutConnectionEdgeSet.size === 0) return;
+
+  if (theme.roadStyle === 'tracks') {
+    const trackOff = theme.trackSpacing / 2;
+    ctx.strokeStyle = theme.trackColor;
+    ctx.lineWidth = theme.trackWidth;
+    ctx.lineCap = 'round';
+
+    for (const eid of roundaboutConnectionEdgeSet) {
+      const edge = edges.get(eid);
+      if (!edge) continue;
+      ctx.beginPath();
+      ctx.arc(edge.tx, edge.ty, trackOff, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    return;
+  }
+
+  ctx.fillStyle = theme.road;
+  for (const eid of roundaboutConnectionEdgeSet) {
+    const edge = edges.get(eid);
+    if (!edge) continue;
+    ctx.beginPath();
+    ctx.arc(edge.tx, edge.ty, ROAD_W / 2, 0, Math.PI * 2);
+    ctx.fill();
   }
 }
 
@@ -1299,12 +1334,53 @@ function drawCars(ctx: CanvasRenderingContext2D, filter?: 'road' | Set<string>) 
     const carLen = car.isTruck ? TRUCK_LEN : CAR_LEN;
     const carWid = car.isTruck ? TRUCK_WID : CAR_WID;
     const renderPos = getVehicleRenderOrigin(car, carLen);
+    const vehicleSvg = car.isTruck ? themeAssets.sprites.truck : themeAssets.sprites.car;
+    const vehicleImg = getIconImage(vehicleSvg, car.color);
 
     ctx.save();
     ctx.translate(renderPos.x, renderPos.y);
     ctx.rotate(car.angle);
 
     ctx.globalAlpha = 1;
+
+    const drawVehicleCargo = () => {
+      const hh = carWid / 2;
+      if (car.isTruck) {
+        if (car.pinsCarried > 0) {
+          const cabLen = carLen * 0.35;
+          const bedLeft = -carLen / 2 + 2;
+          const bedRight = carLen / 2 - cabLen - 1;
+          const bedW = bedRight - bedLeft;
+          const dotR = 1.5;
+          const cols = 3;
+          const rows = 2;
+          const spacingX = bedW / (cols + 1);
+          const spacingY = (carWid - 4) / (rows + 1);
+          ctx.fillStyle = theme.cargoDots;
+          for (let d = 0; d < car.pinsCarried && d < 6; d++) {
+            const col = d % cols;
+            const row = Math.floor(d / cols);
+            const dx = bedLeft + spacingX * (col + 1);
+            const dy = -hh + 2 + spacingY * (row + 1);
+            ctx.beginPath();
+            ctx.arc(dx, dy, dotR, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      } else if (car.carryingPin) {
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(0, 0, 2.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    };
+
+    if (vehicleImg.complete && vehicleImg.naturalWidth > 0) {
+      ctx.drawImage(vehicleImg, -carLen / 2, -carWid / 2, carLen, carWid);
+      drawVehicleCargo();
+      ctx.restore();
+      continue;
+    }
 
     // Draw vehicles centered on their body midpoint so the visible rotation pivot is centered.
     const hh = carWid / 2;
@@ -1327,39 +1403,13 @@ function drawCars(ctx: CanvasRenderingContext2D, filter?: 'road' | Set<string>) 
       ctx.beginPath();
       ctx.roundRect(carLen / 2 - cabLen, -hh + 1, cabLen - 1, carWid - 2, 2);
       ctx.fill();
-      // Cargo pin dots
-      if (car.pinsCarried > 0) {
-        const bedLeft = -carLen / 2 + 2;
-        const bedRight = carLen / 2 - cabLen - 1;
-        const bedW = bedRight - bedLeft;
-        const dotR = 1.5;
-        const cols = 3;
-        const rows = 2;
-        const spacingX = bedW / (cols + 1);
-        const spacingY = (carWid - 4) / (rows + 1);
-        ctx.fillStyle = theme.cargoDots;
-        for (let d = 0; d < car.pinsCarried && d < 6; d++) {
-          const col = d % cols;
-          const row = Math.floor(d / cols);
-          const dx = bedLeft + spacingX * (col + 1);
-          const dy = -hh + 2 + spacingY * (row + 1);
-          ctx.beginPath();
-          ctx.arc(dx, dy, dotR, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
     } else {
       // Windshield
       ctx.fillStyle = theme.windshield;
       ctx.fillRect(carLen / 2 - 4, -carWid / 2 + 2, 3, carWid - 4);
-
-      if (car.carryingPin) {
-        ctx.fillStyle = '#fff';
-        ctx.beginPath();
-        ctx.arc(0, 0, 2.8, 0, Math.PI * 2);
-        ctx.fill();
-      }
     }
+
+    drawVehicleCargo();
 
     ctx.globalAlpha = 1;
     ctx.restore();

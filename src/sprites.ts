@@ -31,7 +31,7 @@ interface SpriteDef {
   anchorTileY: number;
   widthTiles: number;
   heightTiles: number;
-  colorIds: { id: string; property: 'fill' | 'stroke'; role: 'main' | 'shadow' }[];
+  colorIds: { id: string; property: 'fill' | 'stroke'; role: 'main' | 'shadow' | 'darkest' }[];
   groundIds: string[];
   shadowIds: string[];
   buildingIds: string[];
@@ -45,6 +45,7 @@ const HOUSE_COMMON: Omit<SpriteDef, 'raw'> = {
   colorIds: [
     { id: 'RoofMain', property: 'fill', role: 'main' },
     { id: 'RoofShadow', property: 'fill', role: 'shadow' },
+    { id: 'RoofDarkest', property: 'fill', role: 'darkest' },
   ],
   groundIds: ['Ground'],
   shadowIds: ['Shadows'],
@@ -59,6 +60,7 @@ const FACTORY_COMMON: Omit<SpriteDef, 'raw'> = {
   colorIds: [
     { id: 'RoofMain', property: 'fill', role: 'main' },
     { id: 'RoofShadow', property: 'fill', role: 'shadow' },
+    { id: 'RoofDarkest', property: 'fill', role: 'darkest' },
   ],
   groundIds: ['Ground'],
   shadowIds: ['Shadows'],
@@ -73,6 +75,7 @@ const STORAGE_COMMON: Omit<SpriteDef, 'raw'> = {
   colorIds: [
     { id: 'RoofMain', property: 'fill', role: 'main' },
     { id: 'RoofShadow', property: 'fill', role: 'shadow' },
+    { id: 'RoofDarkest', property: 'fill', role: 'darkest' },
   ],
   groundIds: ['Ground'],
   shadowIds: ['Shadows'],
@@ -149,7 +152,11 @@ function colorize(svgRaw: string, def: SpriteDef, color: string): string {
   svg = svg.replace(/<rect width="\d+" height="\d+" fill="[^"]*"\/>\n?/g, '');
 
   for (const c of def.colorIds) {
-    const fillColor = c.role === 'main' ? color : darkenColor(color, 0.7);
+    const fillColor = c.role === 'main'
+      ? color
+      : c.role === 'shadow'
+        ? darkenColor(color, 0.7)
+        : darkenColor(color, 0.55);
     // Match id="RoofMain" or id="RoofMain_2" etc (Figma appends _N for duplicates)
     const idPattern = `${c.id}(?:_\\d+)?`;
     // Try replacing fill directly on the element with this id (for leaf elements like <rect>)

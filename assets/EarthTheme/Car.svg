@@ -1,0 +1,16 @@
+<svg width="32" height="20" viewBox="0 0 32 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Car" clip-path="url(#clip0_102_426)">
+<rect id="RoofDarkest" x="19" y="16" width="9" height="4" rx="2" fill="#A00000"/>
+<rect id="RoofDarkest_2" x="2" y="16" width="9" height="4" rx="2" fill="#A00000"/>
+<rect id="RoofDarkest_3" x="19" width="9" height="4" rx="2" fill="#A00000"/>
+<rect id="RoofDarkest_4" x="2" width="9" height="4" rx="2" fill="#A00000"/>
+<rect id="RoofMain" x="-1" y="2" width="34" height="16" rx="3" fill="#FF0000"/>
+<rect id="Rectangle 33" x="20" y="4" width="7" height="12" rx="1" fill="#D9D9D9"/>
+<rect id="Rectangle 34" x="2" y="4" width="2" height="12" rx="1" fill="#D9D9D9"/>
+</g>
+<defs>
+<clipPath id="clip0_102_426">
+<rect width="32" height="20" fill="white"/>
+</clipPath>
+</defs>
+</svg>

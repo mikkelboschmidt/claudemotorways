@@ -5,6 +5,7 @@ import { buildings, buildingById, getBuildingCenter, getBuildingPixelPos, getCon
 import { findPath } from './pathfinding.ts';
 import { addScore } from './score.ts';
 import { getHighwayPose, highwayEdgeSet } from './highway.ts';
+import { roundaboutEdgeSet } from './roundabout.ts';
 
 const NARROW_SPEED = CAR_SPEED * 0.7; // slower on narrow single-lane roads
 
@@ -766,6 +767,13 @@ function computeEdgeAngle(edge: { fx: number; fy: number; tx: number; ty: number
 
 // Distance from rear axle to front of car (for look-ahead steering)
 const FRONT_OVERHANG = CAR_LEN * 0.7;
+const ROAD_LANE_LEFT_BIAS = 1;
+const ROUNDABOUT_LANE_OUTSET = 1;
+
+function getLaneHalf(edgeId: string, narrow?: boolean): number {
+  const baseLane = narrow ? 0 : LANE_W / 2 - ROAD_LANE_LEFT_BIAS;
+  return roundaboutEdgeSet.has(edgeId) ? baseLane + ROUNDABOUT_LANE_OUTSET : baseLane;
+}
 
 // Sample a point along the car's path at a given distance ahead.
 // Returns pixel coordinates (center of road, not lane-offset).
@@ -851,7 +859,7 @@ function updateCarPosition(car: Car) {
   if (len > 0) { tdx /= len; tdy /= len; }
   // Smooth lane offset blending at narrow↔regular transitions
   const BLEND_DIST = 15; // pixels over which to blend
-  const baseLane = edge.narrow ? 0 : LANE_W / 2;
+  const baseLane = getLaneHalf(edge.id, edge.narrow);
   let laneHalf = baseLane;
   let lateralRate = 0; // perpendicular pixels per forward pixel (for steering angle)
 
@@ -862,7 +870,7 @@ function updateCarPosition(car: Car) {
   if (distFromStart < BLEND_DIST && car.pathIndex >= 2) {
     const prevEdge = getEdgeBetween(car.path[car.pathIndex - 2], car.path[car.pathIndex - 1]);
     if (prevEdge) {
-      const prevLane = prevEdge.narrow ? 0 : LANE_W / 2;
+      const prevLane = getLaneHalf(prevEdge.id, prevEdge.narrow);
       if (prevLane !== baseLane) {
         const blend = distFromStart / BLEND_DIST;
         laneHalf = prevLane + (baseLane - prevLane) * blend;
@@ -878,7 +886,7 @@ function updateCarPosition(car: Car) {
     if (nextIdx < car.path.length) {
       const nextEdge = getEdgeBetween(nextNodeKey, car.path[nextIdx]);
       if (nextEdge) {
-        const nextLane = nextEdge.narrow ? 0 : LANE_W / 2;
+        const nextLane = getLaneHalf(nextEdge.id, nextEdge.narrow);
         if (nextLane !== baseLane) {
           const blend = distToEnd / BLEND_DIST;
           laneHalf = nextLane + (baseLane - nextLane) * blend;
@@ -913,7 +921,7 @@ function updateCarPosition(car: Car) {
         if (nLen > 0) { ndx /= nLen; ndy /= nLen; }
 
         // Next edge lane offset
-        const nextLane = nextEdge.narrow ? 0 : LANE_W / 2;
+        const nextLane = getLaneHalf(nextEdge.id, nextEdge.narrow);
 
         // P0: point on current edge at CORNER_R before node
         const p0t = car.edgeDir === 1 ? (edge.length - CORNER_R) / edge.length : CORNER_R / edge.length;
@@ -958,7 +966,7 @@ function updateCarPosition(car: Car) {
       const pLen = Math.hypot(pdx, pdy);
       if (pLen > 0) { pdx /= pLen; pdy /= pLen; }
 
-      const prevLane = prevEdge.narrow ? 0 : LANE_W / 2;
+      const prevLane = getLaneHalf(prevEdge.id, prevEdge.narrow);
 
       // P0: point on prev edge at CORNER_R before node
       const p0t = prevDir === 1 ? (prevEdge.length - CORNER_R) / prevEdge.length : CORNER_R / prevEdge.length;
