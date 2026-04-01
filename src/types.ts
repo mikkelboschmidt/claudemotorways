@@ -68,6 +68,7 @@ export interface Car {
   stuckFrames: number; // frames spent at speed 0 (for rerouting)
   nextState: 'toWork' | 'toHome' | 'toStorage' | 'toFactory';
   collectProgress: number; // 0→1 animation of pin flying to car
+  carryingPin: boolean; // regular cars show a roof marker while returning home with a scored pin
   pinSourceX: number; // factory pin origin (world px)
   pinSourceY: number;
   isTruck: boolean; // truck: larger vehicle shuttling pins factory→storage
@@ -83,5 +84,3 @@ export interface RoadPreview {
 }
 
 export type ToolType = 'addRoad' | 'addNarrow' | 'removeRoad' | 'addBuilding' | 'removeBuilding' | 'addHighway' | 'addRoundabout' | 'addStorage' | 'demolish';
-
-export const BUILDING_COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6'];

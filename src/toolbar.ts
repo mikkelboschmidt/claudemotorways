@@ -1,7 +1,8 @@
-import { ToolType, BUILDING_COLORS } from './types.ts';
+import { ToolType } from './types.ts';
+import { ThemeId, getBuildingColors, remapColorToTheme } from './theme.ts';
 
 export let activeTool: ToolType = 'addRoad';
-export let selectedColor: string = BUILDING_COLORS[0];
+export let selectedColor: string = getBuildingColors()[0];
 export let selectedBuildingType: 'house' | 'factory' | 'storage' = 'house';
 export let gearMenuOpen = false;
 export let demoModalOpen = false;
@@ -13,6 +14,13 @@ export function setActiveTool(tool: ToolType) {
 
 export function setSelectedColor(color: string) {
   selectedColor = color;
+}
+
+export function remapSelectedColor(targetThemeId: ThemeId, nextColors: string[] = getBuildingColors()) {
+  selectedColor = remapColorToTheme(selectedColor, targetThemeId);
+  if (!nextColors.some(color => color.toLowerCase() === selectedColor.toLowerCase())) {
+    selectedColor = nextColors[0];
+  }
 }
 
 export function setSelectedBuildingType(type: 'house' | 'factory' | 'storage') {

@@ -5,6 +5,7 @@ import { Building } from './types.ts';
 import { highways, highwayEdgeSet, createHighway, resetHighways } from './highway.ts';
 import { cars } from './cars.ts';
 import { roundabouts, roundaboutEdgeSet, roundaboutConnectionEdgeSet, createRoundabout, resetRoundabouts, addRoundaboutConnectionEdge, getRoundaboutConnections } from './roundabout.ts';
+import { remapColorToTheme } from './theme.ts';
 
 const SAVE_KEY = 'claudemotorways_save';
 
@@ -69,8 +70,9 @@ export function loadFromData(data: SaveData): boolean {
 
   // Restore buildings
   for (const b of data.buildings) {
-    buildings.push(b);
-    buildingById.set(b.id, b);
+    const restored = { ...b, color: remapColorToTheme(b.color) };
+    buildings.push(restored);
+    buildingById.set(restored.id, restored);
   }
 
   // Restore edges (also creates nodes)
