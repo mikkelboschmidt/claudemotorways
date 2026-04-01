@@ -4,7 +4,7 @@ import { edges, getEdgeBetween, graphVersion, nodes } from './graph.ts';
 import { buildings, buildingById, getBuildingCenter, getBuildingPixelPos, getConnectionPixelPos, getPinPixelPos } from './buildings.ts';
 import { findPath } from './pathfinding.ts';
 import { addScore } from './score.ts';
-import { highwayEdgeSet } from './highway.ts';
+import { getHighwayPose, highwayEdgeSet } from './highway.ts';
 
 const NARROW_SPEED = CAR_SPEED * 0.7; // slower on narrow single-lane roads
 
@@ -824,6 +824,19 @@ function samplePathAhead(car: Car, dist: number): { x: number; y: number } | nul
 function updateCarPosition(car: Car) {
   const edge = edges.get(car.edgeId);
   if (!edge) return;
+
+  const highwayPose = highwayEdgeSet.has(car.edgeId) ? getHighwayPose(car.edgeId, car.t, car.edgeDir) : null;
+  if (highwayPose) {
+    car.x = highwayPose.x;
+    car.y = highwayPose.y;
+
+    const desiredAngle = Math.atan2(highwayPose.tangentY, highwayPose.tangentX);
+    const speedRatio = car.speed / getBaseSpeed(car.edgeId, car.isTruck);
+    const lerpRate = 0.06 + 0.94 * speedRatio;
+    car.angle = lerpAngle(car.angle, desiredAngle, lerpRate);
+    car.targetAngle = car.angle;
+    return;
+  }
 
   // Rear axle position on current edge (center of road)
   const rearCenterX = edge.fx + (edge.tx - edge.fx) * car.t;

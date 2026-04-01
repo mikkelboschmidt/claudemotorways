@@ -1,4 +1,4 @@
-import { GRID, HALF, HIGHWAY_ROAD_W } from './constants.ts';
+import { GRID, HALF, HIGHWAY_ROAD_W, ROAD_W } from './constants.ts';
 import { nodeKey, nodes, ensureNodeRaw, addEdgeRaw, removeEdge, bumpGraphVersion } from './graph.ts';
 import { removeCarsForEdge } from './cars.ts';
 import { zoom } from './camera.ts';
@@ -23,6 +23,7 @@ export interface Highway {
 export const highways: Highway[] = [];
 export const highwayEdgeSet: Set<string> = new Set();
 let nextHighwayId = 0;
+const highwayEdgeMeta = new Map<string, { highway: Highway; segmentIndex: number; segmentCount: number; forwardDir: 1 | -1 }>();
 
 // Placement state
 export let highwayPhase: 'idle' | 'pickEnd' = 'idle';
@@ -45,6 +46,23 @@ export function setDraggingHandleIndex(index: 1 | 2) { draggingHandleIndex = ind
 function cubicBezier(t: number, p0: number, p1: number, p2: number, p3: number): number {
   const u = 1 - t;
   return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3;
+}
+
+function cubicBezierDerivative(t: number, p0: number, p1: number, p2: number, p3: number): number {
+  const u = 1 - t;
+  return 3 * u * u * (p1 - p0) + 6 * u * t * (p2 - p1) + 3 * t * t * (p3 - p2);
+}
+
+function smoothstep(x: number): number {
+  return x * x * (3 - 2 * x);
+}
+
+function taperHalfW(t: number, baseHalfW: number): number {
+  const roadHalfW = ROAD_W / 2;
+  const taperT = 0.15;
+  if (t < taperT) return roadHalfW + (baseHalfW - roadHalfW) * smoothstep(t / taperT);
+  if (t > 1 - taperT) return roadHalfW + (baseHalfW - roadHalfW) * smoothstep((1 - t) / taperT);
+  return baseHalfW;
 }
 
 // Approximate bezier arc length by sampling
@@ -133,6 +151,12 @@ function buildEdges(hw: Highway) {
     if (edge) {
       edgeIds.push(edge.id);
       highwayEdgeSet.add(edge.id);
+      highwayEdgeMeta.set(edge.id, {
+        highway: hw,
+        segmentIndex: i,
+        segmentCount: N,
+        forwardDir: edge.fromKey === nodeKeys[i] ? 1 : -1,
+      });
     }
   }
 
@@ -144,6 +168,7 @@ function clearEdges(hw: Highway) {
   for (const eid of hw.edgeIds) {
     removeCarsForEdge(eid);
     highwayEdgeSet.delete(eid);
+    highwayEdgeMeta.delete(eid);
     removeEdge(eid);
   }
   // Remove intermediate nodes
@@ -239,8 +264,44 @@ export function findHighwayAtPixel(px: number, py: number): Highway | null {
 export function resetHighways() {
   highways.length = 0;
   highwayEdgeSet.clear();
+  highwayEdgeMeta.clear();
   nextHighwayId = 0;
   highwayPhase = 'idle';
   draggingHighwayId = -1;
   draggingHandleIndex = 1;
+}
+
+export function getHighwayPose(edgeId: string, edgeT: number, edgeDir: 1 | -1) {
+  const meta = highwayEdgeMeta.get(edgeId);
+  if (!meta) return null;
+
+  const { highway: hw, segmentIndex, segmentCount, forwardDir } = meta;
+  const segmentT = forwardDir === 1 ? edgeT : 1 - edgeT;
+  const globalT = (segmentIndex + segmentT) / segmentCount;
+  const clampedT = Math.max(0, Math.min(1, globalT));
+
+  const baseX = cubicBezier(clampedT, hw.p0x, hw.p1x, hw.p2x, hw.p3x);
+  const baseY = cubicBezier(clampedT, hw.p0y, hw.p1y, hw.p2y, hw.p3y);
+
+  let dx = cubicBezierDerivative(clampedT, hw.p0x, hw.p1x, hw.p2x, hw.p3x);
+  let dy = cubicBezierDerivative(clampedT, hw.p0y, hw.p1y, hw.p2y, hw.p3y);
+  const alongForward = edgeDir === forwardDir;
+  if (!alongForward) {
+    dx = -dx;
+    dy = -dy;
+  }
+
+  const len = Math.hypot(dx, dy) || 1;
+  const tx = dx / len;
+  const ty = dy / len;
+  const laneOffset = taperHalfW(clampedT, HIGHWAY_ROAD_W / 2) / 2;
+
+  return {
+    x: baseX - ty * laneOffset,
+    y: baseY + tx * laneOffset,
+    tangentX: tx,
+    tangentY: ty,
+    laneOffset,
+    globalT: clampedT,
+  };
 }
