@@ -22,6 +22,7 @@ import earthStorageTop from '../assets/EarthTheme/Storage-Top.svg?raw';
 import earthStorageBottom from '../assets/EarthTheme/Storage-Bottom.svg?raw';
 import earthCar from '../assets/EarthTheme/Car.svg?raw';
 import earthTruck from '../assets/EarthTheme/Truck.svg?raw';
+import earthColors from '../assets/EarthTheme/Colors.svg?raw';
 
 import spaceSplashUrl from '../assets/SpaceTheme/splashscreen.png';
 import spaceIconRoadNormal from '../assets/SpaceTheme/Icon-Road-Normal.svg?raw';
@@ -47,6 +48,7 @@ import spaceStorageTop from '../assets/SpaceTheme/Storage-Top.svg?raw';
 import spaceStorageBottom from '../assets/SpaceTheme/Storage-Bottom.svg?raw';
 import spaceCar from '../assets/SpaceTheme/Car.svg?raw';
 import spaceTruck from '../assets/SpaceTheme/Truck.svg?raw';
+import spaceColors from '../assets/SpaceTheme/Colors.svg?raw';
 
 type Side = 'right' | 'left' | 'top' | 'bottom';
 
@@ -69,6 +71,34 @@ export interface ThemeAssetBundle {
     storage: Record<Side, string>;
     car: string;
     truck: string;
+  };
+}
+
+export interface ThemeColorBundle {
+  buildingColors: string[];
+  ground: string;
+  road: string;
+}
+
+function extractFill(svg: string, id: string): string | null {
+  const escapedId = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = svg.match(new RegExp(`<[^>]*id="${escapedId}"[^>]*fill="([^"]+)"`, 'i'));
+  return match?.[1] ?? null;
+}
+
+function parseThemeColors(svg: string): ThemeColorBundle | null {
+  const buildingColors = Array.from({ length: 5 }, (_, index) => extractFill(svg, `House_${index + 1}`));
+  const road = extractFill(svg, 'Roads');
+  const ground = extractFill(svg, 'Ground');
+
+  if (buildingColors.some((color): color is null => color == null) || !road || !ground) {
+    return null;
+  }
+
+  return {
+    buildingColors: buildingColors as string[],
+    ground,
+    road,
   };
 }
 
@@ -109,6 +139,8 @@ export const earthAssets: ThemeAssetBundle = {
   },
 };
 
+export const earthThemeColors = parseThemeColors(earthColors);
+
 export const spaceAssets: ThemeAssetBundle = {
   splashUrl: spaceSplashUrl,
   icons: {
@@ -145,3 +177,5 @@ export const spaceAssets: ThemeAssetBundle = {
     truck: spaceTruck,
   },
 };
+
+export const spaceThemeColors = parseThemeColors(spaceColors);

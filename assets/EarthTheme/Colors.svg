@@ -1,0 +1,13 @@
+<svg width="496" height="85" viewBox="0 0 496 85" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Colors">
+<rect x="0.5" y="0.5" width="495" height="84" fill="#397E56"/>
+<rect x="0.5" y="0.5" width="495" height="84" stroke="white"/>
+<rect id="House_2" x="86" y="20" width="45" height="45" fill="#FF9700"/>
+<rect id="House_1" x="32" y="20" width="45" height="45" fill="#FB382F"/>
+<rect id="House_3" x="140" y="20" width="45" height="45" fill="#009BE1"/>
+<rect id="House_4" x="194" y="20" width="45" height="45" fill="#00D36F"/>
+<rect id="House_5" x="248" y="20" width="45" height="45" fill="#A655BB"/>
+<rect id="Roads" x="336" y="20" width="45" height="45" fill="#555555"/>
+<rect id="Ground" x="390.5" y="20.5" width="44" height="44" fill="#397E56" stroke="white"/>
+</g>
+</svg>
