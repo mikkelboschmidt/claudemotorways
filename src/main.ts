@@ -80,10 +80,12 @@ canvas.addEventListener('pointerdown', (e) => {
   if (demoModalOpen) {
     if (hitRect(px, py, layout.demoOpenButton)) {
       closeDemoModal();
+      endRun('reset');
       loadCity('simple-city');
       startRun('demo-city', 'simple-city');
     } else if (hitRect(px, py, layout.demoDismissButton)) {
       closeDemoModal();
+      endRun('reset');
       loadFromData({ buildings: [], edges: [], score: 0, nextBuildingId: 0 });
       saveGame();
       startRun('fresh');
@@ -123,9 +125,6 @@ canvas.addEventListener('pointerdown', (e) => {
   if (gearMenuOpen) {
     if (hitRect(px, py, layout.resetButton)) {
       closeGearMenu();
-      endRun('reset');
-      loadFromData({ buildings: [], edges: [], score: 0, nextBuildingId: 0 });
-      saveGame();
       showDemoModal();
       e.stopImmediatePropagation();
       return;
