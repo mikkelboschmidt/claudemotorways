@@ -66,6 +66,14 @@
       var form = document.getElementById('password-form');
       var input = document.getElementById('password-input');
       var error = document.getElementById('password-error');
+      var hostname = window.location.hostname.toLowerCase();
+      var requiresPassword = hostname === 'loomways.com' || hostname === 'www.loomways.com';
+
+      if (!requiresPassword) {
+        gate.style.display = 'none';
+        return;
+      }
+
       if (sessionStorage.getItem('lw_unlocked') === '1') {
         gate.style.display = 'none';
         return;

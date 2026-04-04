@@ -2,7 +2,7 @@ import { buildings, updatePins } from './buildings.ts';
 import { initRoadInput, roadPreview, cancelRoadDrag, setTouchCountGetter } from './roads.ts';
 import { spawnCars, updateCars, cars } from './cars.ts';
 import { render, getToolbarLayout } from './renderer.ts';
-import { setActiveTool, setSelectedColor, selectedColor, setSelectedBuildingType, toggleGearMenu, closeGearMenu, gearMenuOpen, demoModalOpen, showDemoModal, closeDemoModal, cityModalOpen, showCityModal, closeCityModal, remapSelectedColor } from './toolbar.ts';
+import { setActiveTool, setSelectedColor, selectedColor, setSelectedBuildingType, toggleGearMenu, closeGearMenu, gearMenuOpen, demoModalOpen, showDemoModal, closeDemoModal, cityModalOpen, showCityModal, closeCityModal } from './toolbar.ts';
 import { saveGame, loadGame, loadFromData, downloadSave, uploadSave } from './save.ts';
 import { tickPathfindingFrame } from './pathfinding.ts';
 import { gameSpeed, setGameSpeed } from './speed.ts';
@@ -11,7 +11,7 @@ import { toggleMusic, ensureMusicStarted } from './music.ts';
 import { fetchCities, loadCity } from './cities.ts';
 import { startRun, endRun, updatePeaks } from './run.ts';
 import { score } from './score.ts';
-import { currentThemeId, getBuildingColors, remapColorToTheme, setThemeById, theme, ThemeId } from './theme.ts';
+import { getBuildingColors, theme } from './theme.ts';
 
 // Apply theme's page background at startup
 document.body.style.background = theme.pageBg;
@@ -65,15 +65,6 @@ let activeTouchCount = 0;
 // Helper: check if point is inside rect
 function hitRect(px: number, py: number, r: { x: number; y: number; w: number; h: number }): boolean {
   return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
-}
-
-function remapCityColors(targetThemeId: ThemeId) {
-  for (const building of buildings) {
-    building.color = remapColorToTheme(building.color, targetThemeId);
-  }
-  for (const car of cars) {
-    car.color = remapColorToTheme(car.color, targetThemeId);
-  }
 }
 
 // Toolbar click handling — floating buttons
@@ -143,19 +134,6 @@ canvas.addEventListener('pointerdown', (e) => {
       toggleMusic();
       e.stopImmediatePropagation();
       return;
-    }
-    for (const btn of layout.themeButtons) {
-      if (hitRect(px, py, btn)) {
-        if (btn.themeId !== currentThemeId) {
-          setThemeById(btn.themeId);
-          const nextColors = [...getBuildingColors()];
-          remapCityColors(btn.themeId);
-          remapSelectedColor(btn.themeId, nextColors);
-          saveGame();
-        }
-        e.stopImmediatePropagation();
-        return;
-      }
     }
     if (hitRect(px, py, layout.saveButton)) {
       downloadSave();
