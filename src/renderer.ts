@@ -18,6 +18,7 @@ import { getHouseSprite, getFactorySprite, getStorageSprite, drawSpriteLayer, Pi
 // SVG icon image cache — keyed by (rawSvg + colorOverride)
 const iconCache = new Map<string, HTMLImageElement>();
 const splashCache = new Map<string, HTMLImageElement>();
+const pinGlowCache = new Map<string, HTMLCanvasElement>();
 const trackWideNodeKeys = new Set<string>();
 const trackConnectorCache: { x: number; y: number; wide: boolean }[] = [];
 let trackCacheGraphVersion = -1;
@@ -71,6 +72,40 @@ function getSplashImage(): HTMLImageElement {
   img.src = url;
   splashCache.set(url, img);
   return img;
+}
+
+function getPinGlowSprite(color: string): HTMLCanvasElement {
+  let sprite = pinGlowCache.get(color);
+  if (sprite) return sprite;
+
+  const size = 20;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return canvas;
+
+  const cx = size / 2;
+  const cy = size / 2;
+  const outer = size * 0.45;
+  const inner = size * 0.14;
+  const glow = ctx.createRadialGradient(cx, cy, inner, cx, cy, outer);
+  glow.addColorStop(0, 'rgba(255,255,255,0.95)');
+  glow.addColorStop(0.2, 'rgba(255,255,255,0.75)');
+  glow.addColorStop(0.45, colorToRgba(color, 0.7));
+  glow.addColorStop(1, colorToRgba(color, 0));
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(cx, cy, outer, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.arc(cx, cy, 1.6, 0, Math.PI * 2);
+  ctx.fill();
+
+  pinGlowCache.set(color, canvas);
+  return canvas;
 }
 
 function fract(n: number): number {
@@ -1142,7 +1177,7 @@ function drawBuildingBodies(ctx: CanvasRenderingContext2D) {
         drawStorage(ctx, b, pos);
       }
       if (b.maxPins > 0) {
-        drawBuildingDonut(ctx, pos.x, pos.y, pos.w, pos.h, b.pins, b.maxPins, 0, 'storage', sprite?.pinPlacement ?? null);
+        drawStoragePinGrid(ctx, pos.x, pos.y, pos.w, pos.h, b.pins, b.maxPins, b.pinCooldown, color, sprite?.pinPlacement ?? null);
       }
     }
   }
@@ -1288,6 +1323,13 @@ function darkenColor(hex: string, amount: number): string {
   return `rgb(${Math.round(r * (1 - amount))},${Math.round(g * (1 - amount))},${Math.round(b * (1 - amount))})`;
 }
 
+function colorToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
 function drawBuildingDonut(ctx: CanvasRenderingContext2D, fx: number, fy: number, fw: number, fh: number, pins: number, maxPins: number, pinCooldown: number, type: 'factory' | 'storage', pinPlacement: PinPlacement | null) {
   if (maxPins === 0) return;
 
@@ -1345,6 +1387,74 @@ function drawBuildingDonut(ctx: CanvasRenderingContext2D, fx: number, fy: number
   }
 }
 
+function drawStoragePinGrid(
+  ctx: CanvasRenderingContext2D,
+  fx: number,
+  fy: number,
+  fw: number,
+  fh: number,
+  pins: number,
+  maxPins: number,
+  pinCooldown: number,
+  color: string,
+  pinPlacement: PinPlacement | null,
+) {
+  if (maxPins === 0) return;
+
+  const gridCols = 5;
+  const gridRows = 5;
+  const maxCells = gridCols * gridRows;
+  const activePins = Math.max(0, Math.min(Math.min(maxPins, maxCells), pins));
+  const spawnT = activePins > 0 && pinCooldown > 0 ? 1 - pinCooldown / PIN_COOLDOWN : 1;
+  const inactiveColor = darkenColor(color, 0.55);
+
+  let areaX: number;
+  let areaY: number;
+  let areaW: number;
+  let areaH: number;
+
+  if (pinPlacement) {
+    areaX = fx + pinPlacement.x;
+    areaY = fy + pinPlacement.y;
+    areaW = pinPlacement.w;
+    areaH = pinPlacement.h;
+  } else {
+    areaW = Math.min(18, fw - 12);
+    areaH = Math.min(18, fh - 12);
+    areaX = fx + (fw - areaW) / 2;
+    areaY = fy + (fh - areaH) / 2;
+  }
+
+  const gap = Math.max(1, Math.floor(Math.min(areaW, areaH) / 12));
+  const squareSize = Math.max(2, Math.floor(Math.min(
+    (areaW - gap * (gridCols - 1)) / gridCols,
+    (areaH - gap * (gridRows - 1)) / gridRows,
+  )));
+  const totalW = squareSize * gridCols + gap * (gridCols - 1);
+  const totalH = squareSize * gridRows + gap * (gridRows - 1);
+  const startX = areaX + (areaW - totalW) / 2;
+  const startY = areaY + (areaH - totalH) / 2;
+
+  for (let i = 0; i < maxCells; i++) {
+    const col = i % gridCols;
+    const row = Math.floor(i / gridCols);
+    const x = startX + col * (squareSize + gap);
+    const y = startY + row * (squareSize + gap);
+    const isActive = i < activePins;
+    const isNewest = i === activePins - 1 && pinCooldown > 0;
+    ctx.globalAlpha = isNewest ? Math.max(0, Math.min(1, spawnT)) : 1;
+    ctx.fillStyle = isActive ? '#FFFFFF' : inactiveColor;
+    ctx.fillRect(x, y, squareSize, squareSize);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawCarriedPinGlow(ctx: CanvasRenderingContext2D, glowColor: string) {
+  const sprite = getPinGlowSprite(glowColor);
+  const size = sprite.width;
+  ctx.drawImage(sprite, -size / 2, -size / 2, size, size);
+}
+
 function drawCars(ctx: CanvasRenderingContext2D, filter?: 'road' | Set<string>) {
   for (const car of cars) {
     if (filter === 'road') {
@@ -1389,10 +1499,7 @@ function drawCars(ctx: CanvasRenderingContext2D, filter?: 'road' | Set<string>) 
           }
         }
       } else if (car.carryingPin) {
-        ctx.fillStyle = '#fff';
-        ctx.beginPath();
-        ctx.arc(0, 0, 2.8, 0, Math.PI * 2);
-        ctx.fill();
+        drawCarriedPinGlow(ctx, car.color);
       }
     };
 

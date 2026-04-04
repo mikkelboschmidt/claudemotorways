@@ -315,7 +315,7 @@
       "w": 2,
       "h": 2,
       "pins": 0,
-      "maxPins": 16,
+      "maxPins": 25,
       "maxParkedCars": 1,
       "pinCooldown": 0,
       "disabled": false
@@ -395,7 +395,7 @@
       "w": 2,
       "h": 2,
       "pins": 0,
-      "maxPins": 16,
+      "maxPins": 25,
       "maxParkedCars": 1,
       "pinCooldown": 0,
       "disabled": false
