@@ -1435,16 +1435,19 @@ function drawStoragePinGrid(
   const startX = areaX + (areaW - totalW) / 2;
   const startY = areaY + (areaH - totalH) / 2;
 
+  const radius = squareSize / 2;
   for (let i = 0; i < maxCells; i++) {
     const col = i % gridCols;
     const row = Math.floor(i / gridCols);
-    const x = startX + col * (squareSize + gap);
-    const y = startY + row * (squareSize + gap);
+    const cx = startX + col * (squareSize + gap) + radius;
+    const cy = startY + row * (squareSize + gap) + radius;
     const isActive = i < activePins;
     const isNewest = i === activePins - 1 && pinCooldown > 0;
     ctx.globalAlpha = isNewest ? Math.max(0, Math.min(1, spawnT)) : 1;
-    ctx.fillStyle = isActive ? '#FFFFFF' : inactiveColor;
-    ctx.fillRect(x, y, squareSize, squareSize);
+    ctx.fillStyle = isActive ? '#FFFFFF' : 'rgba(255,255,255,0.18)';
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fill();
   }
   ctx.globalAlpha = 1;
 }
@@ -1925,15 +1928,15 @@ function drawToolbar(ctx: CanvasRenderingContext2D, width: number, height: numbe
   // Current selection label — bottom left
   let label = '';
   switch (activeTool) {
-    case 'addRoad': label = 'Road'; break;
-    case 'addNarrow': label = 'Narrow Road'; break;
-    case 'addHighway': label = 'Highway'; break;
-    case 'addRoundabout': label = 'Roundabout'; break;
+    case 'addRoad': label = currentThemeId === 'space' ? 'Dual Rail' : 'Road'; break;
+    case 'addNarrow': label = currentThemeId === 'space' ? 'Single Rail' : 'Narrow Road'; break;
+    case 'addHighway': label = currentThemeId === 'space' ? 'High-Speed Rail' : 'Highway'; break;
+    case 'addRoundabout': label = currentThemeId === 'space' ? 'Rail Junction' : 'Roundabout'; break;
     case 'demolish': label = 'Demolish'; break;
     case 'addBuilding':
       switch (selectedBuildingType) {
-        case 'house': label = 'Residential'; break;
-        case 'factory': label = 'Factory'; break;
+        case 'house': label = currentThemeId === 'space' ? 'Processing Unit' : 'Residential'; break;
+        case 'factory': label = currentThemeId === 'space' ? 'Mine' : 'Factory'; break;
         case 'storage': label = 'Storage'; break;
       }
       break;
