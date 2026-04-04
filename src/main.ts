@@ -133,6 +133,8 @@ canvas.addEventListener('pointerdown', (e) => {
     if (hitRect(px, py, layout.resetButton)) {
       closeGearMenu();
       endRun('reset');
+      loadFromData({ buildings: [], edges: [], score: 0, nextBuildingId: 0 });
+      saveGame();
       showDemoModal();
       e.stopImmediatePropagation();
       return;

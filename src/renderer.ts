@@ -1130,13 +1130,9 @@ function drawBuildingBodies(ctx: CanvasRenderingContext2D) {
       const sprite = getFactorySprite(b.connectionSide, color);
       if (sprite) {
         drawSpriteLayer(ctx, sprite.building, sprite, pos.x, pos.y);
+        drawFactoryPins(ctx, pos.x, pos.y, sprite.pinRects, b.pins, b.pinCooldown, b.disabled, color);
       } else {
         drawFactory(ctx, b, pos);
-      }
-      // Draw pins on top of building layer
-      if (!b.disabled && b.maxPins > 0) {
-        const factorySprite = getFactorySprite(b.connectionSide, color);
-        drawBuildingDonut(ctx, pos.x, pos.y, pos.w, pos.h, b.pins, b.maxPins, b.pinCooldown, 'factory', factorySprite?.pinPlacement ?? null);
       }
     } else if (b.type === 'storage') {
       const sprite = getStorageSprite(b.connectionSide, color);
@@ -1206,9 +1202,34 @@ function drawFactory(ctx: CanvasRenderingContext2D, b: typeof buildings[0], pos:
   ctx.roundRect(bx, by, bw, bh, 2);
   ctx.stroke();
 
-  // Draw pins inside the building area (skip if disabled)
-  if (!b.disabled) {
-    drawBuildingDonut(ctx, bx, by, bw, bh, b.pins, b.maxPins, b.pinCooldown, 'factory', null);
+}
+
+function drawFactoryPins(
+  ctx: CanvasRenderingContext2D,
+  buildingX: number,
+  buildingY: number,
+  pinRects: { x: number; y: number; w: number; h: number }[],
+  pins: number,
+  pinCooldown: number,
+  disabled: boolean,
+  color: string,
+) {
+  if (disabled || pinRects.length === 0) return;
+
+  const activePins = Math.max(0, Math.min(pinRects.length, pins));
+  const spawnT = activePins > 0 && pinCooldown > 0 ? 1 - pinCooldown / PIN_COOLDOWN : 1;
+  const darkestColor = darkenColor(color, 0.55);
+
+  for (let i = 0; i < pinRects.length; i++) {
+    const rect = pinRects[i];
+    const isActive = i < activePins;
+    const isNewest = i === activePins - 1 && pinCooldown > 0;
+
+    ctx.save();
+    ctx.globalAlpha = isNewest ? Math.max(0, Math.min(1, spawnT)) : 1;
+    ctx.fillStyle = isActive ? '#FFFFFF' : darkestColor;
+    ctx.fillRect(buildingX + rect.x, buildingY + rect.y, rect.w, rect.h);
+    ctx.restore();
   }
 }
 

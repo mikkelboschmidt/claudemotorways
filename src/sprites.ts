@@ -14,6 +14,13 @@ export interface PinPlacement {
   h: number;
 }
 
+export interface PinRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 export interface LayeredSprite {
   ground: SpriteLayer;   // drawn below roads/cars
   shadow: SpriteLayer;   // drawn above cars, below buildings
@@ -23,6 +30,7 @@ export interface LayeredSprite {
   width: number;
   height: number;
   pinPlacement: PinPlacement | null;
+  pinRects: PinRect[];
 }
 
 interface SpriteDef {
@@ -46,6 +54,9 @@ const HOUSE_COMMON: Omit<SpriteDef, 'raw'> = {
     { id: 'RoofMain', property: 'fill', role: 'main' },
     { id: 'RoofShadow', property: 'fill', role: 'shadow' },
     { id: 'RoofDarkest', property: 'fill', role: 'darkest' },
+    { id: 'BuildingMain', property: 'fill', role: 'main' },
+    { id: 'BuildingShadow', property: 'fill', role: 'shadow' },
+    { id: 'BuildingDarkest', property: 'fill', role: 'darkest' },
   ],
   groundIds: ['Ground'],
   shadowIds: ['Shadows'],
@@ -61,6 +72,9 @@ const FACTORY_COMMON: Omit<SpriteDef, 'raw'> = {
     { id: 'RoofMain', property: 'fill', role: 'main' },
     { id: 'RoofShadow', property: 'fill', role: 'shadow' },
     { id: 'RoofDarkest', property: 'fill', role: 'darkest' },
+    { id: 'BuildingMain', property: 'fill', role: 'main' },
+    { id: 'BuildingShadow', property: 'fill', role: 'shadow' },
+    { id: 'BuildingDarkest', property: 'fill', role: 'darkest' },
   ],
   groundIds: ['Ground'],
   shadowIds: ['Shadows'],
@@ -76,6 +90,9 @@ const STORAGE_COMMON: Omit<SpriteDef, 'raw'> = {
     { id: 'RoofMain', property: 'fill', role: 'main' },
     { id: 'RoofShadow', property: 'fill', role: 'shadow' },
     { id: 'RoofDarkest', property: 'fill', role: 'darkest' },
+    { id: 'BuildingMain', property: 'fill', role: 'main' },
+    { id: 'BuildingShadow', property: 'fill', role: 'shadow' },
+    { id: 'BuildingDarkest', property: 'fill', role: 'darkest' },
   ],
   groundIds: ['Ground'],
   shadowIds: ['Shadows'],
@@ -216,6 +233,25 @@ function extractPinPlacement(svgRaw: string, def: SpriteDef): PinPlacement | nul
   };
 }
 
+function extractFactoryPinRects(svgRaw: string, def: SpriteDef): PinRect[] {
+  const anchorSvgX = def.anchorTileX * GRID;
+  const anchorSvgY = def.anchorTileY * GRID;
+  const rects: PinRect[] = [];
+
+  for (let pin = 1; pin <= 6; pin++) {
+    const match = svgRaw.match(new RegExp(`<rect[^>]*id="Pin_${pin}(?:_\\d+)?"[^>]*x="([^"]*)"[^>]*y="([^"]*)"[^>]*width="([^"]*)"[^>]*height="([^"]*)"[^>]*\/?>`, 'i'));
+    if (!match) continue;
+    rects.push({
+      x: parseFloat(match[1]) - anchorSvgX,
+      y: parseFloat(match[2]) - anchorSvgY,
+      w: parseFloat(match[3]),
+      h: parseFloat(match[4]),
+    });
+  }
+
+  return rects;
+}
+
 // Cache: "type:side:color" → LayeredSprite
 const spriteCache = new Map<string, LayeredSprite>();
 
@@ -235,6 +271,7 @@ function buildSprite(def: SpriteDef, color: string): LayeredSprite {
     width: def.widthTiles * GRID,
     height: def.heightTiles * GRID,
     pinPlacement: extractPinPlacement(def.raw, def),
+    pinRects: extractFactoryPinRects(def.raw, def),
   };
 }
 

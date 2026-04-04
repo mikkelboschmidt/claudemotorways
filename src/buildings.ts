@@ -279,17 +279,27 @@ export function getBuildingCenter(b: Building): { x: number; y: number } {
   };
 }
 
-// Get the pixel position of the donut center for a building (used for collecting animation source)
-export function getPinPixelPos(b: Building, _pinIndex: number): { x: number; y: number } {
+// Get the pixel position of a visible pin on the building for collecting animation source.
+export function getPinPixelPos(b: Building, pinIndex: number): { x: number; y: number } {
   const pos = getBuildingPixelPos(b);
 
-  // Try to get pin placement from sprite
   const sprite = b.type === 'storage'
     ? getStorageSprite(b.connectionSide, b.color)
     : b.type === 'factory'
       ? getFactorySprite(b.connectionSide, b.color)
       : null;
   const pp = sprite?.pinPlacement;
+
+  if (b.type === 'factory') {
+    const clampedIndex = Math.max(0, Math.min(5, pinIndex));
+    const pinRect = sprite?.pinRects[clampedIndex];
+    if (pinRect) {
+      return {
+        x: pos.x + pinRect.x + pinRect.w / 2,
+        y: pos.y + pinRect.y + pinRect.h / 2,
+      };
+    }
+  }
 
   if (pp) {
     return {
