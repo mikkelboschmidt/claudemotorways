@@ -1,5 +1,5 @@
 import { buildings, buildingById, initBuildingNodes, setNextBuildingId } from './buildings.ts';
-import { nodes, edges, addEdge, parseKey } from './graph.ts';
+import { nodes, edges, addEdge, parseKey, bumpGraphVersion } from './graph.ts';
 import { score, setScore } from './score.ts';
 import { Building } from './types.ts';
 import { highways, highwayEdgeSet, createHighway, resetHighways } from './highway.ts';
@@ -107,6 +107,7 @@ export function loadFromData(data: SaveData): boolean {
 
   setScore(data.score ?? 0);
   initBuildingNodes();
+  bumpGraphVersion();
 
   if (data.nextBuildingId) {
     setNextBuildingId(data.nextBuildingId);

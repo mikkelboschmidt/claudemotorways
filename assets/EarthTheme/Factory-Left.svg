@@ -17,5 +17,13 @@
 <circle id="RoofMain_2" cx="87" cy="61" r="13" fill="#FF0000"/>
 <circle id="RoofShadow_4" cx="87" cy="61" r="8" fill="#CC0000"/>
 </g>
+<g id="Pins">
+<rect id="Pin_1" x="142" y="69" width="9" height="2" fill="#A00000"/>
+<rect id="Pin_2" x="142" y="65" width="9" height="2" fill="#A00000"/>
+<rect id="Pin_3" x="142" y="61" width="9" height="2" fill="#A00000"/>
+<rect id="Pin_4" x="142" y="57" width="9" height="2" fill="#A00000"/>
+<rect id="Pin_5" x="142" y="53" width="9" height="2" fill="#A00000"/>
+<rect id="Pin_6" x="142" y="49" width="9" height="2" fill="#A00000"/>
+</g>
 </g>
 </svg>
