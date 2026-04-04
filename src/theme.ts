@@ -395,8 +395,6 @@ export const lunarTheme: GameTheme = {
   cityEmptyText: 'rgba(255,255,255,0.5)',
 };
 
-const THEME_STORAGE_KEY = 'claudemotorways_theme';
-
 const themeConfigs: Record<ThemeId, ThemeConfig> = {
   earth: { id: 'earth', label: 'Earth', palette: applyThemeColorsFromSvg(classicTheme, earthThemeColors), assets: earthAssets },
   space: { id: 'space', label: 'Space', palette: applyThemeColorsFromSvg(lunarTheme, spaceThemeColors), assets: spaceAssets },
@@ -424,23 +422,32 @@ function getDefaultThemeId(): ThemeId {
   return getDefaultThemeIdForHostname(window.location.hostname);
 }
 
-function readStoredThemeId(): ThemeId {
-  try {
-    if (typeof localStorage === 'undefined') return getDefaultThemeId();
-    const stored = localStorage.getItem(THEME_STORAGE_KEY);
-    if (stored === 'earth' || stored === 'space') return stored;
-  } catch {
-    // localStorage may be unavailable in some embedded contexts
-  }
+function getThemeIdFromHash(hash: string): ThemeId | null {
+  const normalizedHash = hash.toLowerCase();
+  if (normalizedHash === '#earth') return 'earth';
+  if (normalizedHash === '#space') return 'space';
+  return null;
+}
+
+function getInitialThemeId(): ThemeId {
+  if (typeof window === 'undefined') return 'space';
+  const hashThemeId = getThemeIdFromHash(window.location.hash);
+  if (hashThemeId) return hashThemeId;
   return getDefaultThemeId();
 }
 
-function persistThemeId(themeId: ThemeId) {
+function persistThemeId(_themeId: ThemeId) {
+  // Theme selection is derived from hostname or explicit URL hash override.
+  // Do not persist it between visits, otherwise stale local state can defeat
+  // the domain-based behavior.
+}
+
+function clearStoredThemeId() {
   try {
     if (typeof localStorage === 'undefined') return;
-    localStorage.setItem(THEME_STORAGE_KEY, themeId);
+    localStorage.removeItem('claudemotorways_theme');
   } catch {
-    // ignore persistence failures
+    // ignore storage failures
   }
 }
 
@@ -454,7 +461,9 @@ function applyThemeConfig(config: ThemeConfig, persist: boolean) {
   if (persist) persistThemeId(config.id);
 }
 
-export let currentThemeId: ThemeId = readStoredThemeId();
+clearStoredThemeId();
+
+export let currentThemeId: ThemeId = getInitialThemeId();
 export let theme: GameTheme = themeConfigs[currentThemeId].palette;
 export let themeAssets: ThemeAssetBundle = themeConfigs[currentThemeId].assets;
 

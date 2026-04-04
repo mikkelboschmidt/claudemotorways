@@ -1,5 +1,5 @@
 import { GRID, HALF, ROAD_W, DASH_LEN, DASH_GAP, CAR_LEN, CAR_WID, HIGHWAY_ROAD_W, NARROW_ROAD_W, PIN_COOLDOWN, TRUCK_LEN, TRUCK_WID } from './constants.ts';
-import { THEME_OPTIONS, ThemeId, currentThemeId, getThemeLabel, theme, themeAssets } from './theme.ts';
+import { currentThemeId, theme, themeAssets } from './theme.ts';
 import { camX, camY, zoom } from './camera.ts';
 import { edges, graphVersion, nodes, parseKey } from './graph.ts';
 import { buildings, getBuildingPixelPos, getConnectionPixelPos, getConnectionPoint, HOUSE_W, HOUSE_H, FACTORY_W, FACTORY_H, STORAGE_W_TILES, STORAGE_H_TILES } from './buildings.ts';
@@ -1612,7 +1612,7 @@ function getGearMenuLayout(width: number, height: number) {
   const rowH = 32;
   const rowGap = 10;
   const fpsBlockH = 28;
-  const menuH = pad * 2 + fpsBlockH + rowH * 6 + rowGap * 5;
+  const menuH = pad * 2 + fpsBlockH + rowH * 5 + rowGap * 4;
   const menuX = width - BTN_MARGIN - menuW;
   const menuY = gearCy - gearR - BTN_GAP - menuH;
 
@@ -1634,14 +1634,6 @@ function getGearMenuLayout(width: number, height: number) {
   my += rowH + rowGap;
 
   const halfW = (menuW - pad * 2 - 6) / 2;
-  const themeButtons = THEME_OPTIONS.map((option, index) => ({
-    themeId: option.id as ThemeId,
-    x: menuX + pad + index * (halfW + 6),
-    y: my,
-    w: halfW,
-    h: rowH,
-  }));
-  my += rowH + rowGap;
 
   const saveButton = { x: menuX + pad, y: my, w: halfW, h: rowH };
   const loadButton = { x: menuX + pad + halfW + 6, y: my, w: halfW, h: rowH };
@@ -1665,7 +1657,6 @@ function getGearMenuLayout(width: number, height: number) {
     fpsY,
     speedButtons,
     musicButton,
-    themeButtons,
     saveButton,
     loadButton,
     citiesButton,
@@ -1731,7 +1722,7 @@ function drawToolbar(ctx: CanvasRenderingContext2D, width: number, height: numbe
 
   // Gear menu — popup above gear button
   if (gearMenuOpen) {
-    const { menuW, menuH, menuX, menuY, pad, fpsY, speedButtons, musicButton, themeButtons, saveButton, loadButton, citiesButton, resetButton } = gearLayout;
+    const { menuW, menuH, menuX, menuY, pad, fpsY, speedButtons, musicButton, saveButton, loadButton, citiesButton, resetButton } = gearLayout;
 
     // Background
     ctx.fillStyle = theme.menuBg;
@@ -1783,26 +1774,6 @@ function drawToolbar(ctx: CanvasRenderingContext2D, width: number, height: numbe
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(musicLabel, musicButton.x + musicButton.w / 2, musicButton.y + musicButton.h / 2);
-
-    // Theme buttons
-    for (const btn of themeButtons) {
-      const isActive = btn.themeId === currentThemeId;
-      ctx.fillStyle = isActive ? theme.speedActive : theme.speedInactive;
-      ctx.beginPath();
-      ctx.roundRect(btn.x, btn.y, btn.w, btn.h, 6);
-      ctx.fill();
-      if (isActive) {
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.roundRect(btn.x, btn.y, btn.w, btn.h, 6);
-        ctx.stroke();
-      }
-      ctx.fillStyle = '#fff';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(getThemeLabel(btn.themeId), btn.x + btn.w / 2, btn.y + btn.h / 2);
-    }
 
     // Save / Load row
     ctx.fillStyle = theme.saveLoadBtn;
@@ -2138,7 +2109,6 @@ export function getToolbarLayout(_ctx: CanvasRenderingContext2D, width: number, 
     gearButton,
     speedButtons,
     musicButton,
-    themeButtons,
     saveButton,
     loadButton,
     citiesButton,
@@ -2175,5 +2145,5 @@ export function getToolbarLayout(_ctx: CanvasRenderingContext2D, width: number, 
     cityRowY += CITY_ROW_H + CITY_ROW_GAP;
   }
 
-  return { buttons, colorButton, resetButton, musicButton, themeButtons, speedButtons, gearButton, saveButton, loadButton, citiesButton, cityCloseButton, cityRowButtons, demoOpenButton, demoDismissButton, demoCloseButton };
+  return { buttons, colorButton, resetButton, musicButton, speedButtons, gearButton, saveButton, loadButton, citiesButton, cityCloseButton, cityRowButtons, demoOpenButton, demoDismissButton, demoCloseButton };
 }
