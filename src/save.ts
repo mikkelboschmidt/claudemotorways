@@ -6,6 +6,7 @@ import { highways, highwayEdgeSet, createHighway, resetHighways } from './highwa
 import { cars } from './cars.ts';
 import { roundabouts, roundaboutEdgeSet, roundaboutConnectionEdgeSet, createRoundabout, resetRoundabouts, addRoundaboutConnectionEdge, getRoundaboutConnections } from './roundabout.ts';
 import { remapColorToTheme } from './theme.ts';
+import { FACTORY_MAX_PARKED, FACTORY_MAX_PINS, STORAGE_MAX_PARKED, STORAGE_MAX_PINS } from './constants.ts';
 
 const SAVE_KEY = 'claudemotorways_save';
 
@@ -71,6 +72,13 @@ export function loadFromData(data: SaveData): boolean {
   // Restore buildings
   for (const b of data.buildings) {
     const restored = { ...b, color: remapColorToTheme(b.color) };
+    if (restored.type === 'factory') {
+      restored.maxPins = FACTORY_MAX_PINS;
+      restored.maxParkedCars = FACTORY_MAX_PARKED;
+    } else if (restored.type === 'storage') {
+      restored.maxPins = STORAGE_MAX_PINS;
+      restored.maxParkedCars = STORAGE_MAX_PARKED;
+    }
     buildings.push(restored);
     buildingById.set(restored.id, restored);
   }
