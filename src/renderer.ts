@@ -1177,7 +1177,7 @@ function drawBuildingBodies(ctx: CanvasRenderingContext2D) {
         drawStorage(ctx, b, pos);
       }
       if (b.maxPins > 0) {
-        drawStoragePinGrid(ctx, pos.x, pos.y, pos.w, pos.h, b.pins, b.maxPins, b.pinCooldown, color, sprite?.pinPlacement ?? null);
+        drawStoragePinGrid(ctx, pos.x, pos.y, pos.w, pos.h, b.pins, b.maxPins, b.pinCooldown, color, sprite?.pinPlacement ?? null, b.disabled);
       }
     }
   }
@@ -1249,11 +1249,12 @@ function drawFactoryPins(
   disabled: boolean,
   color: string,
 ) {
-  if (disabled || pinRects.length === 0) return;
+  if (pinRects.length === 0) return;
 
   const activePins = Math.max(0, Math.min(pinRects.length, pins));
   const spawnT = activePins > 0 && pinCooldown > 0 ? 1 - pinCooldown / PIN_COOLDOWN : 1;
   const darkestColor = darkenColor(color, 0.55);
+  const activeColor = disabled ? darkenColor(color, 0.25) : '#FFFFFF';
 
   for (let i = 0; i < pinRects.length; i++) {
     const rect = pinRects[i];
@@ -1262,7 +1263,7 @@ function drawFactoryPins(
 
     ctx.save();
     ctx.globalAlpha = isNewest ? Math.max(0, Math.min(1, spawnT)) : 1;
-    ctx.fillStyle = isActive ? '#FFFFFF' : darkestColor;
+    ctx.fillStyle = isActive ? activeColor : darkestColor;
     ctx.fillRect(buildingX + rect.x, buildingY + rect.y, rect.w, rect.h);
     ctx.restore();
   }
@@ -1398,6 +1399,7 @@ function drawStoragePinGrid(
   pinCooldown: number,
   color: string,
   pinPlacement: PinPlacement | null,
+  disabled = false,
 ) {
   if (maxPins === 0) return;
 
@@ -1444,7 +1446,9 @@ function drawStoragePinGrid(
     const isActive = i < activePins;
     const isNewest = i === activePins - 1 && pinCooldown > 0;
     ctx.globalAlpha = isNewest ? Math.max(0, Math.min(1, spawnT)) : 1;
-    ctx.fillStyle = isActive ? '#FFFFFF' : 'rgba(255,255,255,0.18)';
+    ctx.fillStyle = disabled
+      ? (isActive ? darkenColor(color, 0.25) : inactiveColor)
+      : (isActive ? '#FFFFFF' : 'rgba(255,255,255,0.18)');
     ctx.beginPath();
     ctx.arc(cx, cy, radius, 0, Math.PI * 2);
     ctx.fill();
