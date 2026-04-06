@@ -10,6 +10,7 @@ import { playSfx } from './sfx.ts';
 import { highwayPhase, highwayStartGx, highwayStartGy, draggingHighwayId, draggingHandleIndex, setHighwayPhase, setHighwayStart, setHighwayPreviewEnd, setDraggingHighwayId, setDraggingHandleIndex, createHighway, findHighwayAtPixel, findHighwayHandleAtPixel, removeHighway, updateHighwayMid, rebuildHighway, highways } from './highway.ts';
 import { createRoundabout, removeRoundabout, findRoundaboutAtPixel, segmentCutsRoundabout, roundaboutEdgeSet, roundaboutConnectionEdgeSet, findRoundaboutAtTile, findBestRoundaboutEntry, addRoundaboutConnectionEdge, Roundabout } from './roundabout.ts';
 import { recordRoad, recordHighway, recordRoundabout } from './run.ts';
+import { createTrafficLight, findTrafficLightAtTile, removeTrafficLight } from './trafficLights.ts';
 
 let dragging = false;
 let dragStartGx = 0;
@@ -153,6 +154,19 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
           return;
         }
       }
+      // Check if clicking on a traffic light
+      const tlGx = Math.floor(px / GRID);
+      const tlGy = Math.floor(py / GRID);
+      const tl = findTrafficLightAtTile(tlGx, tlGy);
+      if (tl) {
+        const tlId = tl.id;
+        pendingTap = () => {
+          removeTrafficLight(tlId);
+          playSfx('demolish');
+          saveGame();
+        };
+        return;
+      }
       // Check if clicking on a roundabout
       const ra = findRoundaboutAtPixel(px, py);
       if (ra) {
@@ -212,6 +226,20 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
           playSfx('build');
           saveGame();
         }
+      };
+    } else if (activeTool === 'addTrafficLight') {
+      const gridX = Math.floor(px / GRID);
+      const gridY = Math.floor(py / GRID);
+      pendingTap = () => {
+        // Toggle: if already has traffic light, remove it
+        const existing = findTrafficLightAtTile(gridX, gridY);
+        if (existing) {
+          removeTrafficLight(existing.id);
+          playSfx('demolish');
+        } else if (createTrafficLight(gridX, gridY)) {
+          playSfx('build');
+        }
+        saveGame();
       };
     } else if (activeTool === 'addHighway') {
       // Check for handle drag first

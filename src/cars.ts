@@ -1,6 +1,7 @@
 import { Car } from './types.ts';
 import { CAR_SPEED, CAR_ACCEL, CAR_DECEL, CAR_LEN, CAR_WID, MIN_GAP, LANE_W, SPAWN_INTERVAL, MAX_CARS_PER_HOUSE, PARK_DURATION, PARK_ANIM_SPEED, TURN_LERP, CORNER_BRAKE_DIST, CORNER_MIN_SPEED, CORNER_MED_SPEED, HIGHWAY_SPEED, TRUCK_SPEED, TRUCK_CAPACITY, MAX_TRUCKS_PER_STORAGE, TRUCK_SPAWN_INTERVAL, FACTORY_MAX_PINS } from './constants.ts';
 import { edges, getEdgeBetween, graphVersion, nodes } from './graph.ts';
+import { isRedLight } from './trafficLights.ts';
 import { buildings, buildingById, getBuildingCenter, getBuildingPixelPos, getConnectionPixelPos, getPinPixelPos } from './buildings.ts';
 import { findPath } from './pathfinding.ts';
 import { addScore } from './score.ts';
@@ -1353,6 +1354,30 @@ export function updateCars() {
 
     const owner = nodeOwner.get(endNodeKey);
     if (owner && owner.carId !== car.id && owner.edgeId !== car.edgeId) {
+      const stopDist = MIN_GAP + CAR_LEN * 0.5;
+      if (distToEnd <= stopDist) {
+        targetSpeeds.set(car.id, 0);
+      } else if (distToEnd < INTERSECTION_RANGE) {
+        const range = INTERSECTION_RANGE - stopDist;
+        const brakeFactor = (distToEnd - stopDist) / range;
+        const base = getBaseSpeed(car.edgeId, car.isTruck);
+        const brakeSpeed = base * Math.max(0, Math.min(1, brakeFactor));
+        const current = targetSpeeds.get(car.id) ?? base;
+        if (brakeSpeed < current) targetSpeeds.set(car.id, brakeSpeed);
+      }
+    }
+  }
+
+  // 3b. Traffic light red signals — stop before entering intersection on red
+  for (const car of cars) {
+    if (!isDriving(car.state)) continue;
+    const edge = edges.get(car.edgeId);
+    if (!edge) continue;
+
+    const distToEnd = car.edgeDir === 1 ? (1 - car.t) * edge.length : car.t * edge.length;
+    const endNodeKey = car.edgeDir === 1 ? edge.toKey : edge.fromKey;
+
+    if (distToEnd < INTERSECTION_RANGE && isRedLight(car.edgeId, endNodeKey)) {
       const stopDist = MIN_GAP + CAR_LEN * 0.5;
       if (distToEnd <= stopDist) {
         targetSpeeds.set(car.id, 0);

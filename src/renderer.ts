@@ -14,6 +14,7 @@ import { musicEnabled } from './music.ts';
 import { cities } from './cities.ts';
 import { roundabouts, roundaboutConnectionEdgeSet, roundaboutEdgeSet } from './roundabout.ts';
 import { getHouseSprite, getFactorySprite, getStorageSprite, drawSpriteLayer, PinPlacement } from './sprites.ts';
+import { trafficLights } from './trafficLights.ts';
 
 // SVG icon image cache — keyed by (rawSvg + colorOverride)
 const iconCache = new Map<string, HTMLImageElement>();
@@ -302,6 +303,7 @@ export function render(ctx: CanvasRenderingContext2D, width: number, height: num
   drawRoads(ctx);
   drawRoundabouts(ctx);
   drawRoundaboutConnectionNodes(ctx);
+  drawTrafficLights(ctx);
   drawCars(ctx, 'road');   // Road cars below buildings
 
   if (preview) {
@@ -822,6 +824,126 @@ function drawRoundaboutConnectionNodes(ctx: CanvasRenderingContext2D) {
     ctx.arc(edge.tx, edge.ty, ROAD_W / 2, 0, Math.PI * 2);
     ctx.fill();
   }
+}
+
+function drawTrafficLights(ctx: CanvasRenderingContext2D) {
+  if (trafficLights.length === 0) return;
+
+  const isSpace = currentThemeId === 'space';
+
+  for (const tl of trafficLights) {
+    const cx = tl.gx * GRID + HALF;
+    const cy = tl.gy * GRID + HALF;
+    const rot = tl.diagonal ? Math.PI / 4 : 0;
+
+    if (isSpace) {
+      drawTrafficLightArrows(ctx, cx, cy, rot, tl.greenAxis);
+    } else {
+      drawTrafficLightDots(ctx, cx, cy, rot, tl.greenAxis);
+    }
+  }
+}
+
+function drawTrafficLightDots(ctx: CanvasRenderingContext2D, cx: number, cy: number, rot: number, greenAxis: 'ns' | 'ew') {
+  const size = 8;
+  const dotR = 3;
+  const off = 4.5;
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(rot);
+
+  ctx.fillStyle = '#222';
+  ctx.beginPath();
+  ctx.roundRect(-size, -size, size * 2, size * 2, 3);
+  ctx.fill();
+
+  const nsColor = greenAxis === 'ns' ? '#33cc33' : '#ff3333';
+  const ewColor = greenAxis === 'ew' ? '#33cc33' : '#ff3333';
+
+  // North
+  ctx.fillStyle = nsColor;
+  ctx.beginPath();
+  ctx.arc(0, -off, dotR, 0, Math.PI * 2);
+  ctx.fill();
+  // South
+  ctx.beginPath();
+  ctx.arc(0, off, dotR, 0, Math.PI * 2);
+  ctx.fill();
+
+  // East
+  ctx.fillStyle = ewColor;
+  ctx.beginPath();
+  ctx.arc(off, 0, dotR, 0, Math.PI * 2);
+  ctx.fill();
+  // West
+  ctx.beginPath();
+  ctx.arc(-off, 0, dotR, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function drawTrafficLightArrows(ctx: CanvasRenderingContext2D, cx: number, cy: number, rot: number, greenAxis: 'ns' | 'ew') {
+  const arrowLen = 10;
+  const headLen = 4;
+  const headW = 3;
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(rot);
+
+  // Background circle
+  ctx.fillStyle = 'rgba(20, 20, 30, 0.85)';
+  ctx.beginPath();
+  ctx.arc(0, 0, 10, 0, Math.PI * 2);
+  ctx.fill();
+
+  const greenColor = '#4CFFF9';
+  const blockedColor = colorToRgba(theme.road, 0.1);
+
+  // Vertical axis (ns)
+  ctx.strokeStyle = greenAxis === 'ns' ? greenColor : blockedColor;
+  ctx.lineWidth = 1.8;
+  drawDoubleArrow(ctx, 0, -arrowLen, 0, arrowLen, headLen, headW);
+
+  // Horizontal axis (ew)
+  ctx.strokeStyle = greenAxis === 'ew' ? greenColor : blockedColor;
+  drawDoubleArrow(ctx, -arrowLen, 0, arrowLen, 0, headLen, headW);
+
+  ctx.restore();
+}
+
+function drawDoubleArrow(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number, headLen: number, headW: number) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const len = Math.hypot(dx, dy);
+  const ux = dx / len;
+  const uy = dy / len;
+  const px = -uy;
+  const py = ux;
+
+  // Shaft
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+
+  // Arrowhead at end
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - ux * headLen + px * headW, y2 - uy * headLen + py * headW);
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - ux * headLen - px * headW, y2 - uy * headLen - py * headW);
+  ctx.stroke();
+
+  // Arrowhead at start
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x1 + ux * headLen + px * headW, y1 + uy * headLen + py * headW);
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x1 + ux * headLen - px * headW, y1 + uy * headLen - py * headW);
+  ctx.stroke();
 }
 
 function drawHighways(ctx: CanvasRenderingContext2D) {
@@ -1670,6 +1792,10 @@ function iconStorage(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: n
   drawSvgIcon(ctx, cx, cy, r, themeAssets.icons.storage, selectedColor);
 }
 
+function iconTrafficLight(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
+  drawSvgIcon(ctx, cx, cy, r, themeAssets.icons.trafficLight);
+}
+
 // Gear icon
 function iconGear(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
   const ir = r * 0.35;
@@ -1706,14 +1832,15 @@ const TOOL_ICONS: ToolIconDef[] = [
   { type: 'addNarrow', icon: iconNarrow },
   { type: 'addHighway', icon: iconHighway },
   { type: 'addRoundabout', icon: iconRoundabout },
-  // Color circle goes here (index 4) — handled separately
+  { type: 'addTrafficLight', icon: iconTrafficLight },
+  // Color circle goes here (index 5) — handled separately
   { type: 'addBuilding', buildingType: 'house', icon: iconHouse },
   { type: 'addBuilding', buildingType: 'factory', icon: iconFactory },
   { type: 'addBuilding', buildingType: 'storage', icon: iconStorage },
   { type: 'demolish', icon: iconDemolishIcon },
 ];
 
-const COLOR_SLOT_INDEX = 4; // color circle inserted before house
+const COLOR_SLOT_INDEX = 5; // color circle inserted before house
 
 function getGearMenuLayout(width: number, height: number) {
   const gearR = GEAR_SIZE / 2;
@@ -1936,6 +2063,7 @@ function drawToolbar(ctx: CanvasRenderingContext2D, width: number, height: numbe
     case 'addNarrow': label = currentThemeId === 'space' ? 'Single Rail' : 'Narrow Road'; break;
     case 'addHighway': label = currentThemeId === 'space' ? 'High-Speed Rail' : 'Highway'; break;
     case 'addRoundabout': label = currentThemeId === 'space' ? 'Rail Junction' : 'Roundabout'; break;
+    case 'addTrafficLight': label = currentThemeId === 'space' ? 'Signal Node' : 'Traffic Light'; break;
     case 'demolish': label = 'Demolish'; break;
     case 'addBuilding':
       switch (selectedBuildingType) {

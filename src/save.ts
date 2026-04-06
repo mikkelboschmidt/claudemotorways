@@ -7,6 +7,7 @@ import { cars } from './cars.ts';
 import { roundabouts, roundaboutEdgeSet, roundaboutConnectionEdgeSet, createRoundabout, resetRoundabouts, addRoundaboutConnectionEdge, getRoundaboutConnections } from './roundabout.ts';
 import { remapColorToTheme } from './theme.ts';
 import { FACTORY_MAX_PARKED, FACTORY_MAX_PINS, STORAGE_MAX_PARKED, STORAGE_MAX_PINS } from './constants.ts';
+import { trafficLights, createTrafficLight, resetTrafficLights } from './trafficLights.ts';
 
 const SAVE_KEY = 'claudemotorways_save';
 
@@ -17,6 +18,7 @@ export interface SaveData {
   highways?: { startGx: number; startGy: number; endGx: number; endGy: number; midX?: number; midY?: number; mid1X?: number; mid1Y?: number; mid2X?: number; mid2Y?: number }[];
   roundabouts?: { gx: number; gy: number }[];
   roundaboutConnections?: { raGx: number; raGy: number; outerGx: number; outerGy: number; ringIndex: number }[];
+  trafficLights?: { gx: number; gy: number }[];
   score: number;
   nextBuildingId: number;
 }
@@ -46,12 +48,15 @@ export function serializeState(): SaveData {
   const raList = roundabouts.map(ra => ({ gx: ra.gx, gy: ra.gy }));
   const raConns = getRoundaboutConnections();
 
+  const tlList = trafficLights.map(tl => ({ gx: tl.gx, gy: tl.gy }));
+
   return {
     buildings: buildings.map(b => ({ ...b })),
     edges: edgeList,
     highways: hwList,
     roundabouts: raList,
     roundaboutConnections: raConns.length > 0 ? raConns : undefined,
+    trafficLights: tlList.length > 0 ? tlList : undefined,
     score,
     nextBuildingId: Math.max(...buildings.map(b => b.id), 0) + 1,
   };
@@ -68,6 +73,7 @@ export function loadFromData(data: SaveData): boolean {
   cars.length = 0;
   resetHighways();
   resetRoundabouts();
+  resetTrafficLights();
 
   // Restore buildings
   for (const b of data.buildings) {
@@ -110,6 +116,13 @@ export function loadFromData(data: SaveData): boolean {
       if (ra) {
         addRoundaboutConnectionEdge(ra, conn.outerGx, conn.outerGy, conn.ringIndex);
       }
+    }
+  }
+
+  // Restore traffic lights
+  if (data.trafficLights) {
+    for (const tl of data.trafficLights) {
+      createTrafficLight(tl.gx, tl.gy);
     }
   }
 

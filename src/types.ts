@@ -83,4 +83,15 @@ export interface RoadPreview {
   endGy: number;
 }
 
-export type ToolType = 'addRoad' | 'addNarrow' | 'removeRoad' | 'addBuilding' | 'removeBuilding' | 'addHighway' | 'addRoundabout' | 'addStorage' | 'demolish';
+export interface TrafficLight {
+  id: number;
+  gx: number;
+  gy: number;
+  nodeKey: string;
+  greenAxis: 'ns' | 'ew'; // which axis currently has green (when diagonal: ns=NE/SW, ew=NW/SE)
+  timer: number; // frames remaining in current phase
+  interval: number; // frames per phase (default 180 = ~3s)
+  diagonal: boolean; // true when ALL meeting roads are 45° diagonal
+}
+
+export type ToolType = 'addRoad' | 'addNarrow' | 'removeRoad' | 'addBuilding' | 'removeBuilding' | 'addHighway' | 'addRoundabout' | 'addStorage' | 'demolish' | 'addTrafficLight';
