@@ -81,6 +81,18 @@ A logistics puzzle game where players build road networks connecting residential
 - **Demolish**: Click on the roundabout with the demolish tool to remove it as a whole unit. Drag-removal of road tiles does not break roundabout ring edges.
 - **Persistence**: Saved as `{ gx, gy }` positions plus connection edges `{ outerGx, outerGy, ringIndex }`. Ring edges are recreated on load; connection edges are restored separately.
 
+### Traffic Light
+
+- **Placement**: Click on any intersection node (3+ connected edges) with the traffic light tool. Clicking an existing traffic light removes it. Can also be removed with the demolish tool.
+- **Behavior**: Demand-driven switching with a ~6s max green phase (360 frames). When the timer expires, the light only switches if cars are waiting on the blocked axis (within braking range of the intersection). If no one is waiting, the current green holds indefinitely. Standard intersections alternate N/S vs E/W (classified by `|dy| >= |dx|`). All-diagonal intersections (every meeting edge is 45°) alternate NE/SW vs NW/SE instead.
+- **Diagonal detection**: Recomputed each tick. If ALL edges at the node are diagonal (`dx !== 0 && dy !== 0`), the traffic light uses diagonal axes and the visual rotates 45°. If even one edge is cardinal, standard orientation is used.
+- **Car interaction**: Cars approaching a red light brake smoothly to a stop before the intersection, using the same distance thresholds as intersection reservation (46px range, 18px stop distance). The traffic light check runs after intersection reservation but before cross-edge lookahead.
+- **Auto-removal**: If the underlying road node is removed or drops below 3 edges, the traffic light is automatically cleaned up.
+- **Visual (Earth)**: A dark rounded square at the intersection center with 4 colored dots. Green dots indicate the active axis; red dots indicate the stopped axis. Rotates 45° for all-diagonal intersections.
+- **Visual (Space)**: A dark circle with two double-ended arrows. The green axis arrow is cyan (`#4CFFF9`), the blocked axis arrow is the road color at 10% opacity (barely visible). Rotates 45° for diagonal intersections.
+- **Persistence**: Saved as `{ gx, gy }` positions. Timer state and diagonal flag are not saved — recomputed on load.
+- **Space theme label**: "Signal Node".
+
 ### Road–Building Connections
 
 - **Houses**: The connection tile is the house tile itself. Dragging a road onto a house automatically connects it. The drag direction determines which side becomes the entrance (drag right → right entrance, etc.). Only pure horizontal/vertical drags are matched.
@@ -154,13 +166,14 @@ All parking and departing uses cubic bezier curves. The car's angle follows the 
 
 ## Collision Avoidance
 
-Five checks run every frame, in order:
+Six checks run every frame, in order:
 
 1. **Same-edge gap following**: Cars on the same edge in the same direction maintain a minimum gap of 26px (10px gap + 16px car length). Within 42px, they gradually brake.
 2. **Intersection reservation**: At true intersections (3+ edges), the closest car claims the node. Other cars from different edges yield.
 3. **Yield braking**: Cars that don't own the intersection brake smoothly over 46px to a stop 18px before the node.
-4. **Cross-edge lookahead**: Check the next 2 edges for traffic. If the next edge entry is blocked, brake to 15% speed. If 2 edges ahead is congested, brake to 60%. Also handles narrow-road one-way blocking.
-5. **Corner braking**: Angle-based speed limit approaching turns (see above).
+4. **Traffic light**: Cars approaching a red traffic light brake smoothly to a stop before the intersection, same distance thresholds as yield braking.
+5. **Cross-edge lookahead**: Check the next 2 edges for traffic. If the next edge entry is blocked, brake to 15% speed. If 2 edges ahead is congested, brake to 60%. Also handles narrow-road one-way blocking.
+6. **Corner braking**: Angle-based speed limit approaching turns (see above).
 
 Target speeds are applied via smooth acceleration/deceleration each frame.
 
@@ -202,6 +215,7 @@ The game auto-saves to `localStorage` every 5 seconds and after every build acti
 - All road edges (coordinates, narrow flag)
 - All highways (start, end, two control points)
 - All roundabouts (grid position) and their connection edges (outer tile, ring index)
+- All traffic lights (grid position)
 - Score and next building ID
 
 Cars and trucks are not saved — they respawn naturally after load.
@@ -262,6 +276,7 @@ Floating circular buttons (44px diameter) arranged in a vertical column on the l
 | House SVG | `addBuilding` (house) | Place a house |
 | Factory SVG | `addBuilding` (factory) | Place a factory |
 | Storage SVG | `addBuilding` (storage) | Place a storage depot |
+| Traffic Light icon | `addTrafficLight` | Click an intersection (3+ edges) to toggle a traffic light |
 | Demolish SVG | `demolish` | Tap a building/roundabout to remove it, or drag across road tiles to delete edges/highways |
 
 - All toolbar icons are loaded from the active theme asset bundle (`assets/EarthTheme/` or `assets/SpaceTheme/`) and rendered onto the canvas. SVGs with a layer `id="CurrentColor"` have their fill dynamically replaced with the selected building color.

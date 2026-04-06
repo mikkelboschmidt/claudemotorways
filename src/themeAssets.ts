@@ -8,6 +8,7 @@ import earthIconHouse from '../assets/EarthTheme/Icon-House.svg?raw';
 import earthIconFactory from '../assets/EarthTheme/Icon-Factory.svg?raw';
 import earthIconStorage from '../assets/EarthTheme/Icon-Storage.svg?raw';
 import earthIconDemolish from '../assets/EarthTheme/Icon-Demolish.svg?raw';
+import earthIconTrafficlight from '../assets/EarthTheme/Icon-Trafficlight.svg?raw';
 import earthHouseRight from '../assets/EarthTheme/House-Right.svg?raw';
 import earthHouseLeft from '../assets/EarthTheme/House-Left.svg?raw';
 import earthHouseTop from '../assets/EarthTheme/House-Top.svg?raw';
@@ -34,6 +35,7 @@ import spaceIconHouse from '../assets/SpaceTheme/Icon-House.svg?raw';
 import spaceIconFactory from '../assets/SpaceTheme/Icon-Factory.svg?raw';
 import spaceIconStorage from '../assets/SpaceTheme/Icon-Storage.svg?raw';
 import spaceIconDemolish from '../assets/SpaceTheme/Icon-Demolish.svg?raw';
+import spaceIconTrafficlight from '../assets/SpaceTheme/Icon-Trafficlight.svg?raw';
 import spaceHouseRight from '../assets/SpaceTheme/House-Right.svg?raw';
 import spaceHouseLeft from '../assets/SpaceTheme/House-Left.svg?raw';
 import spaceHouseTop from '../assets/SpaceTheme/House-Top.svg?raw';
@@ -64,6 +66,7 @@ export interface ThemeAssetBundle {
     factory: string;
     storage: string;
     demolish: string;
+    trafficLight: string;
   };
   sprites: {
     house: Record<Side, string>;
@@ -114,6 +117,7 @@ export const earthAssets: ThemeAssetBundle = {
     factory: earthIconFactory,
     storage: earthIconStorage,
     demolish: earthIconDemolish,
+    trafficLight: earthIconTrafficlight,
   },
   sprites: {
     house: {
@@ -153,6 +157,7 @@ export const spaceAssets: ThemeAssetBundle = {
     factory: spaceIconFactory,
     storage: spaceIconStorage,
     demolish: spaceIconDemolish,
+    trafficLight: spaceIconTrafficlight,
   },
   sprites: {
     house: {

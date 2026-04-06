@@ -12,6 +12,7 @@ import { fetchCities, loadCity } from './cities.ts';
 import { startRun, endRun, updatePeaks } from './run.ts';
 import { score } from './score.ts';
 import { getBuildingColors, theme } from './theme.ts';
+import { updateTrafficLights } from './trafficLights.ts';
 
 // Apply theme's page background at startup
 document.body.style.background = theme.pageBg;
@@ -267,6 +268,7 @@ canvas.addEventListener('touchend', (e) => {
 
 function simulationTick() {
   tickPathfindingFrame();
+  updateTrafficLights();
   updatePins();
   spawnCars();
   updateCars();
