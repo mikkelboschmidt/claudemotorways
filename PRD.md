@@ -117,7 +117,8 @@ A logistics puzzle game where players build road networks connecting residential
   4. Park at house for ~2s
   5. Repeat
 - **Scoring**: +1 point each time a car collects a pin.
-- **Stuck reroute**: If a car is stopped for >90 frames, it recalculates its path via Dijkstra, potentially switching to a different factory.
+- **Stuck reroute**: If a car is stopped for 90 frames (~1.5s), it replans its path in place via Dijkstra, potentially switching to a different factory. The car stays on its current edge — only the path ahead changes.
+- **U-turn**: If a car remains stopped for 600 frames (~10s, configurable via `UTURN_STUCK_THRESHOLD`), it performs a u-turn — reversing direction on its current edge and replanning from the node behind it. The car smoothly rotates 180° and switches to the opposite lane. U-turns are blocked on narrow roads, one-way edges, highways, and roundabouts. A 300-frame cooldown (`UTURN_COOLDOWN`) prevents rapid successive u-turns, and a car cannot u-turn twice on the same edge.
 
 ### Truck
 
