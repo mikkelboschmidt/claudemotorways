@@ -37,5 +37,7 @@ export const TRUCK_CAPACITY = 6; // pins per truck load
 export const MAX_TRUCKS_PER_STORAGE = 1;
 export const TRUCK_SPAWN_INTERVAL = 300; // frames (~5s at 60fps)
 export const HIGHWAY_SPEED = CAR_SPEED * 1.5;
+export const UTURN_STUCK_THRESHOLD = 600; // frames (~10s at 60fps) before u-turn triggers
+export const UTURN_COOLDOWN = 300; // frames (~5s) before another u-turn is allowed
 // HIGHWAY_COLOR moved to src/theme.ts
 export const HIGHWAY_ROAD_W = ROAD_W + 6;

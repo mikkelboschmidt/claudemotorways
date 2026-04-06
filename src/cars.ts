@@ -1,5 +1,5 @@
 import { Car } from './types.ts';
-import { CAR_SPEED, CAR_ACCEL, CAR_DECEL, CAR_LEN, CAR_WID, MIN_GAP, LANE_W, SPAWN_INTERVAL, MAX_CARS_PER_HOUSE, PARK_DURATION, PARK_ANIM_SPEED, TURN_LERP, CORNER_BRAKE_DIST, CORNER_MIN_SPEED, CORNER_MED_SPEED, HIGHWAY_SPEED, TRUCK_SPEED, TRUCK_CAPACITY, MAX_TRUCKS_PER_STORAGE, TRUCK_SPAWN_INTERVAL, FACTORY_MAX_PINS } from './constants.ts';
+import { CAR_SPEED, CAR_ACCEL, CAR_DECEL, CAR_LEN, CAR_WID, MIN_GAP, LANE_W, SPAWN_INTERVAL, MAX_CARS_PER_HOUSE, PARK_DURATION, PARK_ANIM_SPEED, TURN_LERP, CORNER_BRAKE_DIST, CORNER_MIN_SPEED, CORNER_MED_SPEED, HIGHWAY_SPEED, TRUCK_SPEED, TRUCK_CAPACITY, MAX_TRUCKS_PER_STORAGE, TRUCK_SPAWN_INTERVAL, FACTORY_MAX_PINS, UTURN_STUCK_THRESHOLD, UTURN_COOLDOWN } from './constants.ts';
 import { edges, getEdgeBetween, graphVersion, nodes } from './graph.ts';
 import { isRedLight } from './trafficLights.ts';
 import { buildings, buildingById, getBuildingCenter, getBuildingPixelPos, getConnectionPixelPos, getPinPixelPos } from './buildings.ts';
@@ -744,6 +744,8 @@ function createCar(homeId: number, workId: number, color: string, path: string[]
     parkedAt: 0,
     parkSlot: 0,
     stuckFrames: 0,
+    uTurnCooldown: 0,
+    lastUTurnEdgeId: '',
     nextState: 'toHome',
     collectProgress: 0,
     carryingPin: false,
@@ -1542,12 +1544,21 @@ export function updateCars() {
       car.speed = Math.max(car.speed - CAR_DECEL, ts);
     }
 
-    // Reroute if stuck in traffic for too long
+    // Tick u-turn cooldown
+    if (car.uTurnCooldown > 0) car.uTurnCooldown--;
+
+    // Reroute or u-turn if stuck in traffic
     if (car.speed <= 0) {
       car.stuckFrames++;
-      if (car.stuckFrames > 90) {
+      if (car.stuckFrames >= UTURN_STUCK_THRESHOLD) {
+        // Long stuck: attempt u-turn, fall back to in-place reroute
         car.stuckFrames = 0;
-        rerouteCar(car);
+        if (!performUTurn(car)) {
+          rerouteCarInPlace(car);
+        }
+      } else if (car.stuckFrames === 90) {
+        // Medium stuck: try replanning from current position (counter keeps climbing)
+        rerouteCarInPlace(car);
       }
     } else {
       car.stuckFrames = 0;
@@ -1686,26 +1697,30 @@ export function updateCars() {
   }
 }
 
-// Reroute a driving car from its current position
-function rerouteCar(car: Car) {
-  // Find current node key (the node the car is heading toward)
+// Reroute a driving car in place — keeps the car on its current edge, only changes path ahead
+function rerouteCarInPlace(car: Car) {
   if (car.pathIndex >= car.path.length) return;
-  const currentNodeKey = car.path[car.pathIndex - 1] ?? car.path[0];
+  const edge = edges.get(car.edgeId);
+  if (!edge) return;
+
+  // The node the car is heading toward
+  const targetNode = car.path[car.pathIndex];
+  // The node behind the car
+  const behindNode = car.path[car.pathIndex - 1] ?? car.path[0];
+  if (!targetNode) return;
 
   let destKey: string | null = null;
   if (car.state === 'toWork') {
-    // Regular car: try to pick a better pin source
     const sameColorSources = buildings.filter(b =>
       (b.type === 'factory' || b.type === 'storage') && b.color === car.color && !b.disabled);
-    const result = pickBestPinSource(currentNodeKey, sameColorSources);
+    const result = pickBestPinSource(targetNode, sameColorSources);
     if (result) {
       car.workBuildingId = result.building.id;
       destKey = result.building.nodeKey;
     }
   } else if (car.state === 'toFactory') {
-    // Truck: try a different factory
     const sameColorFactories = buildings.filter(b => b.type === 'factory' && b.color === car.color && !b.disabled);
-    const result = pickBestFactory(currentNodeKey, sameColorFactories);
+    const result = pickBestFactory(targetNode, sameColorFactories);
     if (result) {
       car.workBuildingId = result.factory.id;
       destKey = result.factory.nodeKey;
@@ -1719,22 +1734,82 @@ function rerouteCar(car: Car) {
   }
 
   if (!destKey) return;
-  const newPath = findPath(currentNodeKey, destKey);
+  const newPath = findPath(targetNode, destKey);
   if (!newPath || newPath.length < 2) return;
 
-  // Check that the first edge of new path matches where we are
-  const nextEdge = getEdgeBetween(newPath[0], newPath[1]);
-  if (!nextEdge) return;
-  if (!isEdgeEntryClear(nextEdge.id, newPath[0], newPath[1])) return;
-
-  car.path = newPath;
+  // Keep car on current edge, only update the path ahead
+  car.path = [behindNode, ...newPath];
   car.pathIndex = 1;
-  car.edgeId = nextEdge.id;
-  car.edgeDir = nextEdge.fromKey === newPath[0] ? 1 : -1;
-  car.t = car.edgeDir === 1 ? 0 : 1;
+}
+
+// Attempt a u-turn: reverse direction on current edge and replan
+function performUTurn(car: Car): boolean {
+  const edge = edges.get(car.edgeId);
+  if (!edge) return false;
+
+  // Guards: no u-turns on narrow, one-way, highway, or roundabout edges
+  if (edge.narrow) return false;
+  if (edge.oneway) return false;
+  if (highwayEdgeSet.has(car.edgeId)) return false;
+  if (roundaboutEdgeSet.has(car.edgeId)) return false;
+
+  // Cooldown and anti-oscillation
+  if (car.uTurnCooldown > 0) return false;
+  if (car.lastUTurnEdgeId === car.edgeId) return false;
+
+  // Don't u-turn near edge endpoints — regular rerouting at the node is better
+  if (car.t < 0.1 || car.t > 0.9) return false;
+
+  // Need valid path nodes
+  const forwardNode = car.path[car.pathIndex];
+  const behindNode = car.path[car.pathIndex - 1];
+  if (!forwardNode || !behindNode) return false;
+
+  // Check opposite lane is clear (oncoming cars on same edge)
+  const newDir: 1 | -1 = car.edgeDir === 1 ? -1 : 1;
+  const clearance = (MIN_GAP + CAR_LEN) * 2;
+  for (const c of cars) {
+    if (c.id === car.id) continue;
+    if (c.edgeId !== car.edgeId) continue;
+    if (!isDriving(c.state)) continue;
+    if (c.edgeDir === newDir) {
+      const dist = Math.abs(c.t - car.t) * edge.length;
+      if (dist < clearance) return false;
+    }
+  }
+
+  // Find destination for new path
+  let destKey: string | null = null;
+  if (car.state === 'toWork') {
+    const work = buildingById.get(car.workBuildingId);
+    if (work) destKey = work.nodeKey;
+  } else if (car.state === 'toHome') {
+    const home = buildingById.get(car.homeBuildingId);
+    if (home) destKey = home.nodeKey;
+  } else if (car.state === 'toFactory') {
+    const work = buildingById.get(car.workBuildingId);
+    if (work) destKey = work.nodeKey;
+  } else if (car.state === 'toStorage') {
+    const storage = buildingById.get(car.storageBuildingId);
+    if (storage) destKey = storage.nodeKey;
+  }
+  if (!destKey) return false;
+
+  // Compute new path from the node we'll now head toward
+  const newPath = findPath(behindNode, destKey);
+  if (!newPath || newPath.length < 2) return false;
+
+  // Execute the u-turn
+  car.edgeDir = newDir;
+  car.path = [forwardNode, ...newPath];
+  car.pathIndex = 1;
   car.speed = 0;
-  if (nextEdge.narrow) lockNarrowChain(nextEdge.id, car.edgeDir);
+  car.stuckFrames = 0;
+  car.uTurnCooldown = UTURN_COOLDOWN;
+  car.lastUTurnEdgeId = car.edgeId;
+
   updateCarPosition(car);
+  return true;
 }
 
 function startDriving(car: Car, carIndex: number, buildingCarIndex?: BuildingCarIndex) {

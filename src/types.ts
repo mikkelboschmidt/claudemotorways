@@ -66,6 +66,8 @@ export interface Car {
   parkedAt: number; // frame counter when car parked (for FIFO ordering)
   parkSlot: number; // which slot in the factory this car occupies
   stuckFrames: number; // frames spent at speed 0 (for rerouting)
+  uTurnCooldown: number; // frames remaining before next u-turn allowed
+  lastUTurnEdgeId: string; // edge where last u-turn happened (anti-oscillation)
   nextState: 'toWork' | 'toHome' | 'toStorage' | 'toFactory';
   collectProgress: number; // 0→1 animation of pin flying to car
   carryingPin: boolean; // regular cars show a roof marker while returning home with a scored pin
