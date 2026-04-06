@@ -19,3 +19,7 @@ npm run build      # TypeScript + Vite production build
 - Source is organized by domain in `src/` (e.g., `cars.ts`, `buildings.ts`, `roads.ts`, `save.ts`, `cities.ts`).
 - Game state lives in module-level arrays/maps exported from each domain file.
 - Deployed to GitHub Pages at `loomways.com` via the GitHub Actions workflow.
+
+## Reference Document
+
+**Always read `PRD.md` at the start of any session.** It is the authoritative source for all game mechanics, UI behaviour, analytics design, deployment setup, and domain configuration. Do not rely on memory or assumptions — the PRD is kept up to date with every change.

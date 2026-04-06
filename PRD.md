@@ -353,6 +353,32 @@ Milestones use consistent `first-building-*` and `first-road-*` prefixes for eas
 - **Milestones mark progression** — sparse events that show how a run evolves over time.
 - **Mobile-reliable end detection** — `visibilitychange` is preferred over `beforeunload` for capturing run-end on iOS/Android.
 
+### Domains
+
+The game is served from two domains, each presenting a different visual theme:
+
+| Domain | Theme / Variant | `game_variant` tag |
+|---|---|---|
+| `loomways.com` | Classic/Lunar motorways branding | `loomways` |
+| `mineloops.com` | Alternative visual variant | `mineloops` |
+
+Both domains use the same codebase. At PostHog init time, `location.hostname` is checked and `posthog.register({ game_variant })` tags every event so the two variants can be compared directly in PostHog dashboards.
+
+### Managed Reverse Proxy
+
+PostHog's **Managed Proxy (Beta)** is enabled. All analytics traffic from both domains is routed through Cloudflare before reaching PostHog's ingestion endpoint.
+
+- **Proxy domain**: `my.mineloops.com`
+- **Provider**: Cloudflare (third-party subprocessor, beta feature)
+- PostHog is initialized with `api_host: 'https://my.mineloops.com'` and `ui_host: 'https://eu.posthog.com'`.
+- A single proxy serves both game domains — no separate proxy is needed for `loomways.com`.
+
+### Localhost Filtering
+
+PostHog is **not initialized on localhost or 127.0.0.1**. The `posthog.init()` call is wrapped in a hostname guard in `index.html`, so no network requests are made during local development. All `posthog.capture()` calls in `src/analytics.ts` already guard with `typeof posthog !== 'undefined'` and silently no-op when init was skipped.
+
+---
+
 ### PostHog Dashboard Widgets
 
 #### Engagement & Retention
