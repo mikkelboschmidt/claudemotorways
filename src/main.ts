@@ -10,6 +10,7 @@ import { pan, zoomAt } from './camera.ts';
 import { toggleMusic, ensureMusicStarted } from './music.ts';
 import { fetchCities, loadCity } from './cities.ts';
 import { startRun, endRun, updatePeaks } from './run.ts';
+import { track } from './analytics.ts';
 import { score } from './score.ts';
 import { getBuildingColors, theme } from './theme.ts';
 import { updateTrafficLights } from './trafficLights.ts';
@@ -137,17 +138,19 @@ canvas.addEventListener('pointerdown', (e) => {
     }
     if (hitRect(px, py, layout.saveButton)) {
       downloadSave();
+      track('save-downloaded');
       e.stopImmediatePropagation();
       return;
     }
     if (hitRect(px, py, layout.loadButton)) {
-      uploadSave();
+      uploadSave().then((success) => track('save-uploaded', { success: success ? 1 : 0 }));
       e.stopImmediatePropagation();
       return;
     }
     if (hitRect(px, py, layout.citiesButton)) {
       closeGearMenu();
       showCityModal();
+      track('city-browsed');
       e.stopImmediatePropagation();
       return;
     }
