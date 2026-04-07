@@ -17,10 +17,10 @@
 <rect id="RoofMain_3" x="58" y="44" width="15" height="28" rx="1" fill="#FF0000"/>
 <path id="RoofShadow_3" d="M101.707 58.2071C101.077 57.5771 101.523 56.5 102.414 56.5H126V64.5H108L101.707 58.2071Z" fill="#CC0000"/>
 <path id="RoofShadow_4" d="M101.707 68.7071C101.077 68.0771 101.523 67 102.414 67H126V74H107L101.707 68.7071Z" fill="#CC0000"/>
-<path id="RoofMain_4" d="M100 55C100 52.7909 101.791 51 104 51H126V59H104C101.791 59 100 57.2091 100 55V55Z" fill="#FF0000"/>
-<path id="RoofMain_5" d="M100 65C100 62.7909 101.791 61 104 61H126V69H104C101.791 69 100 67.2091 100 65V65Z" fill="#FF0000"/>
-<path id="Gradient" d="M100 65C100 62.7909 101.791 61 104 61H126V69H104C101.791 69 100 67.2091 100 65V65Z" fill="url(#paint0_linear_99_256)"/>
-<path id="Gradient_2" d="M100 55C100 52.7909 101.791 51 104 51H126V59H104C101.791 59 100 57.2091 100 55V55Z" fill="url(#paint1_linear_99_256)"/>
+<path id="RoofMain_4" d="M100 55C100 52.7909 101.791 51 104 51H126V59H104C101.791 59 100 57.2091 100 55Z" fill="#FF0000"/>
+<path id="RoofMain_5" d="M100 65C100 62.7909 101.791 61 104 61H126V69H104C101.791 69 100 67.2091 100 65Z" fill="#FF0000"/>
+<path id="Gradient" d="M100 65C100 62.7909 101.791 61 104 61H126V69H104C101.791 69 100 67.2091 100 65Z" fill="url(#paint0_linear_99_256)"/>
+<path id="Gradient_2" d="M100 55C100 52.7909 101.791 51 104 51H126V59H104C101.791 59 100 57.2091 100 55Z" fill="url(#paint1_linear_99_256)"/>
 <rect id="RoofShadow_5" x="73" y="50" width="7" height="3" fill="#CC0000"/>
 <rect id="RoofShadow_6" x="73" y="56" width="7" height="3" fill="#CC0000"/>
 <rect id="RoofShadow_7" x="73" y="62" width="7" height="3" fill="#CC0000"/>

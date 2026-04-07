@@ -6,6 +6,14 @@
 <rect id="RoofDarkest_4" width="13" height="4" rx="2" fill="#A00000"/>
 <rect id="RoofMain" x="3" y="5" width="31" height="18" rx="3" fill="#FF0000"/>
 <rect id="RoofMain_2" x="35" y="5" width="14" height="18" rx="3" fill="#FF0000"/>
+<g id="Pins">
+<rect id="Pin_1" x="24" y="13" width="6" height="6" rx="2" transform="rotate(-90 24 13)" fill="#A00000"/>
+<rect id="Pin_2" x="24" y="21" width="6" height="6" rx="2" transform="rotate(-90 24 21)" fill="#A00000"/>
+<rect id="Pin_3" x="16" y="13" width="6" height="6" rx="2" transform="rotate(-90 16 13)" fill="#A00000"/>
+<rect id="Pin_4" x="16" y="21" width="6" height="6" rx="2" transform="rotate(-90 16 21)" fill="#A00000"/>
+<rect id="Pin_5" x="8" y="13" width="6" height="6" rx="2" transform="rotate(-90 8 13)" fill="#A00000"/>
+<rect id="Pin_6" x="8" y="21" width="6" height="6" rx="2" transform="rotate(-90 8 21)" fill="#A00000"/>
+</g>
 </g>
 <defs>
 <clipPath id="clip0_102_485">

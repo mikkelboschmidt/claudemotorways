@@ -20,6 +20,12 @@ import { trafficLights } from './trafficLights.ts';
 const iconCache = new Map<string, HTMLImageElement>();
 const splashCache = new Map<string, HTMLImageElement>();
 const pinGlowCache = new Map<string, HTMLCanvasElement>();
+// Truck SVG images with Pin_n hidden (drawn programmatically) — keyed by (rawSvg + color)
+const truckImgCache = new Map<string, HTMLImageElement>();
+// Truck pin rect data — keyed by rawSvg (theme-specific)
+interface TruckPinRect { x: number; y: number; w: number; h: number }
+interface TruckPinData { svgW: number; svgH: number; rects: TruckPinRect[] }
+const truckPinDataCache = new Map<string, TruckPinData>();
 const trackWideNodeKeys = new Set<string>();
 const trackConnectorCache: { x: number; y: number; wide: boolean }[] = [];
 let trackCacheGraphVersion = -1;
@@ -60,8 +66,99 @@ let lastIconThemeId = currentThemeId;
 function invalidateIconCacheIfNeeded() {
   if (selectedColor !== lastIconColor || currentThemeId !== lastIconThemeId) {
     iconCache.clear();
+    truckImgCache.clear();
     lastIconColor = selectedColor;
     lastIconThemeId = currentThemeId;
+  }
+}
+
+// Parse Pin_n rect positions from a truck SVG, handling rotate(-90 px py) transforms.
+// Returns rects in SVG coordinate space, plus the SVG's own width/height.
+function getTruckPinData(rawSvg: string): TruckPinData {
+  const cached = truckPinDataCache.get(rawSvg);
+  if (cached) return cached;
+
+  const vbMatch = rawSvg.match(/viewBox="0 0 ([0-9.]+) ([0-9.]+)"/);
+  const svgW = vbMatch ? parseFloat(vbMatch[1]) : 52;
+  const svgH = vbMatch ? parseFloat(vbMatch[2]) : 28;
+
+  const rects: TruckPinRect[] = [];
+  for (let pin = 1; pin <= 6; pin++) {
+    const elemMatch = rawSvg.match(new RegExp(`<rect[^>]*id="Pin_${pin}"[^>]*/?>`, 'i'));
+    if (!elemMatch) continue;
+    const elem = elemMatch[0];
+    const xm = elem.match(/\bx="([^"]*)"/);
+    const ym = elem.match(/\by="([^"]*)"/);
+    const wm = elem.match(/\bwidth="([^"]*)"/);
+    const hm = elem.match(/\bheight="([^"]*)"/);
+    if (!xm || !ym || !wm || !hm) continue;
+    const x = parseFloat(xm[1]);
+    const y = parseFloat(ym[1]);
+    const w = parseFloat(wm[1]);
+    const h = parseFloat(hm[1]);
+    if (elem.match(/transform="rotate\(-90/)) {
+      // rotate(-90, px, py) around rect's own top-left: new bbox = {x, y: y-w, w: h, h: w}
+      rects.push({ x, y: y - w, w: h, h: w });
+    } else {
+      rects.push({ x, y, w, h });
+    }
+  }
+
+  const data: TruckPinData = { svgW, svgH, rects };
+  truckPinDataCache.set(rawSvg, data);
+  return data;
+}
+
+// Get truck SVG image with Pin_n elements hidden (pins drawn programmatically).
+function getTruckImage(rawSvg: string, color: string): HTMLImageElement {
+  const key = rawSvg + color;
+  let img = truckImgCache.get(key);
+  if (img) return img;
+
+  let svg = rawSvg;
+  svg = svg.replace(/(id="RoofMain(?:_\d+)?"[^>]*fill=")([^"]*)(")/g, `$1${color}$3`);
+  svg = svg.replace(/(id="RoofShadow(?:_\d+)?"[^>]*fill=")([^"]*)(")/g, `$1${darkenHex(color, 0.7)}$3`);
+  svg = svg.replace(/(id="RoofDarkest(?:_\d+)?"[^>]*fill=")([^"]*)(")/g, `$1${darkenHex(color, 0.55)}$3`);
+  // Hide the Pins group (both SVGs wrap all Pin_n in <g id="Pins">).
+  // Using the same safe pattern as sprites.ts PinPlacement: insert display="none" after the id attribute.
+  svg = svg.replace(/(<g[^>]*id="Pins")/, '$1 display="none"');
+
+  img = new Image();
+  img.src = 'data:image/svg+xml,' + encodeURIComponent(svg);
+  truckImgCache.set(key, img);
+  return img;
+}
+
+// Draw truck pin indicators using Pin_n rects from the SVG, scaled to the truck's drawn size.
+// Inactive pins render dark; active (carried) pins render white — matching factory pin style.
+function drawTruckPins(
+  ctx: CanvasRenderingContext2D,
+  rawSvg: string,
+  carLen: number,
+  carWid: number,
+  pinsCarried: number,
+  color: string,
+) {
+  const pinData = getTruckPinData(rawSvg);
+  if (pinData.rects.length === 0) return;
+
+  const scaleX = carLen / pinData.svgW;
+  const scaleY = carWid / pinData.svgH;
+  const offsetX = -carLen / 2;
+  const offsetY = -carWid / 2;
+
+  const activePins = Math.max(0, Math.min(pinData.rects.length, pinsCarried));
+  const darkestColor = darkenHex(color, 0.55);
+
+  for (let i = 0; i < pinData.rects.length; i++) {
+    const rect = pinData.rects[i];
+    ctx.fillStyle = i < activePins ? '#FFFFFF' : darkestColor;
+    ctx.fillRect(
+      offsetX + rect.x * scaleX,
+      offsetY + rect.y * scaleY,
+      rect.w * scaleX,
+      rect.h * scaleY,
+    );
   }
 }
 
@@ -1595,7 +1692,7 @@ function drawCars(ctx: CanvasRenderingContext2D, filter?: 'road' | Set<string>) 
     const carWid = car.isTruck ? TRUCK_WID : CAR_WID;
     const renderPos = getVehicleRenderOrigin(car, carLen);
     const vehicleSvg = car.isTruck ? themeAssets.sprites.truck : themeAssets.sprites.car;
-    const vehicleImg = getIconImage(vehicleSvg, car.color);
+    const vehicleImg = car.isTruck ? getTruckImage(vehicleSvg, car.color) : getIconImage(vehicleSvg, car.color);
 
     ctx.save();
     ctx.translate(renderPos.x, renderPos.y);
@@ -1604,29 +1701,8 @@ function drawCars(ctx: CanvasRenderingContext2D, filter?: 'road' | Set<string>) 
     ctx.globalAlpha = 1;
 
     const drawVehicleCargo = () => {
-      const hh = carWid / 2;
       if (car.isTruck) {
-        if (car.pinsCarried > 0) {
-          const cabLen = carLen * 0.35;
-          const bedLeft = -carLen / 2 + 2;
-          const bedRight = carLen / 2 - cabLen - 1;
-          const bedW = bedRight - bedLeft;
-          const dotR = 1.5;
-          const cols = 3;
-          const rows = 2;
-          const spacingX = bedW / (cols + 1);
-          const spacingY = (carWid - 4) / (rows + 1);
-          ctx.fillStyle = theme.cargoDots;
-          for (let d = 0; d < car.pinsCarried && d < 6; d++) {
-            const col = d % cols;
-            const row = Math.floor(d / cols);
-            const dx = bedLeft + spacingX * (col + 1);
-            const dy = -hh + 2 + spacingY * (row + 1);
-            ctx.beginPath();
-            ctx.arc(dx, dy, dotR, 0, Math.PI * 2);
-            ctx.fill();
-          }
-        }
+        drawTruckPins(ctx, vehicleSvg, carLen, carWid, car.pinsCarried, car.color);
       } else if (car.carryingPin) {
         drawCarriedPinGlow(ctx, car.color);
       }
