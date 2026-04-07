@@ -4,8 +4,16 @@
 <rect id="RoofMain_2" y="24" width="13" height="4" rx="2" fill="#FF0000"/>
 <rect id="RoofMain_3" x="39" width="13" height="4" rx="2" fill="#FF0000"/>
 <rect id="RoofMain_4" width="13" height="4" rx="2" fill="#FF0000"/>
-<rect id="RoofMain_5" x="3" y="5" width="31" height="18" rx="3" fill="#FF0000"/>
-<rect id="RoofMain_6" x="35" y="5" width="14" height="18" rx="3" fill="#FF0000"/>
+<rect id="RoofMain_5" x="3" y="5" width="32" height="18" rx="3" fill="#FF0000"/>
+<g id="Pins">
+<rect id="Pin_6" x="5" y="21" width="14" height="3" rx="1" transform="rotate(-90 5 21)" fill="#A00000"/>
+<rect id="Pin_5" x="10" y="21" width="14" height="3" rx="1" transform="rotate(-90 10 21)" fill="#A00000"/>
+<rect id="Pin_4" x="15" y="21" width="14" height="3" rx="1" transform="rotate(-90 15 21)" fill="#A00000"/>
+<rect id="Pin_3" x="20" y="21" width="14" height="3" rx="1" transform="rotate(-90 20 21)" fill="#A00000"/>
+<rect id="Pin_2" x="25" y="21" width="14" height="3" rx="1" transform="rotate(-90 25 21)" fill="#A00000"/>
+<rect id="Pin_1" x="30" y="21" width="14" height="3" rx="1" transform="rotate(-90 30 21)" fill="#A00000"/>
+</g>
+<rect id="RoofMain_6" x="36" y="5" width="13" height="18" rx="3" fill="#FF0000"/>
 </g>
 <defs>
 <clipPath id="clip0_102_419">
