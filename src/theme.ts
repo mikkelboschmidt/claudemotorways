@@ -451,21 +451,28 @@ function clearStoredThemeId() {
   }
 }
 
+const THEME_TITLES: Record<ThemeId, string> = {
+  earth: 'LoomWays',
+  space: 'MineLoops',
+};
+
 function applyThemeConfig(config: ThemeConfig, persist: boolean) {
   currentThemeId = config.id;
   theme = config.palette;
   themeAssets = config.assets;
   if (typeof document !== 'undefined') {
     document.body.style.background = config.palette.pageBg;
+    document.title = THEME_TITLES[config.id];
   }
   if (persist) persistThemeId(config.id);
 }
 
 clearStoredThemeId();
 
-export let currentThemeId: ThemeId = getInitialThemeId();
-export let theme: GameTheme = themeConfigs[currentThemeId].palette;
-export let themeAssets: ThemeAssetBundle = themeConfigs[currentThemeId].assets;
+export let currentThemeId: ThemeId = 'space';
+export let theme: GameTheme = themeConfigs['space'].palette;
+export let themeAssets: ThemeAssetBundle = themeConfigs['space'].assets;
+applyThemeConfig(themeConfigs[getInitialThemeId()], false);
 
 export function getBuildingColors(): string[] {
   return theme.buildingColors;
