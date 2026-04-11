@@ -8,6 +8,7 @@ import { roundabouts, roundaboutEdgeSet, roundaboutConnectionEdgeSet, createRoun
 import { remapColorToTheme } from './theme.ts';
 import { FACTORY_MAX_PARKED, FACTORY_MAX_PINS, STORAGE_MAX_PARKED, STORAGE_MAX_PINS } from './constants.ts';
 import { trafficLights, createTrafficLight, resetTrafficLights } from './trafficLights.ts';
+import { tunnels, tunnelEdgeSet, createTunnel, resetTunnels } from './tunnel.ts';
 
 const SAVE_KEY = 'claudemotorways_save';
 
@@ -19,6 +20,7 @@ export interface SaveData {
   roundabouts?: { gx: number; gy: number }[];
   roundaboutConnections?: { raGx: number; raGy: number; outerGx: number; outerGy: number; ringIndex: number }[];
   trafficLights?: { gx: number; gy: number }[];
+  tunnels?: { startGx: number; startGy: number; endGx: number; endGy: number }[];
   score: number;
   nextBuildingId: number;
 }
@@ -29,6 +31,7 @@ export function serializeState(): SaveData {
     if (highwayEdgeSet.has(edge.id)) continue; // highway edges are recreated from highway data
     if (roundaboutEdgeSet.has(edge.id)) continue; // roundabout edges are recreated from roundabout data
     if (roundaboutConnectionEdgeSet.has(edge.id)) continue; // connection edges saved separately
+    if (tunnelEdgeSet.has(edge.id)) continue; // tunnel edges are recreated from tunnel data
     const [gx1, gy1] = parseKey(edge.fromKey);
     const [gx2, gy2] = parseKey(edge.toKey);
     if (edge.narrow) {
@@ -50,6 +53,11 @@ export function serializeState(): SaveData {
 
   const tlList = trafficLights.map(tl => ({ gx: tl.gx, gy: tl.gy }));
 
+  const tnList = tunnels.map(tn => ({
+    startGx: tn.startGx, startGy: tn.startGy,
+    endGx: tn.endGx, endGy: tn.endGy,
+  }));
+
   return {
     buildings: buildings.map(b => ({ ...b })),
     edges: edgeList,
@@ -57,6 +65,7 @@ export function serializeState(): SaveData {
     roundabouts: raList,
     roundaboutConnections: raConns.length > 0 ? raConns : undefined,
     trafficLights: tlList.length > 0 ? tlList : undefined,
+    tunnels: tnList.length > 0 ? tnList : undefined,
     score,
     nextBuildingId: Math.max(...buildings.map(b => b.id), 0) + 1,
   };
@@ -74,6 +83,7 @@ export function loadFromData(data: SaveData): boolean {
   resetHighways();
   resetRoundabouts();
   resetTrafficLights();
+  resetTunnels();
 
   // Restore buildings
   for (const b of data.buildings) {
@@ -123,6 +133,13 @@ export function loadFromData(data: SaveData): boolean {
   if (data.trafficLights) {
     for (const tl of data.trafficLights) {
       createTrafficLight(tl.gx, tl.gy);
+    }
+  }
+
+  // Restore tunnels
+  if (data.tunnels) {
+    for (const tn of data.tunnels) {
+      createTunnel(tn.startGx, tn.startGy, tn.endGx, tn.endGy);
     }
   }
 

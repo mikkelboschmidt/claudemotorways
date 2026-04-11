@@ -7,6 +7,7 @@ import { findPath } from './pathfinding.ts';
 import { addScore } from './score.ts';
 import { getHighwayPose, highwayEdgeSet } from './highway.ts';
 import { roundaboutEdgeSet } from './roundabout.ts';
+import { tunnelEdgeSet } from './tunnel.ts';
 
 const NARROW_SPEED = CAR_SPEED * 0.7; // slower on narrow single-lane roads
 
@@ -1275,9 +1276,11 @@ export function updateCars() {
   // ============ COLLISION AVOIDANCE ============
 
   // Group driving cars by edge+direction for same-edge gap following
+  // Tunnel cars flow freely — skip collision avoidance entirely
   const laneGroups = new Map<string, Car[]>();
   for (const car of cars) {
     if (!isDriving(car.state)) continue;
+    if (tunnelEdgeSet.has(car.edgeId)) continue;
     const key = `${car.edgeId}:${car.edgeDir}`;
     let group = laneGroups.get(key);
     if (!group) { group = []; laneGroups.set(key, group); }
@@ -1752,6 +1755,7 @@ function performUTurn(car: Car): boolean {
   if (edge.oneway) return false;
   if (highwayEdgeSet.has(car.edgeId)) return false;
   if (roundaboutEdgeSet.has(car.edgeId)) return false;
+  if (tunnelEdgeSet.has(car.edgeId)) return false;
 
   // Cooldown and anti-oscillation
   if (car.uTurnCooldown > 0) return false;
