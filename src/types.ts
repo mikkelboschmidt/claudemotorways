@@ -33,6 +33,7 @@ export interface Edge {
   tx: number; ty: number; // to pixel center
   narrow?: boolean; // narrow single-lane road
   oneway?: string; // if set, node key that traffic must come FROM (one-way edge)
+  tunnel?: boolean; // underground tunnel edge
 }
 
 export interface Car {
@@ -96,4 +97,4 @@ export interface TrafficLight {
   diagonal: boolean; // true when ALL meeting roads are 45° diagonal
 }
 
-export type ToolType = 'addRoad' | 'addNarrow' | 'removeRoad' | 'addBuilding' | 'removeBuilding' | 'addHighway' | 'addRoundabout' | 'addStorage' | 'demolish' | 'addTrafficLight';
+export type ToolType = 'addRoad' | 'addNarrow' | 'removeRoad' | 'addBuilding' | 'removeBuilding' | 'addHighway' | 'addRoundabout' | 'addStorage' | 'demolish' | 'addTrafficLight' | 'addTunnel';

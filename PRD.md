@@ -93,6 +93,18 @@ A logistics puzzle game where players build road networks connecting residential
 - **Persistence**: Saved as `{ gx, gy }` positions. Timer state and diagonal flag are not saved — recomputed on load.
 - **Space theme label**: "Signal Node".
 
+### Tunnel
+
+- **Width**: 14px visual.
+- **Speed**: 1.5 px/frame (same as regular road).
+- **Placement**: Two-click placement (start node, then end node, both must be on existing roads, ≥2 tiles apart). Creates a straight-line underground path between them with intermediate nodes at grid intervals.
+- **Visual**: Dashed line (`setLineDash([6, 4])`) at 20% opacity, drawn below everything else (below building grounds, below roads). Entrance/exit markers are dark semicircles at each endpoint, oriented toward the tunnel interior, rendered at road level.
+- **Underground cars**: Cars on tunnel edges render as a small colored dot (4px radius, 5px for trucks) at 50% opacity instead of the full vehicle sprite. Drawn at the tunnel layer (below roads).
+- **Collision avoidance**: None. Cars flow freely through tunnels at base speed with no gap following, intersection reservation, traffic lights, or cross-edge lookahead. U-turns are also blocked on tunnel edges.
+- **Pathfinding bonus**: Tunnels are weighted at 0.7× cost, making them preferred when they offer a shortcut.
+- **Demolish**: Click anywhere on the tunnel line or its entrance/exit markers with the demolish tool to remove the entire tunnel as a unit. Drag-removal of surface road tiles does not affect tunnel edges.
+- **Persistence**: Saved as `{ startGx, startGy, endGx, endGy }`. Tunnel edges and intermediate nodes are recreated on load.
+
 ### Road–Building Connections
 
 - **Houses**: The connection tile is the house tile itself. Dragging a road onto a house automatically connects it. The drag direction determines which side becomes the entrance (drag right → right entrance, etc.). Only pure horizontal/vertical drags are matched.
@@ -217,6 +229,7 @@ The game auto-saves to `localStorage` every 5 seconds and after every build acti
 - All highways (start, end, two control points)
 - All roundabouts (grid position) and their connection edges (outer tile, ring index)
 - All traffic lights (grid position)
+- All tunnels (start and end grid positions)
 - Score and next building ID
 
 Cars and trucks are not saved — they respawn naturally after load.
@@ -273,12 +286,13 @@ Floating circular buttons (44px diameter) arranged in a vertical column on the l
 | Narrow SVG | `addNarrow` | Drag to place single-lane roads |
 | Highway SVG | `addHighway` | Two-click placement + two draggable control handles |
 | Roundabout SVG | `addRoundabout` | Click to place a 3×3 roundabout centered on the clicked tile |
+| Traffic Light icon | `addTrafficLight` | Click an intersection (3+ edges) to toggle a traffic light |
+| Tunnel icon | `addTunnel` | Two-click placement: click start node, then end node (both on existing roads, ≥2 tiles apart) |
 | **Color SVG** | — | Shows the selected building color via `CurrentColor` layer. Tap to cycle to the next color |
 | House SVG | `addBuilding` (house) | Place a house |
 | Factory SVG | `addBuilding` (factory) | Place a factory |
 | Storage SVG | `addBuilding` (storage) | Place a storage depot |
-| Traffic Light icon | `addTrafficLight` | Click an intersection (3+ edges) to toggle a traffic light |
-| Demolish SVG | `demolish` | Tap a building/roundabout to remove it, or drag across road tiles to delete edges/highways |
+| Demolish SVG | `demolish` | Tap a building/roundabout/tunnel to remove it, or drag across road tiles to delete edges/highways |
 
 - All toolbar icons are loaded from the active theme asset bundle (`assets/EarthTheme/` or `assets/SpaceTheme/`) and rendered onto the canvas. SVGs with a layer `id="CurrentColor"` have their fill dynamically replaced with the selected building color.
 - The active tool has a black background with a white ring outline; inactive tools use a semi-transparent dark background (`rgba(44, 62, 80, 0.85)`).
@@ -476,14 +490,17 @@ The game is deployed to **GitHub Pages** with the custom domain **loomways.com**
 ## Visual Layers (Render Order)
 
 1. **Background**: Theme terrain fill (lunar: dusty brown `#59412F`, classic: green `#4a7c59`) with very faint grid lines.
-2. **Building grounds**: SVG ground layer (driveways, pads) drawn below roads.
-3. **Roads**: Regular → narrow → highway. Solid surfaces + dashes (classic) or parallel track rails (lunar).
-4. **Road preview / hover ghost**: Shown during placement.
-5. **Cars and trucks**: All vehicles.
-6. **Building shadows**: SVG shadow layer drawn above vehicles.
-7. **Building bodies**: SVG building layer drawn on top. Donut fill indicators rendered over buildings.
-8. **Collecting pin animations**: Flying pin dots from building to car.
-9. **UI**: Score display and toolbar (screen-space, not affected by camera).
+2. **Tunnels**: Dashed underground paths at low opacity. Underground car dots rendered here.
+3. **Building grounds**: SVG ground layer (driveways, pads) drawn below roads.
+4. **Roads**: Regular → narrow. Solid surfaces + dashes (classic) or parallel track rails (lunar).
+5. **Tunnel entrances**: Surface markers (semicircle arches) at tunnel entry/exit nodes.
+6. **Road preview / hover ghost**: Shown during placement.
+7. **Cars and trucks**: All surface vehicles (tunnel cars excluded — drawn at layer 2).
+8. **Building shadows**: SVG shadow layer drawn above vehicles.
+9. **Building bodies**: SVG building layer drawn on top. Donut fill indicators rendered over buildings.
+10. **Collecting pin animations**: Flying pin dots from building to car.
+11. **Highways**: Elevated roads + their cars on top of everything.
+12. **UI**: Score display and toolbar (screen-space, not affected by camera).
 
 Buildings use an SVG sprite system with programmatic color replacement. Each SVG has three layer groups (`Ground`, `Shadows`, `Building`) filtered by hiding non-target groups. Colors are replaced by matching element IDs (`RoofMain` → building color, `RoofShadow` → darkened variant). Disabled buildings render in muted dark (`#3a3a50`).
 

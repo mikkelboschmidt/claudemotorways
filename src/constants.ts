@@ -41,3 +41,5 @@ export const UTURN_STUCK_THRESHOLD = 600; // frames (~10s at 60fps) before u-tur
 export const UTURN_COOLDOWN = 300; // frames (~5s) before another u-turn is allowed
 // HIGHWAY_COLOR moved to src/theme.ts
 export const HIGHWAY_ROAD_W = ROAD_W + 6;
+export const TUNNEL_ROAD_W = 14;
+export const TUNNEL_COST_FACTOR = 0.7; // pathfinding discount (like highways at 0.65)

@@ -1,4 +1,4 @@
-import { GRID, HALF, ROAD_W, DASH_LEN, DASH_GAP, CAR_LEN, CAR_WID, HIGHWAY_ROAD_W, NARROW_ROAD_W, PIN_COOLDOWN, TRUCK_LEN, TRUCK_WID } from './constants.ts';
+import { GRID, HALF, ROAD_W, DASH_LEN, DASH_GAP, CAR_LEN, CAR_WID, HIGHWAY_ROAD_W, NARROW_ROAD_W, PIN_COOLDOWN, TRUCK_LEN, TRUCK_WID, TUNNEL_ROAD_W } from './constants.ts';
 import { currentThemeId, theme, themeAssets } from './theme.ts';
 import { camX, camY, zoom } from './camera.ts';
 import { edges, graphVersion, nodes, parseKey } from './graph.ts';
@@ -15,6 +15,7 @@ import { cities } from './cities.ts';
 import { roundabouts, roundaboutConnectionEdgeSet, roundaboutEdgeSet } from './roundabout.ts';
 import { getHouseSprite, getFactorySprite, getStorageSprite, drawSpriteLayer, PinPlacement } from './sprites.ts';
 import { trafficLights } from './trafficLights.ts';
+import { tunnels, tunnelEdgeSet, tunnelPhase, tunnelStartGx, tunnelStartGy, tunnelPreviewEndPx, tunnelPreviewEndPy } from './tunnel.ts';
 
 // SVG icon image cache — keyed by (rawSvg + colorOverride)
 const iconCache = new Map<string, HTMLImageElement>();
@@ -396,8 +397,11 @@ export function render(ctx: CanvasRenderingContext2D, width: number, height: num
   }
   ctx.stroke();
 
+  drawTunnels(ctx);         // Underground paths — below everything
+  drawTunnelCars(ctx);       // Underground cars as colored dots
   drawBuildingGrounds(ctx);
   drawRoads(ctx);
+  drawTunnelEntrances(ctx);  // Surface markers at entrance/exit nodes
   drawRoundabouts(ctx);
   drawRoundaboutConnectionNodes(ctx);
   drawTrafficLights(ctx);
@@ -414,6 +418,7 @@ export function render(ctx: CanvasRenderingContext2D, width: number, height: num
 
   drawHighways(ctx);       // Highways + their cars on top of everything
   drawHighwayPreview(ctx);
+  drawTunnelPreview(ctx);
 
   // Restore from camera transform + clip
   ctx.restore();
@@ -462,7 +467,7 @@ function rebuildTrackRenderCache() {
 
     for (const eid of node.edges) {
       const e = edges.get(eid);
-      if (!e || highwayEdgeSet.has(eid) || roundaboutEdgeSet.has(eid)) continue;
+      if (!e || highwayEdgeSet.has(eid) || roundaboutEdgeSet.has(eid) || tunnelEdgeSet.has(eid)) continue;
 
       if (!gotCenter) {
         const isFrom = e.fromKey === key;
@@ -556,6 +561,7 @@ function drawRoadsTracks(ctx: CanvasRenderingContext2D) {
     for (const [, edge] of edges) {
       if (highwayEdgeSet.has(edge.id)) continue;
       if (roundaboutEdgeSet.has(edge.id)) continue;
+      if (tunnelEdgeSet.has(edge.id)) continue;
       if (edge.narrow) continue; // narrow drawn separately below
       const [ox1, oy1, ox2, oy2] = offsetLine(edge.fx, edge.fy, edge.tx, edge.ty, side * trackOff);
       ctx.moveTo(ox1, oy1);
@@ -569,6 +575,7 @@ function drawRoadsTracks(ctx: CanvasRenderingContext2D) {
   for (const [, edge] of edges) {
     if (highwayEdgeSet.has(edge.id)) continue;
     if (roundaboutEdgeSet.has(edge.id)) continue;
+    if (tunnelEdgeSet.has(edge.id)) continue;
     if (!edge.narrow) continue;
     ctx.moveTo(edge.fx, edge.fy);
     ctx.lineTo(edge.tx, edge.ty);
@@ -637,6 +644,7 @@ function drawRoadsSolid(ctx: CanvasRenderingContext2D) {
   for (const [, edge] of edges) {
     if (highwayEdgeSet.has(edge.id)) continue;
     if (roundaboutEdgeSet.has(edge.id)) continue;
+    if (tunnelEdgeSet.has(edge.id)) continue;
     if (edge.narrow) continue; // narrow drawn separately
     ctx.moveTo(edge.fx, edge.fy);
     ctx.lineTo(edge.tx, edge.ty);
@@ -653,6 +661,7 @@ function drawRoadsSolid(ctx: CanvasRenderingContext2D) {
   for (const [, edge] of edges) {
     if (highwayEdgeSet.has(edge.id)) continue;
     if (roundaboutEdgeSet.has(edge.id)) continue;
+    if (tunnelEdgeSet.has(edge.id)) continue;
     if (!edge.narrow) continue;
     ctx.moveTo(edge.fx, edge.fy);
     ctx.lineTo(edge.tx, edge.ty);
@@ -667,7 +676,7 @@ function drawRoadsSolid(ctx: CanvasRenderingContext2D) {
     let hasRoad = false;
     for (const eid of node.edges) {
       const e = edges.get(eid);
-      if (!e || highwayEdgeSet.has(eid) || roundaboutEdgeSet.has(eid)) continue;
+      if (!e || highwayEdgeSet.has(eid) || roundaboutEdgeSet.has(eid) || tunnelEdgeSet.has(eid)) continue;
       hasRoad = true;
       if (!e.narrow) { hasWide = true; break; }
     }
@@ -703,6 +712,7 @@ function drawRoadsSolid(ctx: CanvasRenderingContext2D) {
   for (const [, edge] of edges) {
     if (edge.narrow) continue;
     if (roundaboutEdgeSet.has(edge.id)) continue;
+    if (tunnelEdgeSet.has(edge.id)) continue;
     ctx.moveTo(edge.fx, edge.fy);
     ctx.lineTo(edge.tx, edge.ty);
   }
@@ -1685,6 +1695,7 @@ function drawCars(ctx: CanvasRenderingContext2D, filter?: 'road' | Set<string>) 
   for (const car of cars) {
     if (filter === 'road') {
       if (highwayEdgeSet.has(car.edgeId)) continue;
+      if (tunnelEdgeSet.has(car.edgeId)) continue;
     } else if (filter instanceof Set) {
       if (!filter.has(car.edgeId)) continue;
     }
@@ -1783,6 +1794,127 @@ function drawCollectingPins(ctx: CanvasRenderingContext2D) {
   }
 }
 
+// ============ TUNNELS ============
+
+function drawTunnels(ctx: CanvasRenderingContext2D) {
+  if (tunnels.length === 0) return;
+
+  ctx.save();
+  const tunnelAlpha = theme.roadStyle === 'tracks' ? 0.15 : 0.08;
+  ctx.globalAlpha = tunnelAlpha;
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = TUNNEL_ROAD_W;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.setLineDash([6, 4]);
+
+  // Tunnels are straight lines — draw directly from known start/end positions
+  const ext = 4;
+  for (const tn of tunnels) {
+    const sx = tn.startGx * GRID + HALF;
+    const sy = tn.startGy * GRID + HALF;
+    const ex = tn.endGx * GRID + HALF;
+    const ey = tn.endGy * GRID + HALF;
+    const dx = ex - sx, dy = ey - sy;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len;
+
+    ctx.beginPath();
+    ctx.moveTo(sx - ux * ext, sy - uy * ext);
+    ctx.lineTo(ex + ux * ext, ey + uy * ext);
+    ctx.stroke();
+  }
+
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+function drawTunnelCars(ctx: CanvasRenderingContext2D) {
+  for (const car of cars) {
+    if (!tunnelEdgeSet.has(car.edgeId)) continue;
+    // Underground cars are simple colored dots
+    ctx.save();
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = car.color;
+    ctx.beginPath();
+    ctx.arc(car.x, car.y, car.isTruck ? 5 : 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawTunnelEntrances(ctx: CanvasRenderingContext2D) {
+  if (tunnels.length === 0) return;
+
+  for (const tn of tunnels) {
+    const sx = tn.startGx * GRID + HALF;
+    const sy = tn.startGy * GRID + HALF;
+    const ex = tn.endGx * GRID + HALF;
+    const ey = tn.endGy * GRID + HALF;
+
+    drawEntranceMarker(ctx, sx, sy, ex, ey);
+    drawEntranceMarker(ctx, ex, ey, sx, sy);
+  }
+}
+
+function drawEntranceMarker(ctx: CanvasRenderingContext2D, x: number, y: number, towardsX: number, towardsY: number) {
+  const dx = towardsX - x;
+  const dy = towardsY - y;
+  const angle = Math.atan2(dy, dx);
+  const r = 10;
+  const offset = r * 0.5;
+
+  ctx.save();
+  ctx.translate(x + Math.cos(angle) * offset, y + Math.sin(angle) * offset);
+  ctx.rotate(angle);
+
+  // Gradient from dark (arc top) to transparent (straight edge)
+  // In rotated space: arc is on the right (+x), straight edge is on the left
+  const grad = ctx.createLinearGradient(-r, 0, r, 0);
+  grad.addColorStop(0, 'rgba(0, 0, 0, 0)');
+  grad.addColorStop(1, 'rgba(0, 0, 0, 0.6)');
+
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(0, 0, r, -Math.PI / 2, Math.PI / 2);
+  ctx.closePath();
+  ctx.fill();
+
+  // Stroke only the curved arc side
+  ctx.strokeStyle = theme.road;
+  ctx.lineWidth = 1.5;
+  ctx.globalAlpha = 0.5;
+  ctx.beginPath();
+  ctx.arc(0, 0, r, -Math.PI / 2, Math.PI / 2);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawTunnelPreview(ctx: CanvasRenderingContext2D) {
+  if (tunnelPhase !== 'pickEnd') return;
+
+  const sx = tunnelStartGx * GRID + HALF;
+  const sy = tunnelStartGy * GRID + HALF;
+
+  ctx.save();
+  ctx.globalAlpha = 0.35;
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = TUNNEL_ROAD_W;
+  ctx.lineCap = 'round';
+  ctx.setLineDash([6, 4]);
+
+  ctx.beginPath();
+  ctx.moveTo(sx, sy);
+  ctx.lineTo(tunnelPreviewEndPx, tunnelPreviewEndPy);
+  ctx.stroke();
+
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
 function drawScore(ctx: CanvasRenderingContext2D, width: number) {
   const text = `Points: ${score}  Cars: ${cars.length}`;
   ctx.font = 'bold 14px sans-serif';
@@ -1872,6 +2004,43 @@ function iconTrafficLight(ctx: CanvasRenderingContext2D, cx: number, cy: number,
   drawSvgIcon(ctx, cx, cy, r, themeAssets.icons.trafficLight);
 }
 
+function iconTunnel(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
+  // Procedural tunnel icon: dark background circle with tunnel arch
+  ctx.fillStyle = 'rgba(44, 62, 80, 0.85)';
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  const ir = r * 0.55;
+  // Tunnel arch (semicircle)
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+  ctx.beginPath();
+  ctx.arc(cx, cy + ir * 0.2, ir, Math.PI, 0);
+  ctx.lineTo(cx + ir, cy + ir * 0.6);
+  ctx.lineTo(cx - ir, cy + ir * 0.6);
+  ctx.closePath();
+  ctx.fill();
+
+  // Arch outline
+  ctx.strokeStyle = theme.road;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(cx, cy + ir * 0.2, ir, Math.PI, 0);
+  ctx.stroke();
+
+  // Dashed road leading in
+  ctx.strokeStyle = theme.road;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([3, 2]);
+  ctx.globalAlpha = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + ir * 0.2);
+  ctx.lineTo(cx, cy - ir * 0.4);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 1;
+}
+
 // Gear icon
 function iconGear(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
   const ir = r * 0.35;
@@ -1909,14 +2078,15 @@ const TOOL_ICONS: ToolIconDef[] = [
   { type: 'addHighway', icon: iconHighway },
   { type: 'addRoundabout', icon: iconRoundabout },
   { type: 'addTrafficLight', icon: iconTrafficLight },
-  // Color circle goes here (index 5) — handled separately
+  { type: 'addTunnel', icon: iconTunnel },
+  // Color circle goes here (index 6) — handled separately
   { type: 'addBuilding', buildingType: 'house', icon: iconHouse },
   { type: 'addBuilding', buildingType: 'factory', icon: iconFactory },
   { type: 'addBuilding', buildingType: 'storage', icon: iconStorage },
   { type: 'demolish', icon: iconDemolishIcon },
 ];
 
-const COLOR_SLOT_INDEX = 5; // color circle inserted before house
+const COLOR_SLOT_INDEX = 6; // color circle inserted before house
 
 function getGearMenuLayout(width: number, height: number) {
   const gearR = GEAR_SIZE / 2;
@@ -2140,6 +2310,7 @@ function drawToolbar(ctx: CanvasRenderingContext2D, width: number, height: numbe
     case 'addHighway': label = currentThemeId === 'space' ? 'High-Speed Rail' : 'Highway'; break;
     case 'addRoundabout': label = currentThemeId === 'space' ? 'Rail Junction' : 'Roundabout'; break;
     case 'addTrafficLight': label = currentThemeId === 'space' ? 'Signal Node' : 'Traffic Light'; break;
+    case 'addTunnel': label = currentThemeId === 'space' ? 'Sub-terrain Rail' : 'Tunnel'; break;
     case 'demolish': label = 'Demolish'; break;
     case 'addBuilding':
       switch (selectedBuildingType) {

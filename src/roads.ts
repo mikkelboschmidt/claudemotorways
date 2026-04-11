@@ -11,6 +11,7 @@ import { highwayPhase, highwayStartGx, highwayStartGy, draggingHighwayId, draggi
 import { createRoundabout, removeRoundabout, findRoundaboutAtPixel, segmentCutsRoundabout, roundaboutEdgeSet, roundaboutConnectionEdgeSet, findRoundaboutAtTile, findBestRoundaboutEntry, addRoundaboutConnectionEdge, Roundabout } from './roundabout.ts';
 import { recordRoad, recordHighway, recordRoundabout } from './run.ts';
 import { createTrafficLight, findTrafficLightAtTile, removeTrafficLight } from './trafficLights.ts';
+import { tunnelPhase, tunnelStartGx, tunnelStartGy, setTunnelPhase, setTunnelStart, setTunnelPreviewEnd, createTunnel, findTunnelAtPixel, removeTunnel } from './tunnel.ts';
 
 let dragging = false;
 let dragStartGx = 0;
@@ -63,6 +64,10 @@ export function cancelRoadDrag() {
   // Cancel highway placement in progress
   if (highwayPhase !== 'idle') {
     setHighwayPhase('idle');
+  }
+  // Cancel tunnel placement in progress
+  if (tunnelPhase !== 'idle') {
+    setTunnelPhase('idle');
   }
 }
 
@@ -189,6 +194,14 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
         saveGame();
         return;
       }
+      // Check if clicking on a tunnel
+      const tn = findTunnelAtPixel(px, py);
+      if (tn) {
+        removeTunnel(tn.id);
+        playSfx('demolish');
+        saveGame();
+        return;
+      }
       removeRoadDragging = true;
       removeStartGx = snapToGrid(px);
       removeStartGy = snapToGrid(py);
@@ -241,6 +254,28 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
         }
         saveGame();
       };
+    } else if (activeTool === 'addTunnel') {
+      const gx = snapToGrid(px);
+      const gy = snapToGrid(py);
+      if (tunnelPhase === 'idle') {
+        // Start: must be on an existing road node
+        if (nodes.has(nodeKey(gx, gy))) {
+          setTunnelStart(gx, gy);
+          setTunnelPhase('pickEnd');
+        }
+      } else if (tunnelPhase === 'pickEnd') {
+        // End: must be on an existing road node, at least 2 tiles apart
+        const key = nodeKey(gx, gy);
+        if (nodes.has(key)) {
+          const dist = Math.hypot(gx - tunnelStartGx, gy - tunnelStartGy);
+          if (dist >= 2) {
+            createTunnel(tunnelStartGx, tunnelStartGy, gx, gy);
+            playSfx('road');
+            saveGame();
+          }
+          setTunnelPhase('idle');
+        }
+      }
     } else if (activeTool === 'addHighway') {
       // Check for handle drag first
       const handle = findHighwayHandleAtPixel(px, py);
@@ -298,6 +333,11 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
     // Highway preview (world coords) — must update for both mouse and touch
     if (activeTool === 'addHighway' && highwayPhase === 'pickEnd') {
       setHighwayPreviewEnd(px, py);
+    }
+
+    // Tunnel preview (world coords)
+    if (activeTool === 'addTunnel' && tunnelPhase === 'pickEnd') {
+      setTunnelPreviewEnd(px, py);
     }
 
     // Update hover position for ghost previews (skip for touch — no hover state)
@@ -408,16 +448,18 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
     if (!isTouch) cancelRoadDrag();
   });
 
-  // Escape or right-click cancels highway placement
+  // Escape or right-click cancels highway/tunnel placement
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && highwayPhase === 'pickEnd') {
-      setHighwayPhase('idle');
+    if (e.key === 'Escape') {
+      if (highwayPhase === 'pickEnd') setHighwayPhase('idle');
+      if (tunnelPhase === 'pickEnd') setTunnelPhase('idle');
     }
   });
   canvas.addEventListener('contextmenu', (e) => {
-    if (highwayPhase === 'pickEnd') {
+    if (highwayPhase === 'pickEnd' || tunnelPhase === 'pickEnd') {
       e.preventDefault();
-      setHighwayPhase('idle');
+      if (highwayPhase === 'pickEnd') setHighwayPhase('idle');
+      if (tunnelPhase === 'pickEnd') setTunnelPhase('idle');
     }
   });
 }

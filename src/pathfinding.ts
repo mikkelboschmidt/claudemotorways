@@ -1,6 +1,8 @@
 import { nodes, edges, getNeighbors, getEdgeBetween } from './graph.ts';
 import { cars } from './cars.ts';
 import { highwayEdgeSet } from './highway.ts';
+import { tunnelEdgeSet } from './tunnel.ts';
+import { TUNNEL_COST_FACTOR } from './constants.ts';
 
 // Precomputed congestion map — rebuilt once per frame at most
 let congestionMap: Map<string, number> | null = null;
@@ -100,7 +102,8 @@ export function findPath(startKey: string, endKey: string): string[] | null {
       const penalty = density > 0 ? Math.pow(1.8, density) - 1 : 0;
       // Highways are faster (1.5x speed), so their effective time-cost is lower
       const highwayFactor = highwayEdgeSet.has(edge.id) ? 0.65 : 1.0;
-      const weight = edge.length * highwayFactor * (1 + penalty);
+      const tunnelFactor = tunnelEdgeSet.has(edge.id) ? TUNNEL_COST_FACTOR : 1.0;
+      const weight = edge.length * highwayFactor * tunnelFactor * (1 + penalty);
 
       const newDist = currentDist + weight;
       const oldDist = dist.get(neighbor);
