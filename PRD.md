@@ -4,6 +4,28 @@ A logistics puzzle game where players build road networks connecting residential
 
 ---
 
+## Table of Contents
+
+- [Buildings](#buildings) — House, Factory, Storage, placement rules, colors
+- [Roads](#roads) — Regular, Narrow, Highway, Roundabout, Traffic Light, Tunnel, building connections
+- [Vehicles](#vehicles) — Car and Truck specs, spawning, lifecycle
+- [Driving Physics](#driving-physics) — Lane tracking, corner smoothing/braking, parking animations
+- [Collision Avoidance](#collision-avoidance) — Gap following, intersection reservation, traffic lights, lookahead
+- [Pathfinding](#pathfinding) — Dijkstra, edge weights, congestion, routing logic
+- [Scoring](#scoring) — Point values
+- [Game Speed](#game-speed) — Pause/1×/2×/3×
+- [Save / Load](#save--load) — Auto-save, export/import, city presets
+- [Splash Screen](#splash-screen) — First-visit modal
+- [City Presets](#city-presets) — Demo cities, manifest
+- [Toolbar](#toolbar) — Tool buttons, gear menu
+- [Touch & Mobile Support](#touch--mobile-support) — Pointer/touch gestures
+- [Analytics](#analytics-run-based) — PostHog events, runs, milestones, dashboards, domains
+- [Theme System](#theme-system) — Classic/Lunar, asset bundles, road styles, colors
+- [Deployment](#deployment) — GitHub Pages, CNAME
+- [Visual Layers](#visual-layers-render-order) — Render order, sprite system
+
+---
+
 ## Buildings
 
 ### House (1×1 tile)
