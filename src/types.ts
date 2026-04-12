@@ -92,6 +92,7 @@ export interface TrafficLight {
   gy: number;
   nodeKey: string;
   greenAxis: 'ns' | 'ew'; // which axis currently has green (when diagonal: ns=NE/SW, ew=NW/SE)
+  phase: 'green' | 'amber'; // amber = transitioning: greenAxis is clearing, no new entries allowed
   timer: number; // frames remaining in current phase
   interval: number; // frames per phase (default 180 = ~3s)
   diagonal: boolean; // true when ALL meeting roads are 45° diagonal

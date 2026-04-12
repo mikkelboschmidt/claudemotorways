@@ -11,6 +11,7 @@ let nextId = 1;
 
 export const TRAFFIC_LIGHT_INTERVAL = 360; // frames per phase (~6s at 60fps)
 const MIN_GREEN_TIME = 120; // minimum frames before allowing a switch (~2s)
+const AMBER_DURATION = 135; // frames for amber phase (~2.25s at 60fps)
 
 /** Check if ALL edges at a node are diagonal (dx !== 0 && dy !== 0) */
 function computeDiagonal(key: string): boolean {
@@ -86,6 +87,7 @@ export function createTrafficLight(gx: number, gy: number): boolean {
     gy,
     nodeKey: key,
     greenAxis: 'ns',
+    phase: 'green',
     timer: TRAFFIC_LIGHT_INTERVAL,
     interval: TRAFFIC_LIGHT_INTERVAL,
     diagonal: computeDiagonal(key),
@@ -121,15 +123,24 @@ export function updateTrafficLights() {
     tl.diagonal = computeDiagonal(tl.nodeKey);
 
     tl.timer--;
-    if (tl.timer <= 0) {
-      // Time expired — only switch if there are cars waiting on the blocked axis
-      const blockedAxis = tl.greenAxis === 'ns' ? 'ew' : 'ns';
-      if (hasWaitingCarsOnAxis(tl, blockedAxis)) {
-        tl.greenAxis = blockedAxis;
+    if (tl.phase === 'green') {
+      if (tl.timer <= 0) {
+        // Green expired — only switch if there are cars waiting on the blocked axis
+        const blockedAxis = tl.greenAxis === 'ns' ? 'ew' : 'ns';
+        if (hasWaitingCarsOnAxis(tl, blockedAxis)) {
+          tl.phase = 'amber';
+          tl.timer = AMBER_DURATION;
+        } else {
+          // No one waiting — hold current green, re-check next frame
+          tl.timer = 0;
+        }
+      }
+    } else {
+      // Amber phase — wait out the duration, then flip the axis to green
+      if (tl.timer <= 0) {
+        tl.greenAxis = tl.greenAxis === 'ns' ? 'ew' : 'ns';
+        tl.phase = 'green';
         tl.timer = tl.interval;
-      } else {
-        // No one waiting — hold current green, re-check next frame
-        tl.timer = 0;
       }
     }
   }
@@ -137,14 +148,25 @@ export function updateTrafficLights() {
 
 /**
  * Check if an edge approaching a node with a traffic light has a red signal.
- * Returns true if the car should stop (red light).
+ * Returns true if the car should stop (red light — not the transitioning axis).
  */
 export function isRedLight(edgeId: string, approachNodeKey: string): boolean {
   const tl = trafficLightByNode.get(approachNodeKey);
   if (!tl) return false;
-
   const axis = edgeAxis(edgeId, approachNodeKey, tl.diagonal);
-  return tl.greenAxis !== axis;
+  return tl.greenAxis !== axis; // the non-green axis is always red
+}
+
+/**
+ * Check if an edge approaching a node with a traffic light has an amber signal.
+ * Returns true for the axis that was green but is now transitioning out.
+ * Amber cars should brake and stop but committed cars (very close) may glide through.
+ */
+export function isAmberLight(edgeId: string, approachNodeKey: string): boolean {
+  const tl = trafficLightByNode.get(approachNodeKey);
+  if (!tl || tl.phase !== 'amber') return false;
+  const axis = edgeAxis(edgeId, approachNodeKey, tl.diagonal);
+  return tl.greenAxis === axis; // the previously-green axis is now amber
 }
 
 export function resetTrafficLights() {
