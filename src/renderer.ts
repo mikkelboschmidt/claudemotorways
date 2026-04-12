@@ -16,6 +16,7 @@ import { roundabouts, roundaboutConnectionEdgeSet, roundaboutEdgeSet } from './r
 import { getHouseSprite, getFactorySprite, getStorageSprite, drawSpriteLayer, PinPlacement } from './sprites.ts';
 import { trafficLights } from './trafficLights.ts';
 import { tunnels, tunnelEdgeSet, tunnelPhase, tunnelStartGx, tunnelStartGy, tunnelPreviewEndPx, tunnelPreviewEndPy } from './tunnel.ts';
+import spaceTerrainUrl from '../assets/SpaceTheme/terrain.png';
 
 // SVG icon image cache — keyed by (rawSvg + colorOverride)
 const iconCache = new Map<string, HTMLImageElement>();
@@ -34,8 +35,20 @@ let spaceSurfacePattern: CanvasPattern | null = null;
 let spaceSurfacePatternCtx: CanvasRenderingContext2D | null = null;
 let spaceSurfaceGradient: CanvasGradient | null = null;
 let spaceSurfaceGradientHeight = 0;
-let spaceSurfaceTexture: HTMLCanvasElement | null = null;
-const SPACE_PATTERN_SIZE = 256;
+let spaceTerrainBitmap: ImageBitmap | null = null;
+const spaceTerrainImg = new Image();
+spaceTerrainImg.onload = () => {
+  // Downscale 1024→256 in memory, then create a GPU-ready ImageBitmap
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 256;
+  c.getContext('2d')!.drawImage(spaceTerrainImg, 0, 0, 256, 256);
+  createImageBitmap(c).then(bmp => {
+    spaceTerrainBitmap = bmp;
+    spaceSurfacePattern = null;
+  });
+};
+spaceTerrainImg.src = spaceTerrainUrl;
 
 function darkenHex(hex: string, factor: number): string {
   const r = Math.round(parseInt(hex.slice(1, 3), 16) * factor);
@@ -207,113 +220,10 @@ function getPinGlowSprite(color: string): HTMLCanvasElement {
   return canvas;
 }
 
-function fract(n: number): number {
-  return n - Math.floor(n);
-}
-
-function noise2(x: number, y: number, seed: number): number {
-  return fract(Math.sin(x * 127.1 + y * 311.7 + seed * 74.7) * 43758.5453123);
-}
-
-function smoothNoise2(x: number, y: number, seed: number): number {
-  const ix = Math.floor(x);
-  const iy = Math.floor(y);
-  const fx = x - ix;
-  const fy = y - iy;
-
-  const a = noise2(ix, iy, seed);
-  const b = noise2(ix + 1, iy, seed);
-  const c = noise2(ix, iy + 1, seed);
-  const d = noise2(ix + 1, iy + 1, seed);
-
-  const ux = fx * fx * (3 - 2 * fx);
-  const uy = fy * fy * (3 - 2 * fy);
-  const top = a + (b - a) * ux;
-  const bottom = c + (d - c) * ux;
-  return top + (bottom - top) * uy;
-}
-
-function mod(n: number, m: number): number {
-  return ((n % m) + m) % m;
-}
-
-function periodicSmoothNoise2(x: number, y: number, period: number, seed: number): number {
-  const ix = Math.floor(x);
-  const iy = Math.floor(y);
-  const fx = x - ix;
-  const fy = y - iy;
-
-  const x0 = mod(ix, period);
-  const y0 = mod(iy, period);
-  const x1 = mod(ix + 1, period);
-  const y1 = mod(iy + 1, period);
-
-  const a = noise2(x0, y0, seed);
-  const b = noise2(x1, y0, seed);
-  const c = noise2(x0, y1, seed);
-  const d = noise2(x1, y1, seed);
-
-  const ux = fx * fx * (3 - 2 * fx);
-  const uy = fy * fy * (3 - 2 * fy);
-  const top = a + (b - a) * ux;
-  const bottom = c + (d - c) * ux;
-  return top + (bottom - top) * uy;
-}
-
-function ensureSpaceSurfaceTexture(): HTMLCanvasElement {
-  if (spaceSurfaceTexture) return spaceSurfaceTexture;
-
-  const texture = document.createElement('canvas');
-  texture.width = SPACE_PATTERN_SIZE;
-  texture.height = SPACE_PATTERN_SIZE;
-  const textureCtx = texture.getContext('2d');
-  if (!textureCtx) return texture;
-
-  const image = textureCtx.createImageData(SPACE_PATTERN_SIZE, SPACE_PATTERN_SIZE);
-  const data = image.data;
-
-  for (let y = 0; y < SPACE_PATTERN_SIZE; y++) {
-    for (let x = 0; x < SPACE_PATTERN_SIZE; x++) {
-      const fine = periodicSmoothNoise2(x / 8, y / 8, SPACE_PATTERN_SIZE / 8, 1.37);
-      const medium = periodicSmoothNoise2(x / 20, y / 20, SPACE_PATTERN_SIZE / 20, 2.41);
-      const broad = periodicSmoothNoise2(x / 68, y / 68, SPACE_PATTERN_SIZE / 68, 3.19);
-      const fleck = noise2(x / 2, y / 2, 5.73);
-      const shadow = noise2(x / 3.5, y / 3.5, 8.11);
-
-      let r = 0;
-      let g = 0;
-      let b = 0;
-      let a = 0;
-
-      if (fleck > 0.91) {
-        r = 224 + Math.floor(broad * 18);
-        g = 186 + Math.floor(medium * 16);
-        b = 142 + Math.floor(fine * 10);
-        a = Math.max(a, 26 + Math.floor((fleck - 0.91) * 150));
-      } else if (shadow > 0.92) {
-        r = 16 + Math.floor(broad * 12);
-        g = 6 + Math.floor(medium * 8);
-        b = 22 + Math.floor(fine * 10);
-        a = Math.max(a, 22 + Math.floor((shadow - 0.92) * 150));
-      }
-
-      const offset = (y * SPACE_PATTERN_SIZE + x) * 4;
-      data[offset] = r;
-      data[offset + 1] = g;
-      data[offset + 2] = b;
-      data[offset + 3] = a;
-    }
-  }
-
-  textureCtx.putImageData(image, 0, 0);
-  spaceSurfaceTexture = texture;
-  return texture;
-}
-
 function ensureSpaceSurfacePattern(ctx: CanvasRenderingContext2D): CanvasPattern | null {
   if (spaceSurfacePattern && spaceSurfacePatternCtx === ctx) return spaceSurfacePattern;
-  const texture = ensureSpaceSurfaceTexture();
-  spaceSurfacePattern = ctx.createPattern(texture, 'repeat');
+  if (!spaceTerrainBitmap) return null;
+  spaceSurfacePattern = ctx.createPattern(spaceTerrainBitmap, 'repeat');
   spaceSurfacePatternCtx = ctx;
   return spaceSurfacePattern;
 }
@@ -330,17 +240,19 @@ function ensureSpaceSurfaceGradient(ctx: CanvasRenderingContext2D, height: numbe
   return spaceSurfaceGradient;
 }
 
-function drawSpaceSurface(ctx: CanvasRenderingContext2D, width: number, height: number, worldLeft: number, worldTop: number, worldRight: number, worldBottom: number) {
+function drawSpaceSurface(ctx: CanvasRenderingContext2D, width: number, height: number) {
   const pattern = ensureSpaceSurfacePattern(ctx);
   if (!pattern) return;
 
+  // Draw in screen-space so we always fill exactly width×height pixels,
+  // regardless of zoom level. The pattern transform handles world tiling.
   ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0); // reset to screen-space
   if ('setTransform' in pattern) {
-    pattern.setTransform(new DOMMatrix());
+    pattern.setTransform(new DOMMatrix().scaleSelf(zoom, zoom).translateSelf(-camX, -camY));
   }
-  ctx.globalAlpha = 0.95;
   ctx.fillStyle = pattern;
-  ctx.fillRect(worldLeft, worldTop, worldRight - worldLeft, worldBottom - worldTop);
+  ctx.fillRect(0, 0, width, height);
   ctx.restore();
 }
 
@@ -377,7 +289,7 @@ export function render(ctx: CanvasRenderingContext2D, width: number, height: num
   const worldBottom = camY + height / zoom;
 
   if (currentThemeId === 'space') {
-    drawSpaceSurface(ctx, width, height, worldLeft, worldTop, worldRight, worldBottom);
+    drawSpaceSurface(ctx, width, height);
   }
 
   // Faint grid — only draw visible lines
@@ -399,6 +311,7 @@ export function render(ctx: CanvasRenderingContext2D, width: number, height: num
 
   drawTunnels(ctx);         // Underground paths — below everything
   drawTunnelCars(ctx);       // Underground cars as colored dots
+  drawTerrainFlatAreas(ctx); // Blurred pads under buildings (space only)
   drawBuildingGrounds(ctx);
   drawRoads(ctx);
   drawTunnelEntrances(ctx);  // Surface markers at entrance/exit nodes
@@ -1001,8 +914,8 @@ function drawTrafficLightArrows(ctx: CanvasRenderingContext2D, cx: number, cy: n
   ctx.translate(cx, cy);
   ctx.rotate(rot);
 
-  // Background circle
-  ctx.fillStyle = 'rgba(20, 20, 30, 0.85)';
+  // Opaque ground-colored disc so arrows don't blend with terrain
+  ctx.fillStyle = theme.terrainFlat;
   ctx.beginPath();
   ctx.arc(0, 0, 10, 0, Math.PI * 2);
   ctx.fill();
@@ -1342,6 +1255,156 @@ function drawHoverGhost(ctx: CanvasRenderingContext2D) {
     ctx.arc(hoverGx * GRID + HALF, hoverGy * GRID + HALF, ROAD_W / 2, 0, Math.PI * 2);
     ctx.fill();
   }
+}
+
+// Terrain flat areas: cached embossed pads under buildings & roads (space theme only)
+const TERRAIN_FLAT_EXPAND = 10;
+const TERRAIN_FLAT_BLUR = 15;
+const TERRAIN_FLAT_EMBOSS = 4;
+const ROAD_FLAT_BLUR = 8;
+const ROAD_FLAT_EMBOSS = 2;
+const TERRAIN_FLAT_PAD = TERRAIN_FLAT_BLUR * 2 + TERRAIN_FLAT_EMBOSS;
+let terrainFlatCache: HTMLCanvasElement | null = null;
+let terrainFlatCacheVersion = -1;
+let terrainFlatOriginX = 0;
+let terrainFlatOriginY = 0;
+
+function isGroundEdge(eid: string): boolean {
+  return !highwayEdgeSet.has(eid) && !tunnelEdgeSet.has(eid) && !roundaboutEdgeSet.has(eid);
+}
+
+function rebuildTerrainFlatCache() {
+  // Collect ground-level road edges, split by width
+  const normalEdges: { fx: number; fy: number; tx: number; ty: number }[] = [];
+  const narrowEdges: { fx: number; fy: number; tx: number; ty: number }[] = [];
+  for (const [eid, e] of edges) {
+    if (isGroundEdge(eid)) (e.narrow ? narrowEdges : normalEdges).push(e);
+  }
+  const groundEdges = [...normalEdges, ...narrowEdges];
+
+  if (buildings.length === 0 && groundEdges.length === 0) {
+    terrainFlatCache = null;
+    terrainFlatCacheVersion = graphVersion;
+    return;
+  }
+
+  // Bounding box covering buildings and road edges
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const b of buildings) {
+    minX = Math.min(minX, b.gx * GRID - TERRAIN_FLAT_EXPAND);
+    minY = Math.min(minY, b.gy * GRID - TERRAIN_FLAT_EXPAND);
+    maxX = Math.max(maxX, b.gx * GRID + b.w * GRID + TERRAIN_FLAT_EXPAND);
+    maxY = Math.max(maxY, b.gy * GRID + b.h * GRID + TERRAIN_FLAT_EXPAND);
+  }
+  for (const e of groundEdges) {
+    minX = Math.min(minX, e.fx, e.tx);
+    minY = Math.min(minY, e.fy, e.ty);
+    maxX = Math.max(maxX, e.fx, e.tx);
+    maxY = Math.max(maxY, e.fy, e.ty);
+  }
+
+  terrainFlatOriginX = minX - TERRAIN_FLAT_PAD;
+  terrainFlatOriginY = minY - TERRAIN_FLAT_PAD;
+  const w = maxX - minX + TERRAIN_FLAT_PAD * 2;
+  const h = maxY - minY + TERRAIN_FLAT_PAD * 2;
+
+  if (!terrainFlatCache) terrainFlatCache = document.createElement('canvas');
+  terrainFlatCache.width = w;
+  terrainFlatCache.height = h;
+  const off = terrainFlatCache.getContext('2d')!;
+  const ox = -terrainFlatOriginX;
+  const oy = -terrainFlatOriginY;
+
+  function buildingPath() {
+    off.beginPath();
+    for (const b of buildings) {
+      const x = b.gx * GRID - TERRAIN_FLAT_EXPAND + ox;
+      const y = b.gy * GRID - TERRAIN_FLAT_EXPAND + oy;
+      const rw = b.w * GRID + TERRAIN_FLAT_EXPAND * 2;
+      const rh = b.h * GRID + TERRAIN_FLAT_EXPAND * 2;
+      off.roundRect(x, y, rw, rh, TERRAIN_FLAT_EXPAND);
+    }
+  }
+
+  function strokeRoads() {
+    off.lineCap = 'round';
+    if (normalEdges.length > 0) {
+      off.lineWidth = ROAD_W;
+      off.beginPath();
+      for (const e of normalEdges) {
+        off.moveTo(e.fx + ox, e.fy + oy);
+        off.lineTo(e.tx + ox, e.ty + oy);
+      }
+      off.stroke();
+    }
+    if (narrowEdges.length > 0) {
+      off.lineWidth = NARROW_ROAD_W;
+      off.beginPath();
+      for (const e of narrowEdges) {
+        off.moveTo(e.fx + ox, e.fy + oy);
+        off.lineTo(e.tx + ox, e.ty + oy);
+      }
+      off.stroke();
+    }
+  }
+
+  // --- Road emboss (drawn first, underneath building emboss) ---
+  if (groundEdges.length > 0) {
+    off.save();
+    off.filter = `blur(${ROAD_FLAT_BLUR}px)`;
+    off.translate(-ROAD_FLAT_EMBOSS, -ROAD_FLAT_EMBOSS);
+    off.strokeStyle = 'rgba(0,0,0,0.2)';
+    strokeRoads();
+    off.restore();
+
+    off.save();
+    off.filter = `blur(${ROAD_FLAT_BLUR - 2}px)`;
+    off.translate(ROAD_FLAT_EMBOSS, ROAD_FLAT_EMBOSS);
+    off.strokeStyle = 'rgba(255,220,180,0.06)';
+    strokeRoads();
+    off.restore();
+
+    off.save();
+    off.filter = `blur(${ROAD_FLAT_BLUR}px)`;
+    off.strokeStyle = theme.terrainFlat;
+    strokeRoads();
+    off.restore();
+  }
+
+  // --- Building emboss (on top of roads) ---
+  if (buildings.length > 0) {
+    off.save();
+    off.filter = `blur(${TERRAIN_FLAT_BLUR}px)`;
+    off.translate(-TERRAIN_FLAT_EMBOSS, -TERRAIN_FLAT_EMBOSS);
+    off.fillStyle = 'rgba(0,0,0,0.3)';
+    buildingPath();
+    off.fill();
+    off.restore();
+
+    off.save();
+    off.filter = `blur(${TERRAIN_FLAT_BLUR - 3}px)`;
+    off.translate(TERRAIN_FLAT_EMBOSS, TERRAIN_FLAT_EMBOSS);
+    off.fillStyle = 'rgba(255,220,180,0.1)';
+    buildingPath();
+    off.fill();
+    off.restore();
+
+    off.save();
+    off.filter = `blur(${TERRAIN_FLAT_BLUR}px)`;
+    off.fillStyle = theme.terrainFlat;
+    buildingPath();
+    off.fill();
+    off.restore();
+  }
+
+  terrainFlatCacheVersion = graphVersion;
+}
+
+function drawTerrainFlatAreas(ctx: CanvasRenderingContext2D) {
+  if (currentThemeId !== 'space') return;
+  if (terrainFlatCacheVersion !== graphVersion) rebuildTerrainFlatCache();
+  if (!terrainFlatCache) return;
+  ctx.drawImage(terrainFlatCache, terrainFlatOriginX, terrainFlatOriginY);
 }
 
 // Ground layer: drawn below roads so cars drive over it
