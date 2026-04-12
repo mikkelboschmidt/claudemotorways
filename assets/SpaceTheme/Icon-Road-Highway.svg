@@ -1,10 +1,10 @@
 <svg width="50" height="50" viewBox="0 0 50 50" fill="none" xmlns="http://www.w3.org/2000/svg">
 <g id="Icon-Road-Highway">
 <g id="IconBackground">
-<path d="M0 0H50V50H0V0Z" fill="#442059"/>
-<path d="M0 15H50V35H0V15Z" fill="#442059"/>
-<path d="M0 17H50V19H0V17Z" fill="#442059"/>
-<path d="M0 31H50V33H0V31Z" fill="#442059"/>
+<path d="M0 0H50V50H0V0Z" fill="#5B3C2A"/>
+<path d="M0 15H50V35H0V15Z" fill="#5B3C2A"/>
+<path d="M0 17H50V19H0V17Z" fill="#5B3C2A"/>
+<path d="M0 31H50V33H0V31Z" fill="#5B3C2A"/>
 </g>
 <rect id="Rectangle 35" y="12" width="50" height="26" fill="white" fill-opacity="0.12"/>
 <rect id="Rectangle 9" y="14" width="50" height="2" fill="url(#paint0_linear_102_454)"/>

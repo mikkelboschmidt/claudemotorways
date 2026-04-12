@@ -4,6 +4,7 @@ export interface GameTheme {
   // Core surfaces
   pageBg: string;           // HTML body background
   bg: string;               // game canvas background / terrain
+  terrainFlat: string;      // flattened area under buildings (space theme)
   gridLine: string;         // faint grid overlay
 
   // Roads
@@ -184,6 +185,7 @@ function applyThemeColorsFromSvg(baseTheme: GameTheme, colorBundle: ThemeColorBu
 export const classicTheme: GameTheme = {
   pageBg: '#2c3e50',
   bg: '#4a7c59',
+  terrainFlat: '#4a7c59',
   gridLine: 'rgba(255,255,255,0.05)',
 
   road: '#555',
@@ -292,6 +294,7 @@ export const classicTheme: GameTheme = {
 export const lunarTheme: GameTheme = {
   pageBg: '#361A59',
   bg: '#361A59',
+  terrainFlat: '#876041',
   gridLine: 'rgba(255,255,255,0.03)',
 
   road: '#59412F',
