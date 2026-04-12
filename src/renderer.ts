@@ -944,14 +944,14 @@ function drawTrafficLights(ctx: CanvasRenderingContext2D) {
     const rot = tl.diagonal ? Math.PI / 4 : 0;
 
     if (isSpace) {
-      drawTrafficLightArrows(ctx, cx, cy, rot, tl.greenAxis);
+      drawTrafficLightArrows(ctx, cx, cy, rot, tl.greenAxis, tl.phase);
     } else {
-      drawTrafficLightDots(ctx, cx, cy, rot, tl.greenAxis);
+      drawTrafficLightDots(ctx, cx, cy, rot, tl.greenAxis, tl.phase);
     }
   }
 }
 
-function drawTrafficLightDots(ctx: CanvasRenderingContext2D, cx: number, cy: number, rot: number, greenAxis: 'ns' | 'ew') {
+function drawTrafficLightDots(ctx: CanvasRenderingContext2D, cx: number, cy: number, rot: number, greenAxis: 'ns' | 'ew', phase: 'green' | 'amber') {
   const size = 8;
   const dotR = 3;
   const off = 4.5;
@@ -965,8 +965,9 @@ function drawTrafficLightDots(ctx: CanvasRenderingContext2D, cx: number, cy: num
   ctx.roundRect(-size, -size, size * 2, size * 2, 3);
   ctx.fill();
 
-  const nsColor = greenAxis === 'ns' ? '#33cc33' : '#ff3333';
-  const ewColor = greenAxis === 'ew' ? '#33cc33' : '#ff3333';
+  const activeColor = phase === 'amber' ? '#ff9900' : '#33cc33';
+  const nsColor = greenAxis === 'ns' ? activeColor : '#ff3333';
+  const ewColor = greenAxis === 'ew' ? activeColor : '#ff3333';
 
   // North
   ctx.fillStyle = nsColor;
@@ -991,7 +992,7 @@ function drawTrafficLightDots(ctx: CanvasRenderingContext2D, cx: number, cy: num
   ctx.restore();
 }
 
-function drawTrafficLightArrows(ctx: CanvasRenderingContext2D, cx: number, cy: number, rot: number, greenAxis: 'ns' | 'ew') {
+function drawTrafficLightArrows(ctx: CanvasRenderingContext2D, cx: number, cy: number, rot: number, greenAxis: 'ns' | 'ew', phase: 'green' | 'amber') {
   const arrowLen = 10;
   const headLen = 4;
   const headW = 3;
@@ -1009,13 +1010,17 @@ function drawTrafficLightArrows(ctx: CanvasRenderingContext2D, cx: number, cy: n
   const greenColor = '#4CFFF9';
   const blockedColor = colorToRgba(theme.road, 0.1);
 
+  // Amber blink: active arrow alternates between lit and dim every 250ms
+  const blinkOn = phase !== 'amber' || Math.floor(Date.now() / 250) % 2 === 0;
+  const activeColor = blinkOn ? greenColor : blockedColor;
+
   // Vertical axis (ns)
-  ctx.strokeStyle = greenAxis === 'ns' ? greenColor : blockedColor;
+  ctx.strokeStyle = greenAxis === 'ns' ? activeColor : blockedColor;
   ctx.lineWidth = 1.8;
   drawDoubleArrow(ctx, 0, -arrowLen, 0, arrowLen, headLen, headW);
 
   // Horizontal axis (ew)
-  ctx.strokeStyle = greenAxis === 'ew' ? greenColor : blockedColor;
+  ctx.strokeStyle = greenAxis === 'ew' ? activeColor : blockedColor;
   drawDoubleArrow(ctx, -arrowLen, 0, arrowLen, 0, headLen, headW);
 
   ctx.restore();

@@ -1,7 +1,7 @@
 import { Car } from './types.ts';
 import { CAR_SPEED, CAR_ACCEL, CAR_DECEL, CAR_LEN, CAR_WID, MIN_GAP, LANE_W, SPAWN_INTERVAL, MAX_CARS_PER_HOUSE, PARK_DURATION, PARK_ANIM_SPEED, TURN_LERP, CORNER_BRAKE_DIST, CORNER_MIN_SPEED, CORNER_MED_SPEED, HIGHWAY_SPEED, TRUCK_SPEED, TRUCK_CAPACITY, MAX_TRUCKS_PER_STORAGE, TRUCK_SPAWN_INTERVAL, FACTORY_MAX_PINS, UTURN_STUCK_THRESHOLD, UTURN_COOLDOWN } from './constants.ts';
 import { edges, getEdgeBetween, graphVersion, nodes } from './graph.ts';
-import { isRedLight } from './trafficLights.ts';
+import { isRedLight, isAmberLight, trafficLightByNode } from './trafficLights.ts';
 import { buildings, buildingById, getBuildingCenter, getBuildingPixelPos, getConnectionPixelPos, getPinPixelPos } from './buildings.ts';
 import { findPath } from './pathfinding.ts';
 import { addScore } from './score.ts';
@@ -1327,12 +1327,16 @@ export function updateCars() {
     const distToEnd = car.edgeDir === 1 ? (1 - car.t) * edge.length : car.t * edge.length;
     const endNodeKey = car.edgeDir === 1 ? edge.toKey : edge.fromKey;
 
-    // Only reserve nodes that are true intersections (3+ connected edges)
+    // Only reserve nodes that are true intersections (3+ connected edges).
+    // At traffic-light intersections, red-light cars won't enter — exclude them from ownership
+    // so they don't block green-light cars approaching from the crossing axis.
     const endNode = nodes.get(endNodeKey);
     if (endNode && endNode.edges.size >= 3 && distToEnd < INTERSECTION_RANGE) {
-      const existing = nodeOwner.get(endNodeKey);
-      if (!existing || distToEnd < existing.dist) {
-        nodeOwner.set(endNodeKey, { carId: car.id, dist: distToEnd, edgeId: car.edgeId });
+      if (!isRedLight(car.edgeId, endNodeKey) && !isAmberLight(car.edgeId, endNodeKey)) {
+        const existing = nodeOwner.get(endNodeKey);
+        if (!existing || distToEnd < existing.dist) {
+          nodeOwner.set(endNodeKey, { carId: car.id, dist: distToEnd, edgeId: car.edgeId });
+        }
       }
     }
 
@@ -1359,6 +1363,10 @@ export function updateCars() {
 
     const owner = nodeOwner.get(endNodeKey);
     if (owner && owner.carId !== car.id && owner.edgeId !== car.edgeId) {
+      // At traffic-light intersections, true-green cars proceed freely — the light
+      // already serialises cross traffic. Amber cars must still stop.
+      if (trafficLightByNode.has(endNodeKey) && !isRedLight(car.edgeId, endNodeKey) && !isAmberLight(car.edgeId, endNodeKey)) continue;
+
       const stopDist = MIN_GAP + CAR_LEN * 0.5;
       if (distToEnd <= stopDist) {
         targetSpeeds.set(car.id, 0);
@@ -1373,7 +1381,10 @@ export function updateCars() {
     }
   }
 
-  // 3b. Traffic light red signals — stop before entering intersection on red
+  // 3b. Traffic light signals — stop before entering intersection on red/amber.
+  //     Red: hard stop a full car length back from the node.
+  //     Amber: brake without a hard stop so committed cars (already past the stop
+  //     line) can glide through while cars further back decelerate to a halt.
   for (const car of cars) {
     if (!isDriving(car.state)) continue;
     const edge = edges.get(car.edgeId);
@@ -1381,12 +1392,13 @@ export function updateCars() {
 
     const distToEnd = car.edgeDir === 1 ? (1 - car.t) * edge.length : car.t * edge.length;
     const endNodeKey = car.edgeDir === 1 ? edge.toKey : edge.fromKey;
+    const stopDist = MIN_GAP + CAR_LEN; // one full car length back from node
 
     if (distToEnd < INTERSECTION_RANGE && isRedLight(car.edgeId, endNodeKey)) {
-      const stopDist = MIN_GAP + CAR_LEN * 0.5;
+      // Red: hard stop at stop line
       if (distToEnd <= stopDist) {
         targetSpeeds.set(car.id, 0);
-      } else if (distToEnd < INTERSECTION_RANGE) {
+      } else {
         const range = INTERSECTION_RANGE - stopDist;
         const brakeFactor = (distToEnd - stopDist) / range;
         const base = getBaseSpeed(car.edgeId, car.isTruck);
@@ -1394,6 +1406,17 @@ export function updateCars() {
         const current = targetSpeeds.get(car.id) ?? base;
         if (brakeSpeed < current) targetSpeeds.set(car.id, brakeSpeed);
       }
+    } else if (distToEnd < INTERSECTION_RANGE && isAmberLight(car.edgeId, endNodeKey)) {
+      // Amber: brake-only, no hard stop — cars already past the stop line proceed
+      if (distToEnd > stopDist) {
+        const range = INTERSECTION_RANGE - stopDist;
+        const brakeFactor = (distToEnd - stopDist) / range;
+        const base = getBaseSpeed(car.edgeId, car.isTruck);
+        const brakeSpeed = base * Math.max(0, Math.min(1, brakeFactor));
+        const current = targetSpeeds.get(car.id) ?? base;
+        if (brakeSpeed < current) targetSpeeds.set(car.id, brakeSpeed);
+      }
+      // Cars at or inside stopDist (committed): leave their speed unchanged
     }
   }
 
