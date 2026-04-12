@@ -1258,12 +1258,15 @@ function drawHoverGhost(ctx: CanvasRenderingContext2D) {
 }
 
 // Terrain flat areas: cached embossed pads under buildings & roads (space theme only)
+// Uses shadowBlur instead of ctx.filter for cross-browser support (Safari lacks ctx.filter).
 const TERRAIN_FLAT_EXPAND = 10;
 const TERRAIN_FLAT_BLUR = 15;
 const TERRAIN_FLAT_EMBOSS = 4;
 const ROAD_FLAT_BLUR = 8;
 const ROAD_FLAT_EMBOSS = 2;
 const TERRAIN_FLAT_PAD = TERRAIN_FLAT_BLUR * 2 + TERRAIN_FLAT_EMBOSS;
+// Shadow trick: draw shapes far off-screen so only the shadow (= blur) is visible.
+const SHADOW_OFF = 8000;
 let terrainFlatCache: HTMLCanvasElement | null = null;
 let terrainFlatCacheVersion = -1;
 let terrainFlatOriginX = 0;
@@ -1274,7 +1277,6 @@ function isGroundEdge(eid: string): boolean {
 }
 
 function rebuildTerrainFlatCache() {
-  // Collect ground-level road edges, split by width
   const normalEdges: { fx: number; fy: number; tx: number; ty: number }[] = [];
   const narrowEdges: { fx: number; fy: number; tx: number; ty: number }[] = [];
   for (const [eid, e] of edges) {
@@ -1288,7 +1290,6 @@ function rebuildTerrainFlatCache() {
     return;
   }
 
-  // Bounding box covering buildings and road edges
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const b of buildings) {
     minX = Math.min(minX, b.gx * GRID - TERRAIN_FLAT_EXPAND);
@@ -1315,25 +1316,40 @@ function rebuildTerrainFlatCache() {
   const ox = -terrainFlatOriginX;
   const oy = -terrainFlatOriginY;
 
-  function buildingPath() {
+  // Helpers: draw shapes offset by SHADOW_OFF so only the blurred shadow is visible.
+  function shadowFillBuildings(blur: number, color: string, dx: number, dy: number) {
+    off.save();
+    off.shadowBlur = blur;
+    off.shadowColor = color;
+    off.shadowOffsetX = SHADOW_OFF + dx;
+    off.shadowOffsetY = SHADOW_OFF + dy;
+    off.fillStyle = 'rgba(0,0,0,1)';
     off.beginPath();
     for (const b of buildings) {
-      const x = b.gx * GRID - TERRAIN_FLAT_EXPAND + ox;
-      const y = b.gy * GRID - TERRAIN_FLAT_EXPAND + oy;
+      const x = b.gx * GRID - TERRAIN_FLAT_EXPAND + ox - SHADOW_OFF;
+      const y = b.gy * GRID - TERRAIN_FLAT_EXPAND + oy - SHADOW_OFF;
       const rw = b.w * GRID + TERRAIN_FLAT_EXPAND * 2;
       const rh = b.h * GRID + TERRAIN_FLAT_EXPAND * 2;
       off.roundRect(x, y, rw, rh, TERRAIN_FLAT_EXPAND);
     }
+    off.fill();
+    off.restore();
   }
 
-  function strokeRoads() {
+  function shadowStrokeRoads(blur: number, color: string, dx: number, dy: number) {
+    off.save();
+    off.shadowBlur = blur;
+    off.shadowColor = color;
+    off.shadowOffsetX = SHADOW_OFF + dx;
+    off.shadowOffsetY = SHADOW_OFF + dy;
+    off.strokeStyle = 'rgba(0,0,0,1)';
     off.lineCap = 'round';
     if (normalEdges.length > 0) {
       off.lineWidth = ROAD_W;
       off.beginPath();
       for (const e of normalEdges) {
-        off.moveTo(e.fx + ox, e.fy + oy);
-        off.lineTo(e.tx + ox, e.ty + oy);
+        off.moveTo(e.fx + ox - SHADOW_OFF, e.fy + oy - SHADOW_OFF);
+        off.lineTo(e.tx + ox - SHADOW_OFF, e.ty + oy - SHADOW_OFF);
       }
       off.stroke();
     }
@@ -1341,60 +1357,26 @@ function rebuildTerrainFlatCache() {
       off.lineWidth = NARROW_ROAD_W;
       off.beginPath();
       for (const e of narrowEdges) {
-        off.moveTo(e.fx + ox, e.fy + oy);
-        off.lineTo(e.tx + ox, e.ty + oy);
+        off.moveTo(e.fx + ox - SHADOW_OFF, e.fy + oy - SHADOW_OFF);
+        off.lineTo(e.tx + ox - SHADOW_OFF, e.ty + oy - SHADOW_OFF);
       }
       off.stroke();
     }
+    off.restore();
   }
 
-  // --- Road emboss (drawn first, underneath building emboss) ---
+  // --- Road emboss ---
   if (groundEdges.length > 0) {
-    off.save();
-    off.filter = `blur(${ROAD_FLAT_BLUR}px)`;
-    off.translate(-ROAD_FLAT_EMBOSS, -ROAD_FLAT_EMBOSS);
-    off.strokeStyle = 'rgba(0,0,0,0.2)';
-    strokeRoads();
-    off.restore();
-
-    off.save();
-    off.filter = `blur(${ROAD_FLAT_BLUR - 2}px)`;
-    off.translate(ROAD_FLAT_EMBOSS, ROAD_FLAT_EMBOSS);
-    off.strokeStyle = 'rgba(255,220,180,0.06)';
-    strokeRoads();
-    off.restore();
-
-    off.save();
-    off.filter = `blur(${ROAD_FLAT_BLUR}px)`;
-    off.strokeStyle = theme.terrainFlat;
-    strokeRoads();
-    off.restore();
+    shadowStrokeRoads(ROAD_FLAT_BLUR, 'rgba(0,0,0,0.2)', -ROAD_FLAT_EMBOSS, -ROAD_FLAT_EMBOSS);
+    shadowStrokeRoads(ROAD_FLAT_BLUR - 2, 'rgba(255,220,180,0.06)', ROAD_FLAT_EMBOSS, ROAD_FLAT_EMBOSS);
+    shadowStrokeRoads(ROAD_FLAT_BLUR, theme.terrainFlat, 0, 0);
   }
 
-  // --- Building emboss (on top of roads) ---
+  // --- Building emboss ---
   if (buildings.length > 0) {
-    off.save();
-    off.filter = `blur(${TERRAIN_FLAT_BLUR}px)`;
-    off.translate(-TERRAIN_FLAT_EMBOSS, -TERRAIN_FLAT_EMBOSS);
-    off.fillStyle = 'rgba(0,0,0,0.3)';
-    buildingPath();
-    off.fill();
-    off.restore();
-
-    off.save();
-    off.filter = `blur(${TERRAIN_FLAT_BLUR - 3}px)`;
-    off.translate(TERRAIN_FLAT_EMBOSS, TERRAIN_FLAT_EMBOSS);
-    off.fillStyle = 'rgba(255,220,180,0.1)';
-    buildingPath();
-    off.fill();
-    off.restore();
-
-    off.save();
-    off.filter = `blur(${TERRAIN_FLAT_BLUR}px)`;
-    off.fillStyle = theme.terrainFlat;
-    buildingPath();
-    off.fill();
-    off.restore();
+    shadowFillBuildings(TERRAIN_FLAT_BLUR, 'rgba(0,0,0,0.3)', -TERRAIN_FLAT_EMBOSS, -TERRAIN_FLAT_EMBOSS);
+    shadowFillBuildings(TERRAIN_FLAT_BLUR - 3, 'rgba(255,220,180,0.1)', TERRAIN_FLAT_EMBOSS, TERRAIN_FLAT_EMBOSS);
+    shadowFillBuildings(TERRAIN_FLAT_BLUR, theme.terrainFlat, 0, 0);
   }
 
   terrainFlatCacheVersion = graphVersion;
