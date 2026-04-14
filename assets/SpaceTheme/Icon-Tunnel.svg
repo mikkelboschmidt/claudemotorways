@@ -1,0 +1,15 @@
+<svg width="50" height="50" viewBox="0 0 50 50" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Icon-Tunnel">
+<rect id="IconBackground" width="50" height="50" fill="#5B3C2A"/>
+<rect id="Rectangle 35" x="11" y="15" width="37" height="20" fill="#4CFFF9" fill-opacity="0.19"/>
+<rect id="Rectangle 9" x="11" y="17" width="37" height="2" fill="#4CFFF9"/>
+<rect id="Rectangle 10" x="11" y="31" width="37" height="2" fill="#4CFFF9"/>
+<path id="Subtract" d="M3 25C3 15.0589 11.0589 7 21 7C22.3748 7 23.7135 7.15437 25 7.44629V42.5537C23.7135 42.8456 22.3748 43 21 43C11.0589 43 3 34.9411 3 25Z" fill="url(#paint0_linear_147_166)"/>
+</g>
+<defs>
+<linearGradient id="paint0_linear_147_166" x1="3" y1="25" x2="25" y2="25" gradientUnits="userSpaceOnUse">
+<stop offset="0.466346"/>
+<stop offset="1" stop-opacity="0"/>
+</linearGradient>
+</defs>
+</svg>

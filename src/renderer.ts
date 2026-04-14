@@ -1258,12 +1258,15 @@ function drawHoverGhost(ctx: CanvasRenderingContext2D) {
 }
 
 // Terrain flat areas: cached embossed pads under buildings & roads (space theme only)
-const TERRAIN_FLAT_EXPAND = 10;
-const TERRAIN_FLAT_BLUR = 15;
+// Uses shadowBlur instead of ctx.filter for cross-browser support (Safari lacks ctx.filter).
+const TERRAIN_FLAT_EXPAND = 6;
+const TERRAIN_FLAT_BLUR = 10;
 const TERRAIN_FLAT_EMBOSS = 4;
 const ROAD_FLAT_BLUR = 8;
 const ROAD_FLAT_EMBOSS = 2;
 const TERRAIN_FLAT_PAD = TERRAIN_FLAT_BLUR * 2 + TERRAIN_FLAT_EMBOSS;
+// Shadow trick: draw shapes far off-screen so only the shadow (= blur) is visible.
+const SHADOW_OFF = 8000;
 let terrainFlatCache: HTMLCanvasElement | null = null;
 let terrainFlatCacheVersion = -1;
 let terrainFlatOriginX = 0;
@@ -1274,7 +1277,6 @@ function isGroundEdge(eid: string): boolean {
 }
 
 function rebuildTerrainFlatCache() {
-  // Collect ground-level road edges, split by width
   const normalEdges: { fx: number; fy: number; tx: number; ty: number }[] = [];
   const narrowEdges: { fx: number; fy: number; tx: number; ty: number }[] = [];
   for (const [eid, e] of edges) {
@@ -1282,19 +1284,27 @@ function rebuildTerrainFlatCache() {
   }
   const groundEdges = [...normalEdges, ...narrowEdges];
 
-  if (buildings.length === 0 && groundEdges.length === 0) {
+  if (buildings.length === 0 && roundabouts.length === 0 && groundEdges.length === 0) {
     terrainFlatCache = null;
     terrainFlatCacheVersion = graphVersion;
     return;
   }
 
-  // Bounding box covering buildings and road edges
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const b of buildings) {
     minX = Math.min(minX, b.gx * GRID - TERRAIN_FLAT_EXPAND);
     minY = Math.min(minY, b.gy * GRID - TERRAIN_FLAT_EXPAND);
     maxX = Math.max(maxX, b.gx * GRID + b.w * GRID + TERRAIN_FLAT_EXPAND);
     maxY = Math.max(maxY, b.gy * GRID + b.h * GRID + TERRAIN_FLAT_EXPAND);
+  }
+  for (const ra of roundabouts) {
+    const cx = (ra.gx + 1) * GRID + HALF;
+    const cy = (ra.gy + 1) * GRID + HALF;
+    const r = GRID + TERRAIN_FLAT_EXPAND;
+    minX = Math.min(minX, cx - r);
+    minY = Math.min(minY, cy - r);
+    maxX = Math.max(maxX, cx + r);
+    maxY = Math.max(maxY, cy + r);
   }
   for (const e of groundEdges) {
     minX = Math.min(minX, e.fx, e.tx);
@@ -1315,25 +1325,50 @@ function rebuildTerrainFlatCache() {
   const ox = -terrainFlatOriginX;
   const oy = -terrainFlatOriginY;
 
-  function buildingPath() {
+  // Helpers: draw shapes offset by SHADOW_OFF so only the blurred shadow is visible.
+  function shadowFillStructures(blur: number, color: string, dx: number, dy: number) {
+    off.save();
+    off.shadowBlur = blur;
+    off.shadowColor = color;
+    off.shadowOffsetX = SHADOW_OFF + dx;
+    off.shadowOffsetY = SHADOW_OFF + dy;
+    off.fillStyle = 'rgba(0,0,0,1)';
     off.beginPath();
     for (const b of buildings) {
-      const x = b.gx * GRID - TERRAIN_FLAT_EXPAND + ox;
-      const y = b.gy * GRID - TERRAIN_FLAT_EXPAND + oy;
+      const x = b.gx * GRID - TERRAIN_FLAT_EXPAND + ox - SHADOW_OFF;
+      const y = b.gy * GRID - TERRAIN_FLAT_EXPAND + oy - SHADOW_OFF;
       const rw = b.w * GRID + TERRAIN_FLAT_EXPAND * 2;
       const rh = b.h * GRID + TERRAIN_FLAT_EXPAND * 2;
       off.roundRect(x, y, rw, rh, TERRAIN_FLAT_EXPAND);
     }
+    for (const ra of roundabouts) {
+      const cx = (ra.gx + 1) * GRID + HALF + ox - SHADOW_OFF;
+      const cy = (ra.gy + 1) * GRID + HALF + oy - SHADOW_OFF;
+      const outerR = GRID + TERRAIN_FLAT_EXPAND;
+      const innerR = GRID * 0.5;
+      off.moveTo(cx + outerR, cy);
+      off.arc(cx, cy, outerR, 0, Math.PI * 2);
+      off.moveTo(cx + innerR, cy);
+      off.arc(cx, cy, innerR, 0, Math.PI * 2, true);
+    }
+    off.fill();
+    off.restore();
   }
 
-  function strokeRoads() {
+  function shadowStrokeRoads(blur: number, color: string, dx: number, dy: number) {
+    off.save();
+    off.shadowBlur = blur;
+    off.shadowColor = color;
+    off.shadowOffsetX = SHADOW_OFF + dx;
+    off.shadowOffsetY = SHADOW_OFF + dy;
+    off.strokeStyle = 'rgba(0,0,0,1)';
     off.lineCap = 'round';
     if (normalEdges.length > 0) {
       off.lineWidth = ROAD_W;
       off.beginPath();
       for (const e of normalEdges) {
-        off.moveTo(e.fx + ox, e.fy + oy);
-        off.lineTo(e.tx + ox, e.ty + oy);
+        off.moveTo(e.fx + ox - SHADOW_OFF, e.fy + oy - SHADOW_OFF);
+        off.lineTo(e.tx + ox - SHADOW_OFF, e.ty + oy - SHADOW_OFF);
       }
       off.stroke();
     }
@@ -1341,60 +1376,26 @@ function rebuildTerrainFlatCache() {
       off.lineWidth = NARROW_ROAD_W;
       off.beginPath();
       for (const e of narrowEdges) {
-        off.moveTo(e.fx + ox, e.fy + oy);
-        off.lineTo(e.tx + ox, e.ty + oy);
+        off.moveTo(e.fx + ox - SHADOW_OFF, e.fy + oy - SHADOW_OFF);
+        off.lineTo(e.tx + ox - SHADOW_OFF, e.ty + oy - SHADOW_OFF);
       }
       off.stroke();
     }
+    off.restore();
   }
 
-  // --- Road emboss (drawn first, underneath building emboss) ---
+  // --- Road emboss ---
   if (groundEdges.length > 0) {
-    off.save();
-    off.filter = `blur(${ROAD_FLAT_BLUR}px)`;
-    off.translate(-ROAD_FLAT_EMBOSS, -ROAD_FLAT_EMBOSS);
-    off.strokeStyle = 'rgba(0,0,0,0.2)';
-    strokeRoads();
-    off.restore();
-
-    off.save();
-    off.filter = `blur(${ROAD_FLAT_BLUR - 2}px)`;
-    off.translate(ROAD_FLAT_EMBOSS, ROAD_FLAT_EMBOSS);
-    off.strokeStyle = 'rgba(255,220,180,0.06)';
-    strokeRoads();
-    off.restore();
-
-    off.save();
-    off.filter = `blur(${ROAD_FLAT_BLUR}px)`;
-    off.strokeStyle = theme.terrainFlat;
-    strokeRoads();
-    off.restore();
+    shadowStrokeRoads(ROAD_FLAT_BLUR, 'rgba(0,0,0,0.2)', -ROAD_FLAT_EMBOSS, -ROAD_FLAT_EMBOSS);
+    shadowStrokeRoads(ROAD_FLAT_BLUR - 2, 'rgba(255,220,180,0.15)', ROAD_FLAT_EMBOSS, ROAD_FLAT_EMBOSS);
+    shadowStrokeRoads(ROAD_FLAT_BLUR, theme.terrainFlat, 0, 0);
   }
 
-  // --- Building emboss (on top of roads) ---
-  if (buildings.length > 0) {
-    off.save();
-    off.filter = `blur(${TERRAIN_FLAT_BLUR}px)`;
-    off.translate(-TERRAIN_FLAT_EMBOSS, -TERRAIN_FLAT_EMBOSS);
-    off.fillStyle = 'rgba(0,0,0,0.3)';
-    buildingPath();
-    off.fill();
-    off.restore();
-
-    off.save();
-    off.filter = `blur(${TERRAIN_FLAT_BLUR - 3}px)`;
-    off.translate(TERRAIN_FLAT_EMBOSS, TERRAIN_FLAT_EMBOSS);
-    off.fillStyle = 'rgba(255,220,180,0.1)';
-    buildingPath();
-    off.fill();
-    off.restore();
-
-    off.save();
-    off.filter = `blur(${TERRAIN_FLAT_BLUR}px)`;
-    off.fillStyle = theme.terrainFlat;
-    buildingPath();
-    off.fill();
-    off.restore();
+  // --- Building + roundabout emboss ---
+  if (buildings.length > 0 || roundabouts.length > 0) {
+    shadowFillStructures(TERRAIN_FLAT_BLUR, 'rgba(0,0,0,0.4)', -TERRAIN_FLAT_EMBOSS, -TERRAIN_FLAT_EMBOSS);
+    shadowFillStructures(TERRAIN_FLAT_BLUR - 3, 'rgba(255,220,180,0.2)', TERRAIN_FLAT_EMBOSS, TERRAIN_FLAT_EMBOSS);
+    shadowFillStructures(TERRAIN_FLAT_BLUR, theme.terrainFlat, 0, 0);
   }
 
   terrainFlatCacheVersion = graphVersion;
@@ -2073,40 +2074,7 @@ function iconTrafficLight(ctx: CanvasRenderingContext2D, cx: number, cy: number,
 }
 
 function iconTunnel(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
-  // Procedural tunnel icon: dark background circle with tunnel arch
-  ctx.fillStyle = 'rgba(44, 62, 80, 0.85)';
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fill();
-
-  const ir = r * 0.55;
-  // Tunnel arch (semicircle)
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-  ctx.beginPath();
-  ctx.arc(cx, cy + ir * 0.2, ir, Math.PI, 0);
-  ctx.lineTo(cx + ir, cy + ir * 0.6);
-  ctx.lineTo(cx - ir, cy + ir * 0.6);
-  ctx.closePath();
-  ctx.fill();
-
-  // Arch outline
-  ctx.strokeStyle = theme.road;
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.arc(cx, cy + ir * 0.2, ir, Math.PI, 0);
-  ctx.stroke();
-
-  // Dashed road leading in
-  ctx.strokeStyle = theme.road;
-  ctx.lineWidth = 2;
-  ctx.setLineDash([3, 2]);
-  ctx.globalAlpha = 0.5;
-  ctx.beginPath();
-  ctx.moveTo(cx, cy + ir * 0.2);
-  ctx.lineTo(cx, cy - ir * 0.4);
-  ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.globalAlpha = 1;
+  drawSvgIcon(ctx, cx, cy, r, themeAssets.icons.tunnel);
 }
 
 // Gear icon

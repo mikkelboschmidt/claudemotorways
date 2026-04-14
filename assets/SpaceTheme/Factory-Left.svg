@@ -2,9 +2,9 @@
 <g id="Factory-Left">
 <rect id="PinPlacement" x="127.5" y="48.5" width="24" height="24" stroke="black"/>
 <g id="Ground">
-<rect id="Fill" x="40" y="40" width="120" height="80" fill="#414141"/>
-<rect id="Entrance" x="40" y="87" width="7" height="26" fill="#555555"/>
-<rect id="Parking" x="44" y="44" width="112" height="72" rx="1" fill="#555555"/>
+<rect id="Fill" x="40" y="40" width="120" height="80" fill="#5E422F"/>
+<rect id="Entrance" x="40" y="87" width="7" height="26" fill="#634934"/>
+<rect id="Parking" x="44" y="44" width="112" height="72" rx="1" fill="#634934"/>
 </g>
 <g id="Shadows">
 <path id="Shadow" d="M165 45V53L183 70V113H165V125H45L40 120H160V113H154.75L148.5 107H87L57 77V44H156L160 48V40L165 45Z" fill="black" fill-opacity="0.1"/>
@@ -48,12 +48,12 @@
 <defs>
 <linearGradient id="paint0_linear_99_256" x1="113" y1="61" x2="113" y2="69" gradientUnits="userSpaceOnUse">
 <stop stop-color="white" stop-opacity="0"/>
-<stop offset="0.158654" stop-color="white" stop-opacity="0.4"/>
+<stop offset="0.158654" stop-color="white" stop-opacity="0.55"/>
 <stop offset="0.75" stop-color="white" stop-opacity="0"/>
 </linearGradient>
 <linearGradient id="paint1_linear_99_256" x1="113" y1="51" x2="113" y2="59" gradientUnits="userSpaceOnUse">
 <stop stop-color="white" stop-opacity="0"/>
-<stop offset="0.158654" stop-color="white" stop-opacity="0.4"/>
+<stop offset="0.158654" stop-color="white" stop-opacity="0.55"/>
 <stop offset="0.75" stop-color="white" stop-opacity="0"/>
 </linearGradient>
 </defs>
