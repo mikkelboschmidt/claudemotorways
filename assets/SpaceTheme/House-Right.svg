@@ -1,7 +1,7 @@
 <svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
 <g id="House-Right">
 <g id="Ground">
-<rect id="Fill" x="40" y="40" width="40" height="40" rx="2" fill="white" fill-opacity="0.14"/>
+<rect id="Fill" x="40" y="40" width="40" height="40" rx="2" fill="#634934"/>
 <g id="Entrance">
 <path d="M71 63C74.8571 63 76.1429 65 80 65V67C76.1429 67 74.8572 68.5 71 68.5V63Z" fill="url(#paint0_linear_92_148)"/>
 <path d="M80 55C76.1429 55 74.8572 57.5 71 57.5V52C74.8571 52 76.1429 53 80 53V55Z" fill="url(#paint1_linear_92_148)"/>

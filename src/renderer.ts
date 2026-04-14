@@ -1259,8 +1259,8 @@ function drawHoverGhost(ctx: CanvasRenderingContext2D) {
 
 // Terrain flat areas: cached embossed pads under buildings & roads (space theme only)
 // Uses shadowBlur instead of ctx.filter for cross-browser support (Safari lacks ctx.filter).
-const TERRAIN_FLAT_EXPAND = 10;
-const TERRAIN_FLAT_BLUR = 15;
+const TERRAIN_FLAT_EXPAND = 6;
+const TERRAIN_FLAT_BLUR = 10;
 const TERRAIN_FLAT_EMBOSS = 4;
 const ROAD_FLAT_BLUR = 8;
 const ROAD_FLAT_EMBOSS = 2;
@@ -1284,7 +1284,7 @@ function rebuildTerrainFlatCache() {
   }
   const groundEdges = [...normalEdges, ...narrowEdges];
 
-  if (buildings.length === 0 && groundEdges.length === 0) {
+  if (buildings.length === 0 && roundabouts.length === 0 && groundEdges.length === 0) {
     terrainFlatCache = null;
     terrainFlatCacheVersion = graphVersion;
     return;
@@ -1296,6 +1296,15 @@ function rebuildTerrainFlatCache() {
     minY = Math.min(minY, b.gy * GRID - TERRAIN_FLAT_EXPAND);
     maxX = Math.max(maxX, b.gx * GRID + b.w * GRID + TERRAIN_FLAT_EXPAND);
     maxY = Math.max(maxY, b.gy * GRID + b.h * GRID + TERRAIN_FLAT_EXPAND);
+  }
+  for (const ra of roundabouts) {
+    const cx = (ra.gx + 1) * GRID + HALF;
+    const cy = (ra.gy + 1) * GRID + HALF;
+    const r = GRID + TERRAIN_FLAT_EXPAND;
+    minX = Math.min(minX, cx - r);
+    minY = Math.min(minY, cy - r);
+    maxX = Math.max(maxX, cx + r);
+    maxY = Math.max(maxY, cy + r);
   }
   for (const e of groundEdges) {
     minX = Math.min(minX, e.fx, e.tx);
@@ -1317,7 +1326,7 @@ function rebuildTerrainFlatCache() {
   const oy = -terrainFlatOriginY;
 
   // Helpers: draw shapes offset by SHADOW_OFF so only the blurred shadow is visible.
-  function shadowFillBuildings(blur: number, color: string, dx: number, dy: number) {
+  function shadowFillStructures(blur: number, color: string, dx: number, dy: number) {
     off.save();
     off.shadowBlur = blur;
     off.shadowColor = color;
@@ -1331,6 +1340,16 @@ function rebuildTerrainFlatCache() {
       const rw = b.w * GRID + TERRAIN_FLAT_EXPAND * 2;
       const rh = b.h * GRID + TERRAIN_FLAT_EXPAND * 2;
       off.roundRect(x, y, rw, rh, TERRAIN_FLAT_EXPAND);
+    }
+    for (const ra of roundabouts) {
+      const cx = (ra.gx + 1) * GRID + HALF + ox - SHADOW_OFF;
+      const cy = (ra.gy + 1) * GRID + HALF + oy - SHADOW_OFF;
+      const outerR = GRID + TERRAIN_FLAT_EXPAND;
+      const innerR = GRID * 0.5;
+      off.moveTo(cx + outerR, cy);
+      off.arc(cx, cy, outerR, 0, Math.PI * 2);
+      off.moveTo(cx + innerR, cy);
+      off.arc(cx, cy, innerR, 0, Math.PI * 2, true);
     }
     off.fill();
     off.restore();
@@ -1368,15 +1387,15 @@ function rebuildTerrainFlatCache() {
   // --- Road emboss ---
   if (groundEdges.length > 0) {
     shadowStrokeRoads(ROAD_FLAT_BLUR, 'rgba(0,0,0,0.2)', -ROAD_FLAT_EMBOSS, -ROAD_FLAT_EMBOSS);
-    shadowStrokeRoads(ROAD_FLAT_BLUR - 2, 'rgba(255,220,180,0.06)', ROAD_FLAT_EMBOSS, ROAD_FLAT_EMBOSS);
+    shadowStrokeRoads(ROAD_FLAT_BLUR - 2, 'rgba(255,220,180,0.15)', ROAD_FLAT_EMBOSS, ROAD_FLAT_EMBOSS);
     shadowStrokeRoads(ROAD_FLAT_BLUR, theme.terrainFlat, 0, 0);
   }
 
-  // --- Building emboss ---
-  if (buildings.length > 0) {
-    shadowFillBuildings(TERRAIN_FLAT_BLUR, 'rgba(0,0,0,0.3)', -TERRAIN_FLAT_EMBOSS, -TERRAIN_FLAT_EMBOSS);
-    shadowFillBuildings(TERRAIN_FLAT_BLUR - 3, 'rgba(255,220,180,0.1)', TERRAIN_FLAT_EMBOSS, TERRAIN_FLAT_EMBOSS);
-    shadowFillBuildings(TERRAIN_FLAT_BLUR, theme.terrainFlat, 0, 0);
+  // --- Building + roundabout emboss ---
+  if (buildings.length > 0 || roundabouts.length > 0) {
+    shadowFillStructures(TERRAIN_FLAT_BLUR, 'rgba(0,0,0,0.4)', -TERRAIN_FLAT_EMBOSS, -TERRAIN_FLAT_EMBOSS);
+    shadowFillStructures(TERRAIN_FLAT_BLUR - 3, 'rgba(255,220,180,0.2)', TERRAIN_FLAT_EMBOSS, TERRAIN_FLAT_EMBOSS);
+    shadowFillStructures(TERRAIN_FLAT_BLUR, theme.terrainFlat, 0, 0);
   }
 
   terrainFlatCacheVersion = graphVersion;
@@ -2055,40 +2074,7 @@ function iconTrafficLight(ctx: CanvasRenderingContext2D, cx: number, cy: number,
 }
 
 function iconTunnel(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
-  // Procedural tunnel icon: dark background circle with tunnel arch
-  ctx.fillStyle = 'rgba(44, 62, 80, 0.85)';
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fill();
-
-  const ir = r * 0.55;
-  // Tunnel arch (semicircle)
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-  ctx.beginPath();
-  ctx.arc(cx, cy + ir * 0.2, ir, Math.PI, 0);
-  ctx.lineTo(cx + ir, cy + ir * 0.6);
-  ctx.lineTo(cx - ir, cy + ir * 0.6);
-  ctx.closePath();
-  ctx.fill();
-
-  // Arch outline
-  ctx.strokeStyle = theme.road;
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.arc(cx, cy + ir * 0.2, ir, Math.PI, 0);
-  ctx.stroke();
-
-  // Dashed road leading in
-  ctx.strokeStyle = theme.road;
-  ctx.lineWidth = 2;
-  ctx.setLineDash([3, 2]);
-  ctx.globalAlpha = 0.5;
-  ctx.beginPath();
-  ctx.moveTo(cx, cy + ir * 0.2);
-  ctx.lineTo(cx, cy - ir * 0.4);
-  ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.globalAlpha = 1;
+  drawSvgIcon(ctx, cx, cy, r, themeAssets.icons.tunnel);
 }
 
 // Gear icon
