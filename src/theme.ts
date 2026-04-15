@@ -163,7 +163,9 @@ function applyThemeColorsFromSvg(baseTheme: GameTheme, colorBundle: ThemeColorBu
 
   const nextTheme: GameTheme = {
     ...baseTheme,
-    bg: colorBundle.ground,
+    // Space theme should keep the same base background as terrainFlat to avoid
+    // a visible color flash before texture/overlays settle.
+    bg: baseTheme.roadStyle === 'tracks' ? baseTheme.terrainFlat : colorBundle.ground,
     previewIsland: withAlpha(colorBundle.ground, 0.5, baseTheme.previewIsland),
     buildingColors: colorBundle.buildingColors,
   };
@@ -292,8 +294,8 @@ export const classicTheme: GameTheme = {
 // ─── Lunar (dark space mining) ───
 
 export const lunarTheme: GameTheme = {
-  pageBg: '#361A59',
-  bg: '#361A59',
+  pageBg: '#876041',
+  bg: '#876041',
   terrainFlat: '#876041',
   gridLine: 'rgba(255,255,255,0.03)',
 

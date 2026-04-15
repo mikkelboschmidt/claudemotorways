@@ -16,11 +16,22 @@ import { roundabouts, roundaboutConnectionEdgeSet, roundaboutEdgeSet } from './r
 import { getHouseSprite, getFactorySprite, getStorageSprite, drawSpriteLayer, PinPlacement } from './sprites.ts';
 import { trafficLights } from './trafficLights.ts';
 import { tunnels, tunnelEdgeSet, tunnelPhase, tunnelStartGx, tunnelStartGy, tunnelPreviewEndPx, tunnelPreviewEndPy } from './tunnel.ts';
+import { setCullBounds, rectVisible, circleVisible, segmentVisible } from './rendererCulling.ts';
+import { darkenHex, lightenColor, darkenColor, colorToRgba, lerpColor } from './rendererColor.ts';
+import { MODAL_BTN_W, MODAL_BTN_H, CITY_MODAL_W, CITY_MODAL_PAD, CITY_ROW_H, CITY_ROW_GAP, getModalMetrics, getCityModalMetrics, drawDemoModal, drawCityModal } from './rendererModals.ts';
 import spaceTerrainUrl from '../assets/SpaceTheme/terrain.png';
+
+// Section Index (jump by search)
+// - render(): main frame renderer
+// - drawRoads*(): roads, tracks, connectors
+// - drawRoundabouts()/drawTrafficLights()/drawTunnels()
+// - drawHighways()/drawHighwayPreview()
+// - drawBuilding*(): grounds, shadows, bodies, pins
+// - drawCars()/drawCollectingPins()
+// - drawToolbar()/drawDemoModal()/drawCityModal()/getToolbarLayout()
 
 // SVG icon image cache — keyed by (rawSvg + colorOverride)
 const iconCache = new Map<string, HTMLImageElement>();
-const splashCache = new Map<string, HTMLImageElement>();
 const pinGlowCache = new Map<string, HTMLCanvasElement>();
 // Truck SVG images with Pin_n hidden (drawn programmatically) — keyed by (rawSvg + color)
 const truckImgCache = new Map<string, HTMLImageElement>();
@@ -31,6 +42,20 @@ const truckPinDataCache = new Map<string, TruckPinData>();
 const trackWideNodeKeys = new Set<string>();
 const trackConnectorCache: { x: number; y: number; wide: boolean }[] = [];
 let trackCacheGraphVersion = -1;
+type Strip = { left: { x: number; y: number }[]; right: { x: number; y: number }[] };
+type HighwayRenderCache = {
+  key: string;
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+  trackSurface?: Strip;
+  trackLines?: Strip;
+  solidShadow?: Strip;
+  solidOutline?: Strip;
+  solidSurface?: Strip;
+};
+const highwayRenderCache = new Map<number, HighwayRenderCache>();
 let spaceSurfacePattern: CanvasPattern | null = null;
 let spaceSurfacePatternCtx: CanvasRenderingContext2D | null = null;
 let spaceSurfaceGradient: CanvasGradient | null = null;
@@ -49,13 +74,6 @@ spaceTerrainImg.onload = () => {
   });
 };
 spaceTerrainImg.src = spaceTerrainUrl;
-
-function darkenHex(hex: string, factor: number): string {
-  const r = Math.round(parseInt(hex.slice(1, 3), 16) * factor);
-  const g = Math.round(parseInt(hex.slice(3, 5), 16) * factor);
-  const b = Math.round(parseInt(hex.slice(5, 7), 16) * factor);
-  return `rgb(${r},${g},${b})`;
-}
 
 function getIconImage(rawSvg: string, colorOverride?: string): HTMLImageElement {
   const key = rawSvg + (colorOverride ?? '');
@@ -176,16 +194,6 @@ function drawTruckPins(
   }
 }
 
-function getSplashImage(): HTMLImageElement {
-  const url = themeAssets.splashUrl;
-  let img = splashCache.get(url);
-  if (img) return img;
-  img = new Image();
-  img.src = url;
-  splashCache.set(url, img);
-  return img;
-}
-
 function getPinGlowSprite(color: string): HTMLCanvasElement {
   let sprite = pinGlowCache.get(color);
   if (sprite) return sprite;
@@ -287,6 +295,7 @@ export function render(ctx: CanvasRenderingContext2D, width: number, height: num
   const worldTop = camY;
   const worldRight = camX + width / zoom;
   const worldBottom = camY + height / zoom;
+  setCullBounds(worldLeft, worldTop, worldRight, worldBottom);
 
   if (currentThemeId === 'space') {
     drawSpaceSurface(ctx, width, height);
@@ -312,6 +321,7 @@ export function render(ctx: CanvasRenderingContext2D, width: number, height: num
   drawTunnels(ctx);         // Underground paths — below everything
   drawTunnelCars(ctx);       // Underground cars as colored dots
   drawTerrainFlatAreas(ctx); // Blurred pads under buildings (space only)
+  rebuildVisibleBuildingList();
   drawBuildingGrounds(ctx);
   drawRoads(ctx);
   drawTunnelEntrances(ctx);  // Surface markers at entrance/exit nodes
@@ -329,7 +339,8 @@ export function render(ctx: CanvasRenderingContext2D, width: number, height: num
   drawBuildingBodies(ctx);
   drawCollectingPins(ctx);
 
-  drawHighways(ctx);       // Highways + their cars on top of everything
+  drawHighways(ctx);       // Highways on top of world layers
+  drawCars(ctx, 'highway'); // Highway cars above all buildings/world content
   drawHighwayPreview(ctx);
   drawTunnelPreview(ctx);
 
@@ -476,6 +487,7 @@ function drawRoadsTracks(ctx: CanvasRenderingContext2D) {
       if (roundaboutEdgeSet.has(edge.id)) continue;
       if (tunnelEdgeSet.has(edge.id)) continue;
       if (edge.narrow) continue; // narrow drawn separately below
+      if (!segmentVisible(edge.fx, edge.fy, edge.tx, edge.ty, tw + trackOff + 8)) continue;
       const [ox1, oy1, ox2, oy2] = offsetLine(edge.fx, edge.fy, edge.tx, edge.ty, side * trackOff);
       ctx.moveTo(ox1, oy1);
       ctx.lineTo(ox2, oy2);
@@ -490,6 +502,7 @@ function drawRoadsTracks(ctx: CanvasRenderingContext2D) {
     if (roundaboutEdgeSet.has(edge.id)) continue;
     if (tunnelEdgeSet.has(edge.id)) continue;
     if (!edge.narrow) continue;
+    if (!segmentVisible(edge.fx, edge.fy, edge.tx, edge.ty, tw + 8)) continue;
     ctx.moveTo(edge.fx, edge.fy);
     ctx.lineTo(edge.tx, edge.ty);
   }
@@ -534,6 +547,7 @@ function drawTrackConnectors(ctx: CanvasRenderingContext2D, trackOff: number) {
   ctx.lineCap = 'round';
 
   for (const connector of trackConnectorCache) {
+    if (!circleVisible(connector.x, connector.y, trackOff, theme.trackWidth + 4)) continue;
     ctx.beginPath();
     if (connector.wide) {
       ctx.arc(connector.x, connector.y, trackOff, 0, Math.PI * 2);
@@ -559,6 +573,7 @@ function drawRoadsSolid(ctx: CanvasRenderingContext2D) {
     if (roundaboutEdgeSet.has(edge.id)) continue;
     if (tunnelEdgeSet.has(edge.id)) continue;
     if (edge.narrow) continue; // narrow drawn separately
+    if (!segmentVisible(edge.fx, edge.fy, edge.tx, edge.ty, ROAD_W + 8)) continue;
     ctx.moveTo(edge.fx, edge.fy);
     ctx.lineTo(edge.tx, edge.ty);
   }
@@ -576,6 +591,7 @@ function drawRoadsSolid(ctx: CanvasRenderingContext2D) {
     if (roundaboutEdgeSet.has(edge.id)) continue;
     if (tunnelEdgeSet.has(edge.id)) continue;
     if (!edge.narrow) continue;
+    if (!segmentVisible(edge.fx, edge.fy, edge.tx, edge.ty, NARROW_ROAD_W + 8)) continue;
     ctx.moveTo(edge.fx, edge.fy);
     ctx.lineTo(edge.tx, edge.ty);
   }
@@ -595,6 +611,7 @@ function drawRoadsSolid(ctx: CanvasRenderingContext2D) {
     }
     if (!hasRoad) continue;
     const r = hasWide ? ROAD_W / 2 : NARROW_ROAD_W / 2;
+    if (!circleVisible(node.gx * GRID + HALF, node.gy * GRID + HALF, r, 4)) continue;
     ctx.beginPath();
     ctx.arc(node.gx * GRID + HALF, node.gy * GRID + HALF, r, 0, Math.PI * 2);
     ctx.fill();
@@ -609,6 +626,7 @@ function drawRoadsSolid(ctx: CanvasRenderingContext2D) {
     const node = nodes.get(`${cx},${cy}`);
     if (!node || node.edges.size === 0) continue;
     const wallPos = getConnectionPixelPos(b);
+    if (!segmentVisible(cx * GRID + HALF, cy * GRID + HALF, wallPos.x, wallPos.y, ROAD_W + 6)) continue;
     ctx.beginPath();
     ctx.moveTo(cx * GRID + HALF, cy * GRID + HALF);
     ctx.lineTo(wallPos.x, wallPos.y);
@@ -626,22 +644,13 @@ function drawRoadsSolid(ctx: CanvasRenderingContext2D) {
     if (edge.narrow) continue;
     if (roundaboutEdgeSet.has(edge.id)) continue;
     if (tunnelEdgeSet.has(edge.id)) continue;
+    if (!segmentVisible(edge.fx, edge.fy, edge.tx, edge.ty, 6)) continue;
     ctx.moveTo(edge.fx, edge.fy);
     ctx.lineTo(edge.tx, edge.ty);
   }
   ctx.stroke();
 
   ctx.setLineDash([]);
-
-
-  // Red tile overlay for tiles pending removal
-  if (pendingRemoveTiles.size > 0) {
-    ctx.fillStyle = theme.removeTileOverlay;
-    for (const tileKey of pendingRemoveTiles) {
-      const [gx, gy] = parseKey(tileKey);
-      ctx.fillRect(gx * GRID, gy * GRID, GRID, GRID);
-    }
-  }
 }
 
 // Evaluate cubic bezier at parameter t
@@ -671,20 +680,6 @@ function taperHalfW(t: number, baseHalfW: number): number {
   return baseHalfW;
 }
 
-// Expand 3-char hex (#abc) to 6-char (#aabbcc)
-function expandHex(c: string): string {
-  if (c.length === 4) return '#' + c[1] + c[1] + c[2] + c[2] + c[3] + c[3];
-  return c;
-}
-
-// Interpolate hex color
-function lerpColor(c0: string, c1: string, f: number): string {
-  const a = expandHex(c0), b = expandHex(c1);
-  const r0 = parseInt(a.slice(1, 3), 16), g0 = parseInt(a.slice(3, 5), 16), b0 = parseInt(a.slice(5, 7), 16);
-  const r1 = parseInt(b.slice(1, 3), 16), g1 = parseInt(b.slice(3, 5), 16), b1 = parseInt(b.slice(5, 7), 16);
-  const r = Math.round(r0 + (r1 - r0) * f), g = Math.round(g0 + (g1 - g0) * f), bb = Math.round(b0 + (b1 - b0) * f);
-  return '#' + ((1 << 24) | (r << 16) | (g << 8) | bb).toString(16).slice(1);
-}
 
 // Build offset polygon edges that widen from endHalfW at endpoints to midHalfW in the center
 function buildWideningEdges(
@@ -770,6 +765,7 @@ function drawRoundabouts(ctx: CanvasRenderingContext2D) {
     const cx = (ra.gx + 1) * GRID + HALF;
     const cy = (ra.gy + 1) * GRID + HALF;
     const ringR = GRID; // ring nodes are 1 tile from center = 40px
+    if (!circleVisible(cx, cy, ringR + ROAD_W, 8)) continue;
 
     if (theme.roadStyle === 'tracks') {
       // Track style: two concentric circles as rails
@@ -829,6 +825,7 @@ function drawRoundaboutConnectionNodes(ctx: CanvasRenderingContext2D) {
     for (const eid of roundaboutConnectionEdgeSet) {
       const edge = edges.get(eid);
       if (!edge) continue;
+      if (!circleVisible(edge.tx, edge.ty, trackOff, theme.trackWidth + 4)) continue;
       ctx.beginPath();
       ctx.arc(edge.tx, edge.ty, trackOff, 0, Math.PI * 2);
       ctx.stroke();
@@ -840,6 +837,7 @@ function drawRoundaboutConnectionNodes(ctx: CanvasRenderingContext2D) {
   for (const eid of roundaboutConnectionEdgeSet) {
     const edge = edges.get(eid);
     if (!edge) continue;
+    if (!circleVisible(edge.tx, edge.ty, ROAD_W / 2, 4)) continue;
     ctx.beginPath();
     ctx.arc(edge.tx, edge.ty, ROAD_W / 2, 0, Math.PI * 2);
     ctx.fill();
@@ -854,6 +852,7 @@ function drawTrafficLights(ctx: CanvasRenderingContext2D) {
   for (const tl of trafficLights) {
     const cx = tl.gx * GRID + HALF;
     const cy = tl.gy * GRID + HALF;
+    if (!circleVisible(cx, cy, 14, 4)) continue;
     const rot = tl.diagonal ? Math.PI / 4 : 0;
 
     if (isSpace) {
@@ -975,15 +974,48 @@ function drawHighways(ctx: CanvasRenderingContext2D) {
   const isTracks = theme.roadStyle === 'tracks';
   const roadTrackOff = theme.trackSpacing / 2;           // match road circles
   const hwTrackOff = (theme.highwayTrackSpacing || theme.trackSpacing) / 2; // wide middle
+  const baseColor = theme.trackColor;
+  const fastColor = theme.highwayTrackFastColor || baseColor;
+
+  const getCache = (hw: typeof highways[number]): HighwayRenderCache => {
+    const key = [
+      hw.p0x, hw.p0y, hw.p1x, hw.p1y, hw.p2x, hw.p2y, hw.p3x, hw.p3y,
+      theme.roadStyle, theme.trackSpacing, theme.highwayTrackSpacing || theme.trackSpacing,
+      baseColor, fastColor,
+    ].join('|');
+    const existing = highwayRenderCache.get(hw.id);
+    if (existing && existing.key === key) return existing;
+
+    const minX = Math.min(hw.p0x, hw.p1x, hw.p2x, hw.p3x);
+    const minY = Math.min(hw.p0y, hw.p1y, hw.p2y, hw.p3y);
+    const maxX = Math.max(hw.p0x, hw.p1x, hw.p2x, hw.p3x);
+    const maxY = Math.max(hw.p0y, hw.p1y, hw.p2y, hw.p3y);
+    const cache: HighwayRenderCache = { key, minX, minY, maxX, maxY };
+
+    if (isTracks) {
+      cache.trackSurface = buildTaperedEdges(hw.p0x, hw.p0y, hw.p1x, hw.p1y, hw.p2x, hw.p2y, hw.p3x, hw.p3y, HIGHWAY_ROAD_W / 2);
+      cache.trackLines = buildWideningEdges(hw.p0x, hw.p0y, hw.p1x, hw.p1y, hw.p2x, hw.p2y, hw.p3x, hw.p3y, roadTrackOff, hwTrackOff);
+    } else {
+      cache.solidShadow = buildTaperedEdges(hw.p0x, hw.p0y, hw.p1x, hw.p1y, hw.p2x, hw.p2y, hw.p3x, hw.p3y, (HIGHWAY_ROAD_W + 6) / 2, 3, 3);
+      cache.solidOutline = buildTaperedEdges(hw.p0x, hw.p0y, hw.p1x, hw.p1y, hw.p2x, hw.p2y, hw.p3x, hw.p3y, (HIGHWAY_ROAD_W + 4) / 2);
+      cache.solidSurface = buildTaperedEdges(hw.p0x, hw.p0y, hw.p1x, hw.p1y, hw.p2x, hw.p2y, hw.p3x, hw.p3y, HIGHWAY_ROAD_W / 2);
+    }
+
+    highwayRenderCache.set(hw.id, cache);
+    return cache;
+  };
 
   for (const hw of highways) {
+    const cache = getCache(hw);
+    if (!rectVisible(cache.minX, cache.minY, cache.maxX - cache.minX, cache.maxY - cache.minY, HIGHWAY_ROAD_W + 24)) continue;
+
     ctx.save();
 
     if (isTracks) {
       // ── Track-style highway ──
 
       // Gradient fill: transparent at ends → semi-transparent white in the middle
-      const surface = buildTaperedEdges(hw.p0x, hw.p0y, hw.p1x, hw.p1y, hw.p2x, hw.p2y, hw.p3x, hw.p3y, HIGHWAY_ROAD_W / 2);
+      const surface = cache.trackSurface!;
       for (let i = 0; i < surface.left.length - 1; i++) {
         const t = (i + 0.5) / HW_SAMPLES;
         const alpha = Math.sin(t * Math.PI) * 0.12;
@@ -998,9 +1030,7 @@ function drawHighways(ctx: CanvasRenderingContext2D) {
       }
 
       // Track lines: taper from road spacing at endpoints to highway spacing in middle
-      const tracks = buildWideningEdges(hw.p0x, hw.p0y, hw.p1x, hw.p1y, hw.p2x, hw.p2y, hw.p3x, hw.p3y, roadTrackOff, hwTrackOff);
-      const baseColor = theme.trackColor;
-      const fastColor = theme.highwayTrackFastColor || baseColor;
+      const tracks = cache.trackLines!;
       ctx.lineWidth = theme.trackWidth + 1;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
@@ -1032,17 +1062,17 @@ function drawHighways(ctx: CanvasRenderingContext2D) {
       // ── Solid-style highway (original) ──
 
       // 1) Shadow (wider, offset)
-      const shadow = buildTaperedEdges(hw.p0x, hw.p0y, hw.p1x, hw.p1y, hw.p2x, hw.p2y, hw.p3x, hw.p3y, (HIGHWAY_ROAD_W + 6) / 2, 3, 3);
+      const shadow = cache.solidShadow!;
       ctx.fillStyle = 'rgba(0,0,0,0.25)';
       fillTaperedPoly(ctx, shadow.left, shadow.right);
 
       // 2) Outline
-      const outline = buildTaperedEdges(hw.p0x, hw.p0y, hw.p1x, hw.p1y, hw.p2x, hw.p2y, hw.p3x, hw.p3y, (HIGHWAY_ROAD_W + 4) / 2);
+      const outline = cache.solidOutline!;
       ctx.fillStyle = theme.highwayOutline;
       fillTaperedPoly(ctx, outline.left, outline.right);
 
       // 3) Surface with color gradient at ends
-      const surface = buildTaperedEdges(hw.p0x, hw.p0y, hw.p1x, hw.p1y, hw.p2x, hw.p2y, hw.p3x, hw.p3y, HIGHWAY_ROAD_W / 2);
+      const surface = cache.solidSurface!;
 
       const taperSamples = Math.ceil(TAPER_T * HW_SAMPLES);
       ctx.fillStyle = theme.highwaySurface;
@@ -1092,10 +1122,6 @@ function drawHighways(ctx: CanvasRenderingContext2D) {
     }
 
     ctx.restore();
-
-    // Draw cars on this highway's edges so they layer correctly
-    const hwEdges = new Set(hw.edgeIds);
-    drawCars(ctx, hwEdges);
   }
 
   // Draw draggable control point handles when highway tool is active
@@ -1413,54 +1439,55 @@ function spriteColor(b: typeof buildings[0]): string {
   return b.disabled ? theme.disabledBuilding : b.color;
 }
 
-function drawBuildingGrounds(ctx: CanvasRenderingContext2D) {
+type VisibleBuilding = {
+  b: typeof buildings[0];
+  pos: { x: number; y: number; w: number; h: number };
+  color: string;
+  sprite: ReturnType<typeof getHouseSprite>;
+};
+let visibleBuildings: VisibleBuilding[] = [];
+
+function rebuildVisibleBuildingList() {
+  visibleBuildings = [];
   for (const b of buildings) {
     const pos = getBuildingPixelPos(b);
+    if (!rectVisible(pos.x, pos.y, pos.w, pos.h, 16)) continue;
     const color = spriteColor(b);
-    if (b.type === 'house') {
-      const sprite = getHouseSprite(b.connectionSide, color);
-      if (sprite) drawSpriteLayer(ctx, sprite.ground, sprite, pos.x, pos.y);
-    } else if (b.type === 'factory') {
-      const sprite = getFactorySprite(b.connectionSide, color);
-      if (sprite) drawSpriteLayer(ctx, sprite.ground, sprite, pos.x, pos.y);
-    } else if (b.type === 'storage') {
-      const sprite = getStorageSprite(b.connectionSide, color);
-      if (sprite) drawSpriteLayer(ctx, sprite.ground, sprite, pos.x, pos.y);
-    }
+    const sprite = b.type === 'house'
+      ? getHouseSprite(b.connectionSide, color)
+      : b.type === 'factory'
+        ? getFactorySprite(b.connectionSide, color)
+        : getStorageSprite(b.connectionSide, color);
+    visibleBuildings.push({ b, pos, color, sprite });
+  }
+}
+
+function drawBuildingGrounds(ctx: CanvasRenderingContext2D) {
+  for (const vb of visibleBuildings) {
+    if (vb.sprite) drawSpriteLayer(ctx, vb.sprite.ground, vb.sprite, vb.pos.x, vb.pos.y);
   }
 }
 
 // Shadow layer: drawn above cars, below building bodies
 function drawBuildingShadows(ctx: CanvasRenderingContext2D) {
-  for (const b of buildings) {
-    const pos = getBuildingPixelPos(b);
-    const color = spriteColor(b);
-    if (b.type === 'house') {
-      const sprite = getHouseSprite(b.connectionSide, color);
-      if (sprite) drawSpriteLayer(ctx, sprite.shadow, sprite, pos.x, pos.y);
-    } else if (b.type === 'factory') {
-      const sprite = getFactorySprite(b.connectionSide, color);
-      if (sprite) drawSpriteLayer(ctx, sprite.shadow, sprite, pos.x, pos.y);
-    } else if (b.type === 'storage') {
-      const sprite = getStorageSprite(b.connectionSide, color);
-      if (sprite) drawSpriteLayer(ctx, sprite.shadow, sprite, pos.x, pos.y);
-    }
+  for (const vb of visibleBuildings) {
+    if (vb.sprite) drawSpriteLayer(ctx, vb.sprite.shadow, vb.sprite, vb.pos.x, vb.pos.y);
   }
 }
 
 // Building body layer: drawn on top of everything
 function drawBuildingBodies(ctx: CanvasRenderingContext2D) {
-  for (const b of buildings) {
-    const pos = getBuildingPixelPos(b);
-    const color = spriteColor(b);
+  for (const vb of visibleBuildings) {
+    const b = vb.b;
+    const pos = vb.pos;
+    const color = vb.color;
+    const sprite = vb.sprite;
 
     if (b.type === 'house') {
-      const sprite = getHouseSprite(b.connectionSide, color);
       if (sprite) {
         drawSpriteLayer(ctx, sprite.building, sprite, pos.x, pos.y);
       }
     } else if (b.type === 'factory') {
-      const sprite = getFactorySprite(b.connectionSide, color);
       if (sprite) {
         drawSpriteLayer(ctx, sprite.building, sprite, pos.x, pos.y);
         drawFactoryPins(ctx, pos.x, pos.y, sprite.pinRects, b.pins, b.pinCooldown, b.disabled, color);
@@ -1468,7 +1495,6 @@ function drawBuildingBodies(ctx: CanvasRenderingContext2D) {
         drawFactory(ctx, b, pos);
       }
     } else if (b.type === 'storage') {
-      const sprite = getStorageSprite(b.connectionSide, color);
       if (sprite) {
         drawSpriteLayer(ctx, sprite.building, sprite, pos.x, pos.y);
       } else {
@@ -1605,30 +1631,6 @@ function drawStorage(ctx: CanvasRenderingContext2D, b: typeof buildings[0], pos:
   ctx.fillText('S', pos.x + pos.w / 2, pos.y + pos.h / 2);
 }
 
-function lightenColor(hex: string, amount: number): string {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  const lr = Math.round(r + (255 - r) * amount);
-  const lg = Math.round(g + (255 - g) * amount);
-  const lb = Math.round(b + (255 - b) * amount);
-  return `rgb(${lr},${lg},${lb})`;
-}
-
-function darkenColor(hex: string, amount: number): string {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgb(${Math.round(r * (1 - amount))},${Math.round(g * (1 - amount))},${Math.round(b * (1 - amount))})`;
-}
-
-function colorToRgba(hex: string, alpha: number): string {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r},${g},${b},${alpha})`;
-}
-
 function drawBuildingDonut(ctx: CanvasRenderingContext2D, fx: number, fy: number, fw: number, fh: number, pins: number, maxPins: number, pinCooldown: number, type: 'factory' | 'storage', pinPlacement: PinPlacement | null) {
   if (maxPins === 0) return;
 
@@ -1760,17 +1762,20 @@ function drawCarriedPinGlow(ctx: CanvasRenderingContext2D, glowColor: string) {
   ctx.drawImage(sprite, -size / 2, -size / 2, size, size);
 }
 
-function drawCars(ctx: CanvasRenderingContext2D, filter?: 'road' | Set<string>) {
+function drawCars(ctx: CanvasRenderingContext2D, filter?: 'road' | 'highway' | Set<string>) {
   for (const car of cars) {
     if (filter === 'road') {
       if (highwayEdgeSet.has(car.edgeId)) continue;
       if (tunnelEdgeSet.has(car.edgeId)) continue;
+    } else if (filter === 'highway') {
+      if (!highwayEdgeSet.has(car.edgeId)) continue;
     } else if (filter instanceof Set) {
       if (!filter.has(car.edgeId)) continue;
     }
     const carLen = car.isTruck ? TRUCK_LEN : CAR_LEN;
     const carWid = car.isTruck ? TRUCK_WID : CAR_WID;
     const renderPos = getVehicleRenderOrigin(car, carLen);
+    if (!circleVisible(renderPos.x, renderPos.y, carLen * 0.8, 10)) continue;
     const vehicleSvg = car.isTruck ? themeAssets.sprites.truck : themeAssets.sprites.car;
     const vehicleImg = car.isTruck ? getTruckImage(vehicleSvg, car.color) : getIconImage(vehicleSvg, car.color);
 
@@ -1780,17 +1785,10 @@ function drawCars(ctx: CanvasRenderingContext2D, filter?: 'road' | Set<string>) 
 
     ctx.globalAlpha = 1;
 
-    const drawVehicleCargo = () => {
-      if (car.isTruck) {
-        drawTruckPins(ctx, vehicleSvg, carLen, carWid, car.pinsCarried, car.color);
-      } else if (car.carryingPin) {
-        drawCarriedPinGlow(ctx, car.color);
-      }
-    };
-
     if (vehicleImg.complete && vehicleImg.naturalWidth > 0) {
       ctx.drawImage(vehicleImg, -carLen / 2, -carWid / 2, carLen, carWid);
-      drawVehicleCargo();
+      if (car.isTruck) drawTruckPins(ctx, vehicleSvg, carLen, carWid, car.pinsCarried, car.color);
+      else if (car.carryingPin) drawCarriedPinGlow(ctx, car.color);
       ctx.restore();
       continue;
     }
@@ -1822,7 +1820,8 @@ function drawCars(ctx: CanvasRenderingContext2D, filter?: 'road' | Set<string>) 
       ctx.fillRect(carLen / 2 - 4, -carWid / 2 + 2, 3, carWid - 4);
     }
 
-    drawVehicleCargo();
+    if (car.isTruck) drawTruckPins(ctx, vehicleSvg, carLen, carWid, car.pinsCarried, car.color);
+    else if (car.carryingPin) drawCarriedPinGlow(ctx, car.color);
 
     ctx.globalAlpha = 1;
     ctx.restore();
@@ -1853,6 +1852,7 @@ function drawCollectingPins(ctx: CanvasRenderingContext2D) {
     // Pin grows slightly then shrinks
     const scale = 1 + 0.3 * Math.sin(t * Math.PI);
     const radius = 3.5 * scale;
+    if (!circleVisible(px, py, radius, 6)) continue;
 
     ctx.globalAlpha = alpha;
     ctx.fillStyle = theme.collectingPin;
@@ -1884,6 +1884,7 @@ function drawTunnels(ctx: CanvasRenderingContext2D) {
     const sy = tn.startGy * GRID + HALF;
     const ex = tn.endGx * GRID + HALF;
     const ey = tn.endGy * GRID + HALF;
+    if (!segmentVisible(sx, sy, ex, ey, TUNNEL_ROAD_W + 10)) continue;
     const dx = ex - sx, dy = ey - sy;
     const len = Math.hypot(dx, dy) || 1;
     const ux = dx / len, uy = dy / len;
@@ -1902,6 +1903,7 @@ function drawTunnels(ctx: CanvasRenderingContext2D) {
 function drawTunnelCars(ctx: CanvasRenderingContext2D) {
   for (const car of cars) {
     if (!tunnelEdgeSet.has(car.edgeId)) continue;
+    if (!circleVisible(car.x, car.y, car.isTruck ? 5 : 4, 8)) continue;
     // Underground cars are simple colored dots
     ctx.save();
     ctx.globalAlpha = 0.5;
@@ -1921,6 +1923,7 @@ function drawTunnelEntrances(ctx: CanvasRenderingContext2D) {
     const sy = tn.startGy * GRID + HALF;
     const ex = tn.endGx * GRID + HALF;
     const ey = tn.endGy * GRID + HALF;
+    if (!segmentVisible(sx, sy, ex, ey, 18)) continue;
 
     drawEntranceMarker(ctx, sx, sy, ex, ey);
     drawEntranceMarker(ctx, ex, ey, sx, sy);
@@ -2367,244 +2370,6 @@ function drawToolbar(ctx: CanvasRenderingContext2D, width: number, height: numbe
   }
 }
 
-const MODAL_BTN_W = 130;
-const MODAL_BTN_H = 42;
-const MODAL_RADIUS = 14;
-
-function getModalMetrics(width: number, height: number) {
-  const size = Math.min(width * 0.7, height * 0.8);
-  const mx = (width - size) / 2;
-  const my = (height - size) / 2;
-  return { size, mx, my };
-}
-
-function drawDemoModal(ctx: CanvasRenderingContext2D, width: number, height: number) {
-  // Dim overlay
-  ctx.fillStyle = theme.overlayDim;
-  ctx.fillRect(0, 0, width, height);
-
-  const { size, mx, my } = getModalMetrics(width, height);
-
-  // Shadow
-  ctx.save();
-  ctx.shadowColor = theme.modalShadow;
-  ctx.shadowBlur = 32;
-  ctx.shadowOffsetX = 0;
-  ctx.shadowOffsetY = 8;
-  ctx.fillStyle = '#000';
-  ctx.beginPath();
-  ctx.roundRect(mx, my, size, size, MODAL_RADIUS);
-  ctx.fill();
-  ctx.restore();
-
-  // Splash image (is the modal)
-  const splashImg = getSplashImage();
-  if (splashImg.complete && splashImg.naturalWidth > 0) {
-    ctx.save();
-    ctx.beginPath();
-    ctx.roundRect(mx, my, size, size, MODAL_RADIUS);
-    ctx.clip();
-    ctx.drawImage(splashImg, mx, my, size, size);
-    ctx.restore();
-  }
-
-  // White outline
-  ctx.strokeStyle = theme.modalOutline;
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.roundRect(mx, my, size, size, MODAL_RADIUS);
-  ctx.stroke();
-
-  // Close button (top-right)
-  const closeSize = 28;
-  const closePad = 8;
-  const closeX = mx + size - closeSize - closePad;
-  const closeY = my + closePad;
-  ctx.fillStyle = theme.closeButtonBg;
-  ctx.beginPath();
-  ctx.arc(closeX + closeSize / 2, closeY + closeSize / 2, closeSize / 2, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = theme.btnBorder;
-  ctx.lineWidth = 2;
-  const xPad = 8;
-  ctx.beginPath();
-  ctx.moveTo(closeX + xPad, closeY + xPad);
-  ctx.lineTo(closeX + closeSize - xPad, closeY + closeSize - xPad);
-  ctx.moveTo(closeX + closeSize - xPad, closeY + xPad);
-  ctx.lineTo(closeX + xPad, closeY + closeSize - xPad);
-  ctx.stroke();
-
-  // Gradient fade at bottom for button readability
-  const gradH = 100;
-  const grad = ctx.createLinearGradient(0, my + size - gradH, 0, my + size);
-  grad.addColorStop(0, 'rgba(0,0,0,0)');
-  grad.addColorStop(1, theme.bottomGradientEnd);
-  ctx.save();
-  ctx.beginPath();
-  ctx.roundRect(mx, my, size, size, MODAL_RADIUS);
-  ctx.clip();
-  ctx.fillStyle = grad;
-  ctx.fillRect(mx, my + size - gradH, size, gradH);
-  ctx.restore();
-
-  // Buttons overlaid on bottom of image
-  const gap = 14;
-  const pillRadius = MODAL_BTN_H / 2;
-  const totalBtnW = MODAL_BTN_W * 2 + gap;
-  const btnStartX = mx + (size - totalBtnW) / 2;
-  const btnY = my + size - MODAL_BTN_H - 46;
-
-  // Animated multi-color glow for buttons
-  const glowColors = theme.glowColors;
-  const t = performance.now() / 1000;
-  const pulse = 0.5 + 0.5 * Math.sin(t * 3); // pulsate intensity
-  const colorIdx = t * 0.8; // slow color cycle
-  const c0 = glowColors[Math.floor(colorIdx) % glowColors.length];
-  const c1 = glowColors[(Math.floor(colorIdx) + 1) % glowColors.length];
-  const frac = colorIdx % 1;
-  const gr = Math.round(c0[0] + (c1[0] - c0[0]) * frac);
-  const gg = Math.round(c0[1] + (c1[1] - c0[1]) * frac);
-  const gb = Math.round(c0[2] + (c1[2] - c0[2]) * frac);
-  const glowAlpha = 0.5 + 0.4 * pulse;
-  const glowBlur = 12 + 10 * pulse;
-
-  // Helper to draw a glowing button
-  const drawGlowBtn = (bx: number, grad: CanvasGradient, label: string) => {
-    // Multi-color glow layers
-    ctx.save();
-    ctx.shadowColor = `rgba(${gr}, ${gg}, ${gb}, ${glowAlpha})`;
-    ctx.shadowBlur = glowBlur;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 0;
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.roundRect(bx, btnY, MODAL_BTN_W, MODAL_BTN_H, pillRadius);
-    ctx.fill();
-    // Second glow pass for richer effect
-    ctx.shadowBlur = glowBlur * 1.5;
-    ctx.shadowColor = `rgba(${gr}, ${gg}, ${gb}, ${glowAlpha * 0.4})`;
-    ctx.fill();
-    ctx.restore();
-    ctx.strokeStyle = theme.btnBorder;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.roundRect(bx, btnY, MODAL_BTN_W, MODAL_BTN_H, pillRadius);
-    ctx.stroke();
-    ctx.fillStyle = theme.btnText;
-    ctx.font = 'bold 14px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(label, bx + MODAL_BTN_W / 2, btnY + MODAL_BTN_H / 2);
-  };
-
-  // Demo City button
-  const demoGrad = ctx.createLinearGradient(0, btnY, 0, btnY + MODAL_BTN_H);
-  demoGrad.addColorStop(0, theme.demoBtnGradTop);
-  demoGrad.addColorStop(1, theme.demoBtnGradBottom);
-  drawGlowBtn(btnStartX, demoGrad, 'Demo City');
-
-  // Start Fresh button
-  const freshGrad = ctx.createLinearGradient(0, btnY, 0, btnY + MODAL_BTN_H);
-  freshGrad.addColorStop(0, theme.freshBtnGradTop);
-  freshGrad.addColorStop(1, theme.freshBtnGradBottom);
-  drawGlowBtn(btnStartX + MODAL_BTN_W + gap, freshGrad, 'Start Fresh');
-}
-
-const CITY_MODAL_W = 320;
-const CITY_MODAL_PAD = 16;
-const CITY_ROW_H = 44;
-const CITY_ROW_GAP = 8;
-
-function getCityModalMetrics(width: number, height: number) {
-  const cityCount = cities.length;
-  const headerH = 48;
-  const contentH = cityCount * (CITY_ROW_H + CITY_ROW_GAP) - CITY_ROW_GAP;
-  const modalH = headerH + contentH + CITY_MODAL_PAD * 2;
-  const mx = (width - CITY_MODAL_W) / 2;
-  const my = (height - modalH) / 2;
-  return { modalH, mx, my, headerH };
-}
-
-function drawCityModal(ctx: CanvasRenderingContext2D, width: number, height: number) {
-  // Dim overlay
-  ctx.fillStyle = theme.overlayDim;
-  ctx.fillRect(0, 0, width, height);
-
-  const cityCount = cities.length;
-  const { modalH, mx, my, headerH } = getCityModalMetrics(width, height);
-
-  // Shadow + background
-  ctx.save();
-  ctx.shadowColor = theme.modalShadow;
-  ctx.shadowBlur = 32;
-  ctx.shadowOffsetY = 8;
-  ctx.fillStyle = theme.cityModalBg;
-  ctx.beginPath();
-  ctx.roundRect(mx, my, CITY_MODAL_W, modalH, 12);
-  ctx.fill();
-  ctx.restore();
-
-  // Outline
-  ctx.strokeStyle = theme.cityModalOutline;
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.roundRect(mx, my, CITY_MODAL_W, modalH, 12);
-  ctx.stroke();
-
-  // Header
-  ctx.fillStyle = theme.cityRowText;
-  ctx.font = 'bold 16px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('Choose a City', mx + CITY_MODAL_W / 2, my + headerH / 2);
-
-  // Close button (top-right)
-  const closeSize = 28;
-  const closePad = 10;
-  const closeX = mx + CITY_MODAL_W - closeSize - closePad;
-  const closeY = my + closePad;
-  ctx.fillStyle = theme.cityCloseBg;
-  ctx.beginPath();
-  ctx.arc(closeX + closeSize / 2, closeY + closeSize / 2, closeSize / 2, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = theme.btnBorder;
-  ctx.lineWidth = 2;
-  const xInset = 8;
-  ctx.beginPath();
-  ctx.moveTo(closeX + xInset, closeY + xInset);
-  ctx.lineTo(closeX + closeSize - xInset, closeY + closeSize - xInset);
-  ctx.moveTo(closeX + closeSize - xInset, closeY + xInset);
-  ctx.lineTo(closeX + xInset, closeY + closeSize - xInset);
-  ctx.stroke();
-
-  // City rows
-  let rowY = my + headerH;
-  for (let i = 0; i < cityCount; i++) {
-    const rowX = mx + CITY_MODAL_PAD;
-    const rowW = CITY_MODAL_W - CITY_MODAL_PAD * 2;
-
-    ctx.fillStyle = theme.cityRowBg;
-    ctx.beginPath();
-    ctx.roundRect(rowX, rowY, rowW, CITY_ROW_H, 8);
-    ctx.fill();
-
-    ctx.fillStyle = theme.cityRowText;
-    ctx.font = '14px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(cities[i].name, mx + CITY_MODAL_W / 2, rowY + CITY_ROW_H / 2);
-
-    rowY += CITY_ROW_H + CITY_ROW_GAP;
-  }
-
-  if (cityCount === 0) {
-    ctx.fillStyle = theme.cityEmptyText;
-    ctx.font = '13px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('No cities available', mx + CITY_MODAL_W / 2, my + headerH + 20);
-  }
-}
 
 export function getToolbarLayout(_ctx: CanvasRenderingContext2D, width: number, height: number) {
   const r = BTN_SIZE / 2;
