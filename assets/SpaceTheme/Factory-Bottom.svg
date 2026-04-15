@@ -6,6 +6,14 @@
 <rect id="Entrance" x="153" y="113" width="7" height="26" transform="rotate(90 153 113)" fill="#634934"/>
 <rect id="Parking" x="44" y="44" width="112" height="72" rx="1" fill="#634934"/>
 </g>
+<g id="Entry">
+<rect id="Rectangle 9" x="133" y="120" width="36" height="2" transform="rotate(-90 133 120)" fill="url(#paint0_linear_103_660)"/>
+<rect id="Rectangle 10" x="145" y="120" width="36" height="2" transform="rotate(-90 145 120)" fill="url(#paint1_linear_103_660)"/>
+<path id="Subtract" d="M137.777 113.844L140 116.066L142.223 113.844L143.189 114.811L140 118L136.811 114.811L137.777 113.844Z" fill="#4CFFF9"/>
+<path id="Subtract_2" d="M137.777 108.844L140 111.066L142.223 108.844L143.189 109.811L140 113L136.811 109.811L137.777 108.844Z" fill="#4CFFF9"/>
+<path id="Subtract_3" d="M142.223 106L140 103.777L137.777 106L136.811 105.033L140 101.844L143.189 105.033L142.223 106Z" fill="#4CFFF9"/>
+<path id="Subtract_4" d="M142.223 101L140 98.7773L137.777 101L136.811 100.033L140 96.8438L143.189 100.033L142.223 101Z" fill="#4CFFF9"/>
+</g>
 <g id="Shadows">
 <path id="Shadow" d="M45 125H165V45L160 40V120H40L45 125Z" fill="black" fill-opacity="0.1"/>
 <path id="Shadow_2" d="M160 64V107H64L44 87V44H140L160 64Z" fill="black" fill-opacity="0.1"/>
@@ -20,8 +28,8 @@
 <path id="RoofShadow_4" d="M100.293 54.2929C100.105 54.1054 99.851 54 99.5858 54H74V64H102.757C105.43 64 106.769 60.7686 104.879 58.8787L100.293 54.2929Z" fill="#CC0000"/>
 <path id="RoofMain_4" d="M100 55C100 52.7909 98.2091 51 96 51H74V59H96C98.2091 59 100 57.2091 100 55V55Z" fill="#FF0000"/>
 <path id="RoofMain_5" d="M100 65C100 62.7909 98.2091 61 96 61H74V69H96C98.2091 69 100 67.2091 100 65V65Z" fill="#FF0000"/>
-<path id="Gradient" d="M100 65C100 62.7909 98.2091 61 96 61H74V69H96C98.2091 69 100 67.2091 100 65V65Z" fill="url(#paint0_linear_103_660)"/>
-<path id="Gradient_2" d="M100 55C100 52.7909 98.2091 51 96 51H74V59H96C98.2091 59 100 57.2091 100 55V55Z" fill="url(#paint1_linear_103_660)"/>
+<path id="Gradient" d="M100 65C100 62.7909 98.2091 61 96 61H74V69H96C98.2091 69 100 67.2091 100 65V65Z" fill="url(#paint2_linear_103_660)"/>
+<path id="Gradient_2" d="M100 55C100 52.7909 98.2091 51 96 51H74V59H96C98.2091 59 100 57.2091 100 55V55Z" fill="url(#paint3_linear_103_660)"/>
 <rect id="RoofShadow_5" x="120" y="50" width="7" height="3" fill="#CC0000"/>
 <rect id="RoofShadow_6" x="120" y="56" width="7" height="3" fill="#CC0000"/>
 <rect id="RoofShadow_7" x="120" y="62" width="7" height="3" fill="#CC0000"/>
@@ -47,12 +55,20 @@
 </g>
 </g>
 <defs>
-<linearGradient id="paint0_linear_103_660" x1="87" y1="61" x2="87" y2="69" gradientUnits="userSpaceOnUse">
+<linearGradient id="paint0_linear_103_660" x1="133" y1="121" x2="169" y2="121" gradientUnits="userSpaceOnUse">
+<stop stop-color="#4CFFF9"/>
+<stop offset="0.567308" stop-color="#4CFFF9" stop-opacity="0"/>
+</linearGradient>
+<linearGradient id="paint1_linear_103_660" x1="145" y1="121" x2="181" y2="121" gradientUnits="userSpaceOnUse">
+<stop stop-color="#4CFFF9"/>
+<stop offset="0.567308" stop-color="#4CFFF9" stop-opacity="0"/>
+</linearGradient>
+<linearGradient id="paint2_linear_103_660" x1="87" y1="61" x2="87" y2="69" gradientUnits="userSpaceOnUse">
 <stop stop-color="white" stop-opacity="0"/>
 <stop offset="0.158654" stop-color="white" stop-opacity="0.55"/>
 <stop offset="0.75" stop-color="white" stop-opacity="0"/>
 </linearGradient>
-<linearGradient id="paint1_linear_103_660" x1="87" y1="51" x2="87" y2="59" gradientUnits="userSpaceOnUse">
+<linearGradient id="paint3_linear_103_660" x1="87" y1="51" x2="87" y2="59" gradientUnits="userSpaceOnUse">
 <stop stop-color="white" stop-opacity="0"/>
 <stop offset="0.158654" stop-color="white" stop-opacity="0.55"/>
 <stop offset="0.75" stop-color="white" stop-opacity="0"/>

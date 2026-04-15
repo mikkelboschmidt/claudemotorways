@@ -1,13 +1,24 @@
 import { Car } from './types.ts';
-import { CAR_SPEED, CAR_ACCEL, CAR_DECEL, CAR_LEN, CAR_WID, MIN_GAP, LANE_W, SPAWN_INTERVAL, MAX_CARS_PER_HOUSE, PARK_DURATION, PARK_ANIM_SPEED, TURN_LERP, CORNER_BRAKE_DIST, CORNER_MIN_SPEED, CORNER_MED_SPEED, HIGHWAY_SPEED, TRUCK_SPEED, TRUCK_CAPACITY, MAX_TRUCKS_PER_STORAGE, TRUCK_SPAWN_INTERVAL, FACTORY_MAX_PINS, UTURN_STUCK_THRESHOLD, UTURN_COOLDOWN } from './constants.ts';
+import { CAR_SPEED, CAR_ACCEL, CAR_DECEL, CAR_LEN, MIN_GAP, LANE_W, SPAWN_INTERVAL, MAX_CARS_PER_HOUSE, PARK_DURATION, PARK_ANIM_SPEED, TURN_LERP, CORNER_BRAKE_DIST, CORNER_MIN_SPEED, CORNER_MED_SPEED, HIGHWAY_SPEED, TRUCK_SPEED, TRUCK_CAPACITY, MAX_TRUCKS_PER_STORAGE, TRUCK_SPAWN_INTERVAL, UTURN_STUCK_THRESHOLD, UTURN_COOLDOWN } from './constants.ts';
 import { edges, getEdgeBetween, graphVersion, nodes } from './graph.ts';
 import { isRedLight, isAmberLight, trafficLightByNode } from './trafficLights.ts';
-import { buildings, buildingById, getBuildingCenter, getBuildingPixelPos, getConnectionPixelPos, getPinPixelPos } from './buildings.ts';
+import { buildings, buildingById, getPinPixelPos } from './buildings.ts';
 import { findPath } from './pathfinding.ts';
 import { addScore } from './score.ts';
 import { getHighwayPose, highwayEdgeSet } from './highway.ts';
 import { roundaboutEdgeSet } from './roundabout.ts';
 import { tunnelEdgeSet } from './tunnel.ts';
+import { getFactoryParkPath, getHouseParkPath, getFactoryExitPath, getHouseExitPoint } from './carParkingPaths.ts';
+import { pickBestFactory, pickBestPinSource } from './carTargeting.ts';
+
+// Section Index (jump by search)
+// - spawnCars()
+// - updateCarPosition()
+// - updateCars()
+// - rerouteCarInPlace()
+// - performUTurn()
+// - startDriving()
+// - narrow-chain helpers / edge-entry checks
 
 const NARROW_SPEED = CAR_SPEED * 0.7; // slower on narrow single-lane roads
 
@@ -182,22 +193,6 @@ function hasAnyOccupant(buildingCars: Set<Car> | undefined, exclude?: Car): bool
   return false;
 }
 
-function getFactoryParkSlot(buildingCars: Set<Car> | undefined, buildingId: number, car: Car): number {
-  // Find the farthest available slot. Slot 0 = nearest entrance, higher = deeper.
-  const b = buildingById.get(buildingId);
-  const maxSlots = b ? b.maxParkedCars : 3;
-  const takenSlots = new Set<number>();
-  if (buildingCars) for (const c of buildingCars) {
-    if (c === car) continue;
-    takenSlots.add(c.parkSlot);
-  }
-  // Pick the deepest (highest index) available slot
-  for (let s = maxSlots - 1; s >= 0; s--) {
-    if (!takenSlots.has(s)) return s;
-  }
-  return 0;
-}
-
 // FIFO: the car that parked earliest gets to depart first.
 // Also block if another car is currently parking or departing (avoid collisions).
 function canDepartBuilding(buildingCars: Set<Car> | undefined, car: Car): boolean {
@@ -210,295 +205,6 @@ function canDepartBuilding(buildingCars: Set<Car> | undefined, car: Car): boolea
     if (c.state === 'parked' && c.parkedAt < car.parkedAt) return false;
   }
   return true;
-}
-
-// Returns cubic bezier control points for factory parking path.
-// Layout: a driving lane runs along one side of the factory, parking spots on the opposite side.
-// Cars drive into the lane, travel along it, then pull into their spot.
-function getFactoryParkPath(buildingCars: Set<Car> | undefined, buildingId: number, car: Car): {
-  p0x: number; p0y: number; // start (road)
-  p1x: number; p1y: number; // control 1 (into lane)
-  p2x: number; p2y: number; // control 2 (above/beside spot)
-  p3x: number; p3y: number; // end (parked)
-  endAngle: number;
-  slot: number;
-} {
-  const b = buildingById.get(buildingId)!;
-  const pos = getBuildingPixelPos(b);
-  const slot = getFactoryParkSlot(buildingCars, buildingId, car);
-  const spotSpacing = CAR_WID + 8;
-  const margin = 6;
-
-  const p0x = car.x;
-  const p0y = car.y;
-  let p1x: number, p1y: number, p2x: number, p2y: number, p3x: number, p3y: number, endAngle: number;
-
-  // Slot 0 = nearest entrance, higher slot = deeper inside.
-  // Control points create a gentle arc from the road into the parking spot.
-  // P1 guides the car inward, P2 eases it into the final spot direction.
-  switch (b.connectionSide) {
-    case 'left': {
-      const spotY = pos.y + pos.h - margin - CAR_LEN / 2;
-      const spotX = pos.x + margin + CAR_WID / 2 + slot * spotSpacing;
-      const midY = (p0y + spotY) / 2;
-      p1x = spotX * 0.4 + p0x * 0.6;
-      p1y = midY;
-      p2x = spotX;
-      p2y = midY;
-      p3x = spotX;
-      p3y = spotY;
-      endAngle = Math.PI / 2;
-      break;
-    }
-    case 'right': {
-      const spotY = pos.y + pos.h - margin - CAR_LEN / 2;
-      const spotX = pos.x + pos.w - margin - CAR_WID / 2 - slot * spotSpacing;
-      const midY = (p0y + spotY) / 2;
-      p1x = spotX * 0.4 + p0x * 0.6;
-      p1y = midY;
-      p2x = spotX;
-      p2y = midY;
-      p3x = spotX;
-      p3y = spotY;
-      endAngle = Math.PI / 2;
-      break;
-    }
-    case 'top': {
-      const spotX = pos.x + pos.w - margin - CAR_LEN / 2;
-      const spotY = pos.y + margin + CAR_WID / 2 + slot * spotSpacing;
-      const midX = (p0x + spotX) / 2;
-      p1x = midX;
-      p1y = spotY * 0.4 + p0y * 0.6;
-      p2x = midX;
-      p2y = spotY;
-      p3x = spotX;
-      p3y = spotY;
-      endAngle = 0;
-      break;
-    }
-    case 'bottom': {
-      const spotX = pos.x + pos.w - margin - CAR_LEN / 2;
-      const spotY = pos.y + pos.h - margin - CAR_WID / 2 - slot * spotSpacing;
-      const midX = (p0x + spotX) / 2;
-      p1x = midX;
-      p1y = spotY * 0.4 + p0y * 0.6;
-      p2x = midX;
-      p2y = spotY;
-      p3x = spotX;
-      p3y = spotY;
-      endAngle = 0;
-      break;
-    }
-  }
-
-  return { p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y, endAngle, slot };
-}
-
-// House parking: enter on the right lane, park inside, exit on the right lane (other side).
-// Returns cubic bezier for entry path. Departure reverses it with lane offset swap.
-function getHouseParkPath(buildingId: number, car: Car): {
-  p0x: number; p0y: number;
-  p1x: number; p1y: number;
-  p2x: number; p2y: number;
-  p3x: number; p3y: number;
-  endAngle: number;
-} {
-  const b = buildingById.get(buildingId)!;
-  const center = getBuildingCenter(b);
-  const laneOff = LANE_W / 2;
-
-  // p0 = car's current position (already on the right lane)
-  const p0x = car.x, p0y = car.y;
-
-  // Park target inside the building, offset to the entry lane side
-  // Exit point will be on the opposite lane side
-  let p3x: number, p3y: number, endAngle: number;
-
-  // Lane offset formula: offsetX = -tdy * laneOff, offsetY = tdx * laneOff
-  // Heading LEFT  (tdx=-1, tdy=0): offsetY = -laneOff → top lane (y - off)
-  // Heading RIGHT (tdx=+1, tdy=0): offsetY = +laneOff → bottom lane (y + off)
-  // Heading DOWN  (tdx=0, tdy=+1): offsetX = -laneOff → left lane (x - off)
-  // Heading UP    (tdx=0, tdy=-1): offsetX = +laneOff → right lane (x + off)
-  switch (b.connectionSide) {
-    case 'right':
-      // Car enters heading left → right lane = y - laneOff
-      p3x = center.x;
-      p3y = center.y - laneOff;
-      endAngle = Math.PI;
-      break;
-    case 'left':
-      // Car enters heading right → right lane = y + laneOff
-      p3x = center.x;
-      p3y = center.y + laneOff;
-      endAngle = 0;
-      break;
-    case 'top':
-      // Car enters heading down → right lane = x - laneOff
-      p3x = center.x - laneOff;
-      p3y = center.y;
-      endAngle = Math.PI / 2;
-      break;
-    case 'bottom':
-      // Car enters heading up → right lane = x + laneOff
-      p3x = center.x + laneOff;
-      p3y = center.y;
-      endAngle = -Math.PI / 2;
-      break;
-  }
-
-  // Simple cubic bezier: straight-ish pull into the building
-  const p1x = (p0x * 2 + p3x) / 3;
-  const p1y = (p0y * 2 + p3y) / 3;
-  const p2x = (p0x + p3x * 2) / 3;
-  const p2y = (p0y + p3y * 2) / 3;
-
-  return { p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y, endAngle };
-}
-
-// Compute factory exit bezier: from parked spot to the right lane of the outgoing direction.
-// The car leaves the factory on the opposite lane from where it entered.
-function getFactoryExitPath(buildingId: number, car: Car): {
-  p0x: number; p0y: number;
-  p1x: number; p1y: number;
-  p2x: number; p2y: number;
-  p3x: number; p3y: number;
-} {
-  const b = buildingById.get(buildingId)!;
-  const conn = getConnectionPixelPos(b);
-  const laneOff = LANE_W / 2;
-
-  // P0 = current parked position
-  const p0x = car.x;
-  const p0y = car.y;
-
-  // P3 = exit point on the right lane for the outgoing direction
-  // Factory entrance is on connectionSide, so car exits heading AWAY from building
-  let p3x: number, p3y: number;
-  switch (b.connectionSide) {
-    case 'left':
-      // Entered heading right, exits heading LEFT → right lane = y - laneOff
-      p3x = conn.x; p3y = conn.y - laneOff;
-      break;
-    case 'right':
-      // Entered heading left, exits heading RIGHT → right lane = y + laneOff
-      p3x = conn.x; p3y = conn.y + laneOff;
-      break;
-    case 'top':
-      // Entered heading down, exits heading UP → right lane = x + laneOff
-      p3x = conn.x + laneOff; p3y = conn.y;
-      break;
-    case 'bottom':
-      // Entered heading up, exits heading DOWN → right lane = x - laneOff
-      p3x = conn.x - laneOff; p3y = conn.y;
-      break;
-  }
-
-  // Gentle bezier: P1 eases out of the parking spot, P2 aligns toward exit
-  const p1x = (p0x * 2 + p3x) / 3;
-  const p1y = (p0y * 2 + p3y) / 3;
-  const p2x = (p0x + p3x * 2) / 3;
-  const p2y = (p0y + p3y * 2) / 3;
-
-  return { p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y };
-}
-
-// For house departure: compute the exit point on the opposite lane
-function getHouseExitPoint(buildingId: number): { x: number; y: number } {
-  const b = buildingById.get(buildingId)!;
-  const conn = getConnectionPixelPos(b);
-  const laneOff = LANE_W / 2;
-
-  // Exit direction is opposite to entry: car leaves the building heading away
-  // right conn → exits heading RIGHT → right lane = y + laneOff
-  // left conn  → exits heading LEFT  → right lane = y - laneOff
-  // top conn   → exits heading UP    → right lane = x + laneOff
-  // bottom conn→ exits heading DOWN  → right lane = x - laneOff
-  switch (b.connectionSide) {
-    case 'right':  return { x: conn.x, y: conn.y + laneOff };
-    case 'left':   return { x: conn.x, y: conn.y - laneOff };
-    case 'top':    return { x: conn.x + laneOff, y: conn.y };
-    case 'bottom': return { x: conn.x - laneOff, y: conn.y };
-  }
-}
-
-// How much a factory needs a car: pins waiting + future pins minus cars already heading there / inside
-function factoryNeed(factory: typeof buildings[0]): number {
-  let carsAssigned = 0;
-  for (const c of cars) {
-    if (c.workBuildingId === factory.id && (c.state === 'toWork' || c.state === 'parking' || c.state === 'parked' || c.state === 'collecting')) {
-      carsAssigned++;
-    }
-  }
-  // Need = pins available to pick up minus cars that will pick them up, plus a base desire
-  // so empty factories still attract some cars
-  return factory.pins - carsAssigned + 1;
-}
-
-function pickBestFactory(fromNodeKey: string, factories: typeof buildings): { factory: typeof buildings[0]; path: string[] } | null {
-  let best: { factory: typeof buildings[0]; path: string[] } | null = null;
-  let bestScore = -Infinity;
-
-  for (const factory of factories) {
-    if (factory.disabled) continue;
-    const need = factoryNeed(factory);
-    if (need <= 0 && factory.pins === 0) continue; // skip if fully served and no pins
-
-    const path = findPath(fromNodeKey, factory.nodeKey);
-    if (!path || path.length < 2) continue;
-
-    // Score: need minus path length penalty (prefer closer factories when need is equal)
-    const score = need * 10 - path.length;
-    if (score > bestScore) {
-      bestScore = score;
-      best = { factory, path };
-    }
-  }
-  return best;
-}
-
-// Pick best pin source (factory or storage with pins) for a regular car
-function pickBestPinSource(fromNodeKey: string, targets: typeof buildings): { building: typeof buildings[0]; path: string[] } | null {
-  let best: { building: typeof buildings[0]; path: string[] } | null = null;
-  let bestScore = -Infinity;
-
-  for (const target of targets) {
-    if (target.disabled) continue;
-    // For factories, use factoryNeed; for storages, use pin count
-    let need: number;
-    if (target.type === 'factory') {
-      need = factoryNeed(target);
-      if (need <= 0 && target.pins === 0) continue;
-    } else {
-      // Storage: only send cars if there are actual pins to collect
-      if (target.pins === 0) continue;
-      let carsHeading = 0;
-      for (const c of cars) {
-        if (!c.isTruck && c.workBuildingId === target.id && (c.state === 'toWork' || c.state === 'parking' || c.state === 'parked' || c.state === 'collecting')) {
-          carsHeading++;
-        }
-      }
-      need = target.pins - carsHeading;
-      if (need <= 0) continue;
-    }
-
-    const path = findPath(fromNodeKey, target.nodeKey);
-    if (!path || path.length < 2) continue;
-
-    let score: number;
-    if (target.type === 'storage') {
-      // Prefer storage to keep inventory low
-      score = need * 10 + 15 - path.length;
-    } else {
-      // Factory: urgency rises as pins approach capacity (prevents burn-out)
-      const urgency = target.pins / FACTORY_MAX_PINS;
-      score = need * 10 * (1 + urgency * 2) - path.length;
-    }
-    if (score > bestScore) {
-      bestScore = score;
-      best = { building: target, path };
-    }
-  }
-  return best;
 }
 
 let truckSpawnTimer = 0;
@@ -536,7 +242,7 @@ export function spawnCars() {
         const houseCars = houseCarCounts.get(house.id) ?? 0;
         if (houseCars >= MAX_CARS_PER_HOUSE) continue;
 
-        const result = pickBestPinSource(house.nodeKey, pinSources);
+        const result = pickBestPinSource(house.nodeKey, pinSources, cars, findPath);
         if (!result) continue;
 
         const firstEdge = getEdgeBetween(result.path[0], result.path[1]);
@@ -565,7 +271,7 @@ export function spawnCars() {
         if (truckCount >= MAX_TRUCKS_PER_STORAGE) continue;
 
         // Find a factory that needs pickup (has pins)
-        const result = pickBestFactory(storage.nodeKey, factories);
+        const result = pickBestFactory(storage.nodeKey, factories, cars, findPath);
         if (!result) continue;
 
         const firstEdge = getEdgeBetween(result.path[0], result.path[1]);
@@ -1055,7 +761,7 @@ function setupDepartPath(car: Car) {
 
   if (parkedBuilding && parkedBuilding.type === 'house') {
     // Departing from house
-    const exit = getHouseExitPoint(parkedAtId);
+    const exit = getHouseExitPoint(parkedBuilding);
     car.parkStartX = car.parkTargetX;
     car.parkStartY = car.parkTargetY;
     car.parkTargetX = exit.x;
@@ -1066,7 +772,8 @@ function setupDepartPath(car: Car) {
     car.parkCy2 = (car.parkStartY + exit.y * 2) / 3;
   } else {
     // Departing from factory or storage
-    const ep = getFactoryExitPath(parkedAtId, car);
+    if (!parkedBuilding) return;
+    const ep = getFactoryExitPath(parkedBuilding, car);
     car.parkStartX = ep.p0x;
     car.parkStartY = ep.p0y;
     car.parkCx1 = ep.p1x;
@@ -1686,7 +1393,7 @@ export function updateCars() {
                 const updatedTargetBuildingCars = buildingCarIndex.get(targetBuildingId);
 
                 if (targetBuilding.type === 'factory' || targetBuilding.type === 'storage') {
-                  const bp = getFactoryParkPath(updatedTargetBuildingCars, targetBuildingId, car);
+                  const bp = getFactoryParkPath(updatedTargetBuildingCars, targetBuilding, car);
                   car.parkStartX = bp.p0x;
                   car.parkStartY = bp.p0y;
                   car.parkCx1 = bp.p1x;
@@ -1699,7 +1406,7 @@ export function updateCars() {
                   car.parkSlot = bp.slot;
                 } else {
                   // House: lane-aware entry
-                  const hp = getHouseParkPath(targetBuildingId, car);
+                  const hp = getHouseParkPath(targetBuilding, car);
                   car.parkStartX = hp.p0x;
                   car.parkStartY = hp.p0y;
                   car.parkCx1 = hp.p1x;
@@ -1739,14 +1446,14 @@ function rerouteCarInPlace(car: Car) {
   if (car.state === 'toWork') {
     const sameColorSources = buildings.filter(b =>
       (b.type === 'factory' || b.type === 'storage') && b.color === car.color && !b.disabled);
-    const result = pickBestPinSource(targetNode, sameColorSources);
+    const result = pickBestPinSource(targetNode, sameColorSources, cars, findPath);
     if (result) {
       car.workBuildingId = result.building.id;
       destKey = result.building.nodeKey;
     }
   } else if (car.state === 'toFactory') {
     const sameColorFactories = buildings.filter(b => b.type === 'factory' && b.color === car.color && !b.disabled);
-    const result = pickBestFactory(targetNode, sameColorFactories);
+    const result = pickBestFactory(targetNode, sameColorFactories, cars, findPath);
     if (result) {
       car.workBuildingId = result.factory.id;
       destKey = result.factory.nodeKey;
@@ -1856,7 +1563,7 @@ function startDriving(car: Car, carIndex: number, buildingCarIndex?: BuildingCar
     // Regular car: re-evaluate which factory/storage to pick up from
     const sameColorSources = buildings.filter(b =>
       (b.type === 'factory' || b.type === 'storage') && b.color === car.color);
-    const result = pickBestPinSource(origin.nodeKey, sameColorSources);
+    const result = pickBestPinSource(origin.nodeKey, sameColorSources, cars, findPath);
     if (result) {
       car.workBuildingId = result.building.id;
       path = result.path;
@@ -1871,7 +1578,7 @@ function startDriving(car: Car, carIndex: number, buildingCarIndex?: BuildingCar
     // Truck: pick best factory — always allow targeting even if "need" is low
     const sameColorFactories = buildings.filter(b => b.type === 'factory' && b.color === car.color && !b.disabled);
     // Try scored selection first
-    let result = pickBestFactory(origin.nodeKey, sameColorFactories);
+    let result = pickBestFactory(origin.nodeKey, sameColorFactories, cars, findPath);
     if (!result) {
       // Fallback: pick nearest reachable factory regardless of need
       let bestPath: string[] | null = null;

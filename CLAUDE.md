@@ -16,6 +16,21 @@ npm run build        # TypeScript check + Vite production build
 
 Verify changes by running the game in the browser — there is no test suite.
 
+## Minimal Context Path (Read This First)
+
+For new chats/contexts, read in this order:
+
+1. `START_HERE.md`
+2. This file (`CLAUDE.md`)
+3. `PRD_QUICK.md`
+4. Only then open relevant source files for the active task
+
+Supporting context map:
+
+- `docs/AGENT_CONTEXT.md` for runtime graph, ownership, and entry points.
+
+Avoid opening `src/renderer.ts` and `src/cars.ts` unless your task specifically needs them.
+
 ## Architecture — File → Responsibility
 
 | File | What it owns | Key exports |
@@ -59,6 +74,8 @@ Game state lives in module-level arrays/maps (e.g. `buildings[]`, `cars[]`, `edg
 ## PRD — When and How to Read It
 
 `PRD.md` is the authoritative spec for all game mechanics, UI, analytics, and deployment. **Read only the sections relevant to your task**, not the whole document. The PRD has a table of contents — use it to jump to what you need.
+
+Use `PRD_QUICK.md` first for low-token orientation, then open `PRD.md` sections only as needed.
 
 | If your task involves… | Read these PRD sections |
 |---|---|
