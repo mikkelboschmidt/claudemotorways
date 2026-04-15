@@ -276,7 +276,15 @@ function drawSvgIcon(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: n
   ctx.restore();
 }
 
-export function render(ctx: CanvasRenderingContext2D, width: number, height: number, preview: RoadPreview | null, fps: number = 0) {
+export function render(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  preview: RoadPreview | null,
+  fps: number = 0,
+  simStepsLastFrame: number = 0,
+  accumulatorMs: number = 0,
+) {
   // Clear entire canvas
   ctx.fillStyle = theme.bg;
   ctx.fillRect(0, 0, width, height);
@@ -354,7 +362,7 @@ export function render(ctx: CanvasRenderingContext2D, width: number, height: num
 
   // Score and toolbar drawn in screen space
   drawScore(ctx, width);
-  drawToolbar(ctx, width, height, fps);
+  drawToolbar(ctx, width, height, fps, simStepsLastFrame, accumulatorMs);
   if (cityModalOpen) drawCityModal(ctx, width, height);
   if (demoModalOpen) drawDemoModal(ctx, width, height);
 }
@@ -2137,7 +2145,7 @@ function getGearMenuLayout(width: number, height: number) {
   const pad = 10;
   const rowH = 32;
   const rowGap = 10;
-  const fpsBlockH = 28;
+  const fpsBlockH = 42;
   const menuH = pad * 2 + fpsBlockH + rowH * 5 + rowGap * 4;
   const menuX = width - BTN_MARGIN - menuW;
   const menuY = gearCy - gearR - BTN_GAP - menuH;
@@ -2197,7 +2205,14 @@ function isToolActive(def: ToolIconDef): boolean {
   return activeTool === def.type;
 }
 
-function drawToolbar(ctx: CanvasRenderingContext2D, width: number, height: number, fps: number = 0) {
+function drawToolbar(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  fps: number = 0,
+  simStepsLastFrame: number = 0,
+  accumulatorMs: number = 0,
+) {
   invalidateIconCacheIfNeeded();
   const r = BTN_SIZE / 2;
   const totalSlots = TOOL_ICONS.length + 1; // +1 for color circle
@@ -2256,14 +2271,18 @@ function drawToolbar(ctx: CanvasRenderingContext2D, width: number, height: numbe
     ctx.roundRect(menuX, menuY, menuW, menuH, 8);
     ctx.fill();
 
-    // FPS display
+    // Render/simulation diagnostics
     const fpsText = `${fps} FPS`;
+    const simText = `${simStepsLastFrame.toFixed(2)} st/f  ${Math.max(0, accumulatorMs).toFixed(1)}ms`;
     ctx.font = 'bold 12px monospace';
     const fpsColor = fps >= 50 ? theme.fpsGood : fps >= 30 ? theme.fpsOk : theme.fpsBad;
     ctx.fillStyle = fpsColor;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(fpsText, menuX + pad, fpsY + 10);
+    ctx.fillText(fpsText, menuX + pad, fpsY + 9);
+    ctx.fillStyle = '#cfd8dc';
+    ctx.font = '11px monospace';
+    ctx.fillText(simText, menuX + pad, fpsY + 25);
 
     // Speed buttons row
     ctx.font = '13px sans-serif';

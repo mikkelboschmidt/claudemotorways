@@ -57,6 +57,20 @@ let saveTimer = 0;
 let fps = 0;
 let fpsFrames = 0;
 let fpsLastTime = performance.now();
+let lastTimeMs = performance.now();
+let accumulatorMs = 0;
+let simStepsLastFrame = 0;
+let simDisplaySteps = 0;
+let simDisplayAccumulatorMs = 0;
+let simHudFrameCount = 0;
+let simHudStepsTotal = 0;
+let simHudLastUpdate = performance.now();
+
+const SIM_HZ = 60;
+const FIXED_DT_MS = 1000 / SIM_HZ;
+const MAX_FRAME_DELTA_MS = 250;
+const MAX_STEPS_PER_FRAME = 8;
+const SIM_HUD_UPDATE_MS = 250;
 
 // Start music on first user interaction (browser requires gesture for audio)
 canvas.addEventListener('pointerdown', () => ensureMusicStarted(), { once: true });
@@ -294,15 +308,32 @@ function gameLoop() {
     fpsLastTime = now;
   }
 
-  // Run simulation ticks based on speed (paused while modal is open)
+  const rawDelta = now - lastTimeMs;
+  lastTimeMs = now;
+  const deltaMs = Math.min(rawDelta, MAX_FRAME_DELTA_MS);
+  let steps = 0;
+
+  // Run simulation ticks based on speed and real elapsed time (paused while modal is open)
   if (!demoModalOpen && !cityModalOpen) {
-    const ticks = gameSpeed;
-    for (let i = 0; i < ticks; i++) {
+    accumulatorMs += deltaMs * gameSpeed;
+    while (accumulatorMs >= FIXED_DT_MS && steps < MAX_STEPS_PER_FRAME) {
       simulationTick();
+      accumulatorMs -= FIXED_DT_MS;
+      steps++;
     }
   }
+  simStepsLastFrame = steps;
+  simHudFrameCount++;
+  simHudStepsTotal += simStepsLastFrame;
+  if (now - simHudLastUpdate >= SIM_HUD_UPDATE_MS) {
+    simDisplaySteps = simHudFrameCount > 0 ? simHudStepsTotal / simHudFrameCount : 0;
+    simDisplayAccumulatorMs = accumulatorMs;
+    simHudFrameCount = 0;
+    simHudStepsTotal = 0;
+    simHudLastUpdate = now;
+  }
 
-  render(ctx, canvas.width, canvas.height, roadPreview, fps);
+  render(ctx, canvas.width, canvas.height, roadPreview, fps, simDisplaySteps, simDisplayAccumulatorMs);
 
   requestAnimationFrame(gameLoop);
 }
