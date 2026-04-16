@@ -1452,6 +1452,7 @@ type VisibleBuilding = {
   pos: { x: number; y: number; w: number; h: number };
   color: string;
   sprite: ReturnType<typeof getHouseSprite>;
+  connected: boolean;
 };
 let visibleBuildings: VisibleBuilding[] = [];
 
@@ -1466,7 +1467,9 @@ function rebuildVisibleBuildingList() {
       : b.type === 'factory'
         ? getFactorySprite(b.connectionSide, color)
         : getStorageSprite(b.connectionSide, color);
-    visibleBuildings.push({ b, pos, color, sprite });
+    const node = nodes.get(b.nodeKey);
+    const connected = !!node && node.edges.size > 0;
+    visibleBuildings.push({ b, pos, color, sprite, connected });
   }
 }
 
@@ -1511,6 +1514,9 @@ function drawBuildingBodies(ctx: CanvasRenderingContext2D) {
       if (b.maxPins > 0) {
         drawStoragePinGrid(ctx, pos.x, pos.y, pos.w, pos.h, b.pins, b.maxPins, b.pinCooldown, color, sprite?.pinPlacement ?? null, b.disabled);
       }
+    }
+    if (sprite && vb.connected) {
+      drawSpriteLayer(ctx, sprite.entry, sprite, pos.x, pos.y);
     }
   }
 }
@@ -1586,7 +1592,7 @@ function drawFactoryPins(
   const activePins = Math.max(0, Math.min(pinRects.length, pins));
   const spawnT = activePins > 0 && pinCooldown > 0 ? 1 - pinCooldown / PIN_COOLDOWN : 1;
   const darkestColor = darkenColor(color, 0.55);
-  const activeColor = disabled ? darkenColor(color, 0.25) : '#FFFFFF';
+  const activeColor = disabled ? color : '#FFFFFF';
 
   for (let i = 0; i < pinRects.length; i++) {
     const rect = pinRects[i];
@@ -1755,7 +1761,7 @@ function drawStoragePinGrid(
     const isNewest = i === activePins - 1 && pinCooldown > 0;
     ctx.globalAlpha = isNewest ? Math.max(0, Math.min(1, spawnT)) : 1;
     ctx.fillStyle = disabled
-      ? (isActive ? darkenColor(color, 0.25) : inactiveColor)
+      ? (isActive ? color : inactiveColor)
       : (isActive ? '#FFFFFF' : 'rgba(255,255,255,0.18)');
     ctx.beginPath();
     ctx.arc(cx, cy, radius, 0, Math.PI * 2);
@@ -1877,7 +1883,7 @@ function drawTunnels(ctx: CanvasRenderingContext2D) {
   if (tunnels.length === 0) return;
 
   ctx.save();
-  const tunnelAlpha = theme.roadStyle === 'tracks' ? 0.15 : 0.08;
+  const tunnelAlpha = theme.roadStyle === 'tracks' ? 0.28 : 0.08;
   ctx.globalAlpha = tunnelAlpha;
   ctx.strokeStyle = '#000';
   ctx.lineWidth = TUNNEL_ROAD_W;

@@ -25,6 +25,7 @@ export interface LayeredSprite {
   ground: SpriteLayer;   // drawn below roads/cars
   shadow: SpriteLayer;   // drawn above cars, below buildings
   building: SpriteLayer; // drawn above shadow
+  entry: SpriteLayer;    // drawn above building, only when connected to a road
   anchorX: number;
   anchorY: number;
   width: number;
@@ -43,6 +44,7 @@ interface SpriteDef {
   groundIds: string[];
   shadowIds: string[];
   buildingIds: string[];
+  entryIds: string[];
 }
 
 const HOUSE_COMMON: Omit<SpriteDef, 'raw'> = {
@@ -61,6 +63,7 @@ const HOUSE_COMMON: Omit<SpriteDef, 'raw'> = {
   groundIds: ['Ground'],
   shadowIds: ['Shadows'],
   buildingIds: ['Building'],
+  entryIds: ['Entry'],
 };
 
 const FACTORY_COMMON: Omit<SpriteDef, 'raw'> = {
@@ -79,6 +82,7 @@ const FACTORY_COMMON: Omit<SpriteDef, 'raw'> = {
   groundIds: ['Ground'],
   shadowIds: ['Shadows'],
   buildingIds: ['Building'],
+  entryIds: ['Entry'],
 };
 
 const STORAGE_COMMON: Omit<SpriteDef, 'raw'> = {
@@ -97,6 +101,7 @@ const STORAGE_COMMON: Omit<SpriteDef, 'raw'> = {
   groundIds: ['Ground'],
   shadowIds: ['Shadows'],
   buildingIds: ['Building'],
+  entryIds: ['Entry'],
 };
 
 function getSpriteDef(type: 'house' | 'factory' | 'storage', side: ConnectionSide): SpriteDef | null {
@@ -257,15 +262,17 @@ const spriteCache = new Map<string, LayeredSprite>();
 
 function buildSprite(def: SpriteDef, color: string): LayeredSprite {
   const svg = colorize(def.raw, def, color);
-  const allLayerIds = [...def.groundIds, ...def.shadowIds, ...def.buildingIds];
-  // Hide PinPlacement rect from all layers (it's just metadata)
+  const allLayerIds = [...def.groundIds, ...def.shadowIds, ...def.buildingIds, ...def.entryIds];
+  // Hide PinPlacement and Pin_N rects from all layers — canvas draws them
   let filtered = svg;
   filtered = filtered.replace(/(<[^>]*id="PinPlacement")/, '$1 display="none"');
+  filtered = filtered.replace(/(<[^>]*id="Pin_\d+(?:_\d+)?")/g, '$1 display="none"');
 
   return {
     ground: svgToImage(filterLayer(filtered, allLayerIds, def.groundIds)),
     shadow: svgToImage(filterLayer(filtered, allLayerIds, def.shadowIds)),
     building: svgToImage(filterLayer(filtered, allLayerIds, def.buildingIds)),
+    entry: svgToImage(filterLayer(filtered, allLayerIds, def.entryIds)),
     anchorX: def.anchorTileX * GRID,
     anchorY: def.anchorTileY * GRID,
     width: def.widthTiles * GRID,

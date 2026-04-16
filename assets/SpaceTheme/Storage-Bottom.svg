@@ -2,8 +2,14 @@
 <g id="Storage-Bottom">
 <g id="Ground">
 <rect id="Fill" x="40" y="40" width="80" height="80" fill="#555555"/>
-<path id="Polygon 1" d="M100.5 101.5L106.562 107.5L94.4378 107.5L100.5 101.5Z" fill="white" fill-opacity="0.39"/>
-<path id="Polygon 2" d="M100.5 116.5L94.4378 110.5L106.562 110.5L100.5 116.5Z" fill="white" fill-opacity="0.39"/>
+</g>
+<g id="Entry">
+<rect id="Rectangle 9" x="93" y="120" width="36" height="2" transform="rotate(-90 93 120)" fill="url(#paint0_linear_99_357)"/>
+<rect id="Rectangle 10" x="105" y="120" width="36" height="2" transform="rotate(-90 105 120)" fill="url(#paint1_linear_99_357)"/>
+<path id="Subtract" d="M97.7773 113.844L100 116.066L102.223 113.844L103.189 114.811L100 118L96.8105 114.811L97.7773 113.844Z" fill="#4CFFF9"/>
+<path id="Subtract_2" d="M97.7773 108.844L100 111.066L102.223 108.844L103.189 109.811L100 113L96.8105 109.811L97.7773 108.844Z" fill="#4CFFF9"/>
+<path id="Subtract_3" d="M102.223 106L100 103.777L97.7773 106L96.8105 105.033L100 101.844L103.189 105.033L102.223 106Z" fill="#4CFFF9"/>
+<path id="Subtract_4" d="M102.223 101L100 98.7773L97.7773 101L96.8105 100.033L100 96.8438L103.189 100.033L102.223 101Z" fill="#4CFFF9"/>
 </g>
 <g id="Shadows">
 <path id="Shadow" d="M105 55V105H55L40 90V40H90L105 55Z" fill="black" fill-opacity="0.1"/>
@@ -14,4 +20,14 @@
 <path id="RoofShadow" d="M86 47H47V86H44V44H86V47Z" fill="#CC0000"/>
 </g>
 </g>
+<defs>
+<linearGradient id="paint0_linear_99_357" x1="93" y1="121" x2="129" y2="121" gradientUnits="userSpaceOnUse">
+<stop stop-color="#4CFFF9"/>
+<stop offset="0.567308" stop-color="#4CFFF9" stop-opacity="0"/>
+</linearGradient>
+<linearGradient id="paint1_linear_99_357" x1="105" y1="121" x2="141" y2="121" gradientUnits="userSpaceOnUse">
+<stop stop-color="#4CFFF9"/>
+<stop offset="0.567308" stop-color="#4CFFF9" stop-opacity="0"/>
+</linearGradient>
+</defs>
 </svg>
