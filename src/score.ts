@@ -14,21 +14,36 @@ export let productivityScore = 0;
 export let peakProductivity = 0;
 export let metricsExpanded = false;
 
-// Real-time ms timestamps of each collection (for 15s rolling rate window)
+// Game clock: advances only while unpaused, so pausing doesn't age out data
+let gameClockMs = 0;
+let lastRealMs = performance.now();
+let wasPaused = false;
+
+function updateGameClock(): number {
+  const realNow = performance.now();
+  if (gameSpeed > 0 && !wasPaused) {
+    gameClockMs += realNow - lastRealMs;
+  }
+  lastRealMs = realNow;
+  wasPaused = gameSpeed === 0;
+  return gameClockMs;
+}
+
+// Game-clock timestamps of each collection (for 15s rolling rate window)
 const collectionTimes: number[] = [];
 const RATE_WINDOW_MS = 15_000;
 
-// Per-car stall tracking: id → {x, y, firstSlowMs}
+// Per-car stall tracking: id → {x, y, firstGameMs}
 // A car is stalled once it has been within STALL_RADIUS px for STALL_DURATION_MS
-const stallTracker = new Map<number, { x: number; y: number; firstSlowMs: number }>();
+const stallTracker = new Map<number, { x: number; y: number; firstGameMs: number }>();
 const STALL_RADIUS = 8;        // px — less than this counts as not moving
-const STALL_DURATION_MS = 6_000; // 6 real seconds
+const STALL_DURATION_MS = 6_000; // 6 real seconds (game-clock)
 
 export function addScore(points: number) {
   score += points;
   if (points > 0) {
     collected += points;
-    collectionTimes.push(performance.now());
+    collectionTimes.push(updateGameClock());
   }
 }
 
@@ -49,10 +64,11 @@ const PINS_PER_FACTORY_PER_SIM_MIN = 4;
 
 // Called every 1s from main.ts
 export function updateMetrics(cars: Car[], buildings: Building[]) {
-  // When paused, freeze all metrics — don't let the rolling window decay
+  const now = updateGameClock();
+
+  // When paused, game clock doesn't advance — metrics stay frozen
   if (gameSpeed === 0) return;
 
-  const now = performance.now();
   const cutoff = now - RATE_WINDOW_MS;
 
   // Prune timestamps older than 15s
@@ -88,15 +104,15 @@ export function updateMetrics(cars: Car[], buildings: Building[]) {
       const dist = Math.hypot(car.x - entry.x, car.y - entry.y);
       if (dist > STALL_RADIUS) {
         // Car made meaningful progress — reset
-        stallTracker.set(car.id, { x: car.x, y: car.y, firstSlowMs: now });
+        stallTracker.set(car.id, { x: car.x, y: car.y, firstGameMs: now });
       }
-      // else: still within radius, keep firstSlowMs
+      // else: still within radius, keep firstGameMs
     } else {
-      stallTracker.set(car.id, { x: car.x, y: car.y, firstSlowMs: now });
+      stallTracker.set(car.id, { x: car.x, y: car.y, firstGameMs: now });
     }
   }
 
-  stalledVehicles = [...stallTracker.values()].filter(e => now - e.firstSlowMs >= STALL_DURATION_MS).length;
+  stalledVehicles = [...stallTracker.values()].filter(e => now - e.firstGameMs >= STALL_DURATION_MS).length;
 
   // --- Productivity score ---
   // Base throughput: how many pins are being collected per minute
