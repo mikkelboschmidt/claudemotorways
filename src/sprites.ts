@@ -21,6 +21,13 @@ export interface PinRect {
   h: number;
 }
 
+export interface ParkingRect {
+  x: number;      // pixel offset from building top-left
+  y: number;
+  w: number;
+  h: number;
+}
+
 export interface LayeredSprite {
   ground: SpriteLayer;   // drawn below roads/cars
   shadow: SpriteLayer;   // drawn above cars, below buildings
@@ -32,6 +39,8 @@ export interface LayeredSprite {
   height: number;
   pinPlacement: PinPlacement | null;
   pinRects: PinRect[];
+  truckParking: ParkingRect | null;
+  carsParking: ParkingRect | null;
 }
 
 interface SpriteDef {
@@ -238,6 +247,19 @@ function extractPinPlacement(svgRaw: string, def: SpriteDef): PinPlacement | nul
   };
 }
 
+function extractParkingRect(svgRaw: string, def: SpriteDef, id: string): ParkingRect | null {
+  const match = svgRaw.match(new RegExp(`<rect[^>]*id="${id}"[^>]*\\/>`));
+  if (!match) return null;
+  const tag = match[0];
+  const x = parseFloat(tag.match(/\bx="([^"]*)"/)![1]);
+  const y = parseFloat(tag.match(/\by="([^"]*)"/)![1]);
+  const w = parseFloat(tag.match(/\bwidth="([^"]*)"/)![1]);
+  const h = parseFloat(tag.match(/\bheight="([^"]*)"/)![1]);
+  const anchorSvgX = def.anchorTileX * GRID;
+  const anchorSvgY = def.anchorTileY * GRID;
+  return { x: x - anchorSvgX, y: y - anchorSvgY, w, h };
+}
+
 function extractFactoryPinRects(svgRaw: string, def: SpriteDef): PinRect[] {
   const anchorSvgX = def.anchorTileX * GRID;
   const anchorSvgY = def.anchorTileY * GRID;
@@ -267,6 +289,8 @@ function buildSprite(def: SpriteDef, color: string): LayeredSprite {
   let filtered = svg;
   filtered = filtered.replace(/(<[^>]*id="PinPlacement")/, '$1 display="none"');
   filtered = filtered.replace(/(<[^>]*id="Pin_\d+(?:_\d+)?")/g, '$1 display="none"');
+  filtered = filtered.replace(/(<[^>]*id="TruckParking")/, '$1 display="none"');
+  filtered = filtered.replace(/(<[^>]*id="CarsParking")/, '$1 display="none"');
 
   return {
     ground: svgToImage(filterLayer(filtered, allLayerIds, def.groundIds)),
@@ -279,6 +303,8 @@ function buildSprite(def: SpriteDef, color: string): LayeredSprite {
     height: def.heightTiles * GRID,
     pinPlacement: extractPinPlacement(def.raw, def),
     pinRects: extractFactoryPinRects(def.raw, def),
+    truckParking: extractParkingRect(def.raw, def, 'TruckParking'),
+    carsParking: extractParkingRect(def.raw, def, 'CarsParking'),
   };
 }
 

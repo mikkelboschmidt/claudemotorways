@@ -5,7 +5,7 @@
 <rect id="House_2" x="86" y="20" width="45" height="45" fill="#FFF34E"/>
 <rect id="House_1" x="32" y="20" width="45" height="45" fill="#FF009D"/>
 <rect id="House_3" x="140" y="20" width="45" height="45" fill="#4BAEFF"/>
-<rect id="House_4" x="194" y="20" width="45" height="45" fill="#55FF2F"/>
+<rect id="House_4" x="194" y="20" width="45" height="45" fill="#00A954"/>
 <rect id="House_5" x="248" y="20" width="45" height="45" fill="#FFE7D3"/>
 <rect id="Roads" x="336" y="20" width="45" height="45" fill="#4CFFF9"/>
 <rect id="Ground" x="390.5" y="20.5" width="44" height="44" fill="#361A59" stroke="white"/>

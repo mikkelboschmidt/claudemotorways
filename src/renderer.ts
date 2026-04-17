@@ -1888,8 +1888,13 @@ function drawCollectingPins(ctx: CanvasRenderingContext2D) {
     const t = car.collectProgress;
     // Ease-out curve for snappy start, gentle arrival
     const et = 1 - (1 - t) * (1 - t);
-    const px = car.pinSourceX + (renderPos.x - car.pinSourceX) * et;
-    const py = car.pinSourceY + (renderPos.y - car.pinSourceY) * et;
+    // Offloading: pin flies from car to building (reversed direction)
+    const fromX = car.offloading ? renderPos.x : car.pinSourceX;
+    const fromY = car.offloading ? renderPos.y : car.pinSourceY;
+    const toX = car.offloading ? car.pinSourceX : renderPos.x;
+    const toY = car.offloading ? car.pinSourceY : renderPos.y;
+    const px = fromX + (toX - fromX) * et;
+    const py = fromY + (toY - fromY) * et;
     // Pin fades out as it arrives
     const alpha = 1 - t * 0.5;
     // Pin grows slightly then shrinks

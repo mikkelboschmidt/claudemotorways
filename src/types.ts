@@ -70,10 +70,11 @@ export interface Car {
   uTurnCooldown: number; // frames remaining before next u-turn allowed
   lastUTurnEdgeId: string; // edge where last u-turn happened (anti-oscillation)
   nextState: 'toWork' | 'toHome' | 'toStorage' | 'toFactory';
-  collectProgress: number; // 0→1 animation of pin flying to car
+  collectProgress: number; // 0→1 animation of pin flying to car (or from car when offloading)
   carryingPin: boolean; // regular cars show a roof marker while returning home with a scored pin
   pinSourceX: number; // factory pin origin (world px)
   pinSourceY: number;
+  offloading: boolean; // truck offloading: pin flies from car to building (reversed animation)
   isTruck: boolean; // truck: larger vehicle shuttling pins factory→storage
   pinsCarried: number; // pins currently being transported (trucks only)
   storageBuildingId: number; // truck's home storage building
