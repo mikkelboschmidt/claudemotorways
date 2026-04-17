@@ -340,10 +340,27 @@ Tapping anywhere outside the menu closes it.
 
 The game is fully playable on touch devices. The canvas uses pointer events for tool interactions and touch events for multi-finger gestures.
 
-- **Single finger**: Operates the active tool (place roads, place buildings, etc.) — same as mouse click/drag. Highway control handles use a screen-space hit radius (22px) so they remain easy to tap at any zoom level.
+### Single-finger gestures
+
+Touch input distinguishes between panning and tool use based on movement and hold duration:
+
+- **Pan**: Moving a finger ≥ 10px before the hold timer fires pans the camera (single finger). This lets players scroll the map regardless of the active tool.
+- **Long-hold to drag** (road/remove tools): Holding a finger still for 140 ms activates road drawing or tile removal drag. On activation, a double-ring burst animation expands outward from the touch point (road color, 420 ms, ease-out) as a visible confirmation. Mouse input skips the hold timer and activates drag immediately on `pointerdown`.
+- **Tap** (building placement, highway/tunnel, demolish): All tap actions are deferred to `pointerup` so they are not triggered accidentally during a pan that does not exceed the movement threshold.
+
+### Multi-finger gestures
+
 - **Two-finger pinch**: Zoom in/out. Any in-progress road drag or highway placement is cancelled when a second finger touches down.
 - **Two-finger pan**: Drag the camera with two fingers.
-- **Tool/UI taps**: Tapping floating toolbar buttons and gear menu items works via `pointerdown` hit-testing against the button layout.
+
+### UI taps
+
+Tapping floating toolbar buttons and gear menu items works via `pointerdown` hit-testing against the button layout. Highway control handles use a screen-space hit radius (22px) so they remain easy to tap at any zoom level.
+
+### Browser compatibility
+
+- `crypto.randomUUID` is called with optional chaining (`?.`) with a `Math.random` fallback for Safari versions older than 15.4 (older iPads).
+- `html`, `body`, and `canvas` have `-webkit-user-select: none`, `-webkit-touch-callout: none`, and `-webkit-tap-highlight-color: transparent` to suppress native browser selection and highlight UI on touch.
 
 ---
 

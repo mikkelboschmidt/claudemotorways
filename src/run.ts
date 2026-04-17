@@ -24,7 +24,7 @@ let run: RunState | null = null;
 
 function createRun(startType: StartType, cityName?: string): RunState {
   return {
-    runId: crypto.randomUUID(),
+    runId: crypto.randomUUID?.() ?? Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2),
     startTime: Date.now(),
     startType,
     cityName,
