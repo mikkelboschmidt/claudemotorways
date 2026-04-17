@@ -8,7 +8,7 @@ import { addScore } from './score.ts';
 import { getHighwayPose, highwayEdgeSet } from './highway.ts';
 import { roundaboutEdgeSet } from './roundabout.ts';
 import { tunnelEdgeSet } from './tunnel.ts';
-import { getFactoryParkPath, getHouseParkPath, getFactoryExitPath, getHouseExitPoint } from './carParkingPaths.ts';
+import { getFactoryParkPath, getStorageParkPath, getHouseParkPath, getFactoryExitPath, getHouseExitPoint } from './carParkingPaths.ts';
 import { pickBestFactory, pickBestPinSource } from './carTargeting.ts';
 
 // Section Index (jump by search)
@@ -195,10 +195,11 @@ function hasAnyOccupant(buildingCars: Set<Car> | undefined, exclude?: Car): bool
 
 // FIFO: the car that parked earliest gets to depart first.
 // Also block if another car is currently parking or departing (avoid collisions).
-function canDepartBuilding(buildingCars: Set<Car> | undefined, car: Car): boolean {
+function canDepartBuilding(buildingCars: Set<Car> | undefined, car: Car, skipTrucks = false): boolean {
   if (!buildingCars) return true;
   for (const c of buildingCars) {
     if (c === car) continue;
+    if (skipTrucks && c.isTruck) continue;
     // Block if any car is mid-animation in this building
     if (c.state === 'parking' || c.state === 'collecting' || c.state === 'departing') return false;
     // Block if another parked car arrived earlier (FIFO)
@@ -458,6 +459,7 @@ function createCar(homeId: number, workId: number, color: string, path: string[]
     carryingPin: false,
     pinSourceX: 0,
     pinSourceY: 0,
+    offloading: false,
     isTruck: false,
     pinsCarried: 0,
     storageBuildingId: 0,
@@ -839,12 +841,19 @@ export function updateCars() {
       let canDepart = false;
 
       if (car.isTruck && car.nextState === 'toFactory') {
-        // Truck at storage — deposit pins then head to factory
-        if (canDepartBuilding(buildingCars, car)) {
-          if (car.pinsCarried > 0 && parkedBuilding) {
-            parkedBuilding.pins = Math.min(parkedBuilding.pins + car.pinsCarried, parkedBuilding.maxPins);
-            car.pinsCarried = 0;
+        // Truck at storage (in TruckParking area) — offload pins one at a time
+        if (car.pinsCarried > 0 && parkedBuilding) {
+          if (parkedBuilding.pins < parkedBuilding.maxPins && parkedBuilding.pinCooldown <= 0) {
+            // Offload one pin with animation (pin flies from truck to storage)
+            const pinPos = getPinPixelPos(parkedBuilding, parkedBuilding.pins);
+            car.state = 'collecting';
+            car.collectProgress = 0;
+            car.offloading = true;
+            car.pinSourceX = pinPos.x;
+            car.pinSourceY = pinPos.y;
           }
+          // Storage full or on cooldown — wait
+        } else {
           canDepart = true;
         }
       } else if (car.isTruck && car.nextState === 'toStorage') {
@@ -874,7 +883,7 @@ export function updateCars() {
         } else if (parkedBuilding && parkedBuilding.type === 'storage' && parkedBuilding.pins === 0) {
           // Storage is empty — leave immediately so we don't block the truck
           canDepart = true;
-        } else if (canDepartBuilding(buildingCars, car)) {
+        } else if (canDepartBuilding(buildingCars, car, parkedBuilding?.type === 'storage')) {
           if (parkedBuilding && parkedBuilding.pins > 0 && parkedBuilding.pinCooldown <= 0) {
             // Start collecting animation — pin flies to car
             const pinPos = getPinPixelPos(parkedBuilding, parkedBuilding.pins - 1);
@@ -898,8 +907,16 @@ export function updateCars() {
       car.collectProgress += 0.035;
       if (car.collectProgress >= 1) {
         car.collectProgress = 1;
-        if (car.isTruck) {
-          // Truck: increment carried pins and return to parked to collect more
+        if (car.isTruck && car.offloading) {
+          // Truck offloading: pin deposited into storage
+          car.pinsCarried--;
+          car.offloading = false;
+          const parkedAtId = getParkedBuildingId(car);
+          const storage = buildingById.get(parkedAtId);
+          if (storage) storage.pins++;
+          car.state = 'parked';
+        } else if (car.isTruck) {
+          // Truck picking up: increment carried pins and return to parked to collect more
           car.pinsCarried++;
           car.state = 'parked';
         } else {
@@ -1354,11 +1371,17 @@ export function updateCars() {
               let blocked = false;
               const targetBuildingCars = buildingCarIndex.get(targetBuildingId);
               if ((targetBuilding.type === 'factory' || targetBuilding.type === 'storage') && targetBuilding.maxParkedCars > 0) {
-                if (targetBuilding.type === 'storage' && !car.isTruck) {
-                  // Storage: cars can enter freely (one at a time via animation check),
-                  // but trucks don't block car entry
-                  const carAnimating = hasAnimatingCar(targetBuildingCars, false);
-                  if (carAnimating) blocked = true;
+                if (targetBuilding.type === 'storage') {
+                  if (car.isTruck) {
+                    // Truck: only blocked if another truck is already inside
+                    // Truck parks in TruckParking area (separate from cars) and waits to offload
+                    const truckInside = hasTruckInside(targetBuildingCars, car);
+                    if (truckInside) blocked = true;
+                  } else {
+                    // Cars: only blocked by other cars animating, trucks don't block
+                    const carAnimating = hasAnimatingCar(targetBuildingCars, false);
+                    if (carAnimating) blocked = true;
+                  }
                 } else {
                   const parkedCount = countParkedCars(targetBuildingCars);
                   const hasAnimating = hasAnimatingCar(targetBuildingCars);
@@ -1392,7 +1415,19 @@ export function updateCars() {
                 addBuildingOccupant(buildingCarIndex, car);
                 const updatedTargetBuildingCars = buildingCarIndex.get(targetBuildingId);
 
-                if (targetBuilding.type === 'factory' || targetBuilding.type === 'storage') {
+                if (targetBuilding.type === 'storage') {
+                  const bp = getStorageParkPath(targetBuilding, car);
+                  car.parkStartX = bp.p0x;
+                  car.parkStartY = bp.p0y;
+                  car.parkCx1 = bp.p1x;
+                  car.parkCy1 = bp.p1y;
+                  car.parkCx2 = bp.p2x;
+                  car.parkCy2 = bp.p2y;
+                  car.parkTargetX = bp.p3x;
+                  car.parkTargetY = bp.p3y;
+                  car.parkEndAngle = bp.endAngle;
+                  car.parkSlot = bp.slot;
+                } else if (targetBuilding.type === 'factory') {
                   const bp = getFactoryParkPath(updatedTargetBuildingCars, targetBuilding, car);
                   car.parkStartX = bp.p0x;
                   car.parkStartY = bp.p0y;

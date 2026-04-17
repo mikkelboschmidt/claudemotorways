@@ -25,5 +25,6 @@
 <rect id="Pin_5" x="142" y="53" width="9" height="2" fill="#A00000"/>
 <rect id="Pin_6" x="142" y="49" width="9" height="2" fill="#A00000"/>
 </g>
+<rect id="CarsParking" x="68.5" y="87.5" width="87" height="28" stroke="black"/>
 </g>
 </svg>

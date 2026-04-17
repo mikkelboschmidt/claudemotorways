@@ -9,6 +9,8 @@
 <path id="Shadow" d="M105 85V135H55L40 120V70H90L105 85Z" fill="black" fill-opacity="0.1"/>
 </g>
 <rect id="PinPlacement" x="44.5" y="74.5" width="41" height="41" stroke="black"/>
+<rect id="CarsParking" x="90.5" y="70.5" width="29" height="49" stroke="black"/>
+<rect id="TruckParking" x="40.5" y="40.5" width="49" height="29" stroke="black"/>
 <g id="Building">
 <rect id="RoofMain" x="40" y="70" width="50" height="50" fill="#FF0000"/>
 <path id="RoofShadow" d="M86 77H47V116H44V74H86V77Z" fill="#CC0000"/>
