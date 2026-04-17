@@ -1,7 +1,7 @@
 import { buildings, updatePins } from './buildings.ts';
 import { initRoadInput, roadPreview, cancelRoadDrag, setTouchCountGetter } from './roads.ts';
 import { spawnCars, updateCars, cars } from './cars.ts';
-import { render, getToolbarLayout } from './renderer.ts';
+import { render, getToolbarLayout, getMetricsPanelToggleRect } from './renderer.ts';
 import { setActiveTool, setSelectedColor, selectedColor, setSelectedBuildingType, toggleGearMenu, closeGearMenu, gearMenuOpen, demoModalOpen, showDemoModal, closeDemoModal, cityModalOpen, showCityModal, closeCityModal } from './toolbar.ts';
 import { saveGame, loadGame, loadFromData, downloadSave, uploadSave } from './save.ts';
 import { tickPathfindingFrame } from './pathfinding.ts';
@@ -11,7 +11,7 @@ import { toggleMusic, ensureMusicStarted } from './music.ts';
 import { fetchCities, loadCity } from './cities.ts';
 import { startRun, endRun, updatePeaks } from './run.ts';
 import { track } from './analytics.ts';
-import { score } from './score.ts';
+import { score, updateMetrics, toggleMetricsExpanded } from './score.ts';
 import { getBuildingColors, theme } from './theme.ts';
 import { updateTrafficLights } from './trafficLights.ts';
 
@@ -53,6 +53,10 @@ document.addEventListener('visibilitychange', () => {
 // Auto-save every 5 seconds (counted in sim ticks)
 let saveTimer = 0;
 
+// Metrics update every 15 real seconds
+const METRICS_UPDATE_MS = 1_000;
+let lastMetricsUpdateMs = 0;
+
 // FPS tracking
 let fps = 0;
 let fpsFrames = 0;
@@ -91,6 +95,14 @@ canvas.addEventListener('pointerdown', (e) => {
 
   ctx.font = '13px sans-serif';
   const layout = getToolbarLayout(ctx, canvas.width, canvas.height);
+
+  // Metrics panel toggle
+  const metricsToggle = getMetricsPanelToggleRect();
+  if (hitRect(px, py, metricsToggle)) {
+    toggleMetricsExpanded();
+    e.stopImmediatePropagation();
+    return;
+  }
 
   // Demo modal — blocks all other interaction
   if (demoModalOpen) {
@@ -331,6 +343,11 @@ function gameLoop() {
     simHudFrameCount = 0;
     simHudStepsTotal = 0;
     simHudLastUpdate = now;
+  }
+
+  if (now - lastMetricsUpdateMs >= METRICS_UPDATE_MS) {
+    updateMetrics(cars, buildings);
+    lastMetricsUpdateMs = now;
   }
 
   render(ctx, canvas.width, canvas.height, roadPreview, fps, simDisplaySteps, simDisplayAccumulatorMs);
