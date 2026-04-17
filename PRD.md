@@ -235,6 +235,42 @@ Weighted Dijkstra shortest path on the road graph.
 
 Truck pin transfers (factory → storage) do not score.
 
+### Productivity Score
+
+The **Productivity** score is the primary performance metric, displayed prominently in the metrics panel. It measures how well the player's logistics network is running, rewarding throughput and scale while penalizing inefficiency and burnouts.
+
+**Formula**: `baseThroughput × flowQuality × scaleMultiplier × burnoutPenalty`
+
+| Component | Definition |
+|---|---|
+| **Base throughput** | `collectedPerMinute` — pins collected in the last 15s, extrapolated to per-minute, normalized to 1× speed |
+| **Flow quality** | `staleRatio × (0.4 + 0.6 × flowFactor)` — penalizes stalled and idle vehicles. `staleRatio` = fraction of driving vehicles not stalled (stalled = within 8px for 6s). `flowFactor` = fraction of all vehicles with speed > 0. |
+| **Scale multiplier** | `1 + log₂(infraScore) × 0.15` — rewards city complexity. `infraScore` = buildings + roads×0.1 + highways×0.5 + roundabouts×0.3. A 20-building city with infrastructure gets ~2× vs a starter city. |
+| **Burnout penalty** | `max(0, 1 - burnedFactories × 0.1)` — each disabled factory reduces score by 10%, stacking. |
+
+The session-best Productivity ("Best") is tracked and displayed in the expanded metrics panel.
+
+### Metrics Panel
+
+A translucent panel in the top-right corner of the screen. Always shows **Productivity** (gold text, `#ffd966`). A toggle (▼/▲) expands/collapses detail rows.
+
+| Row | Collapsed | Expanded | Color |
+|---|---|---|---|
+| Productivity | ✓ | ✓ | Gold `#ffd966` |
+| Best | — | ✓ | Orange `#ffb450` |
+| Collected | ✓ | ✓ | White |
+| /min | — | ✓ | White |
+| Generated/min | — | ✓ | White |
+| Vehicles | ✓ | ✓ | White |
+| Stalled | — | ✓ | Red `#ff6b6b` when > 0 |
+
+### Game Clock
+
+All metrics (collection rate window, stall tracking) use a **game clock** that only advances while the game is unpaused. This ensures:
+
+- **Pause → resume**: metrics pick up where they left off; no zero-drop from the rolling window aging out.
+- **Speed changes**: the game clock ticks in real-time (not sim-time). `collectedPerMinute` divides by `effectiveSpeed` to normalize the displayed rate to 1× regardless of speed setting.
+
 ---
 
 ## Game Speed
@@ -391,13 +427,13 @@ When a hidden tab becomes visible again, a new run starts with `startType: save-
 
 ### Run Summary (`run-ended` properties)
 
-`finalScore`, `peakCars`, `housesPlaced`, `factoriesPlaced`, `storagesPlaced`, `totalBuildings`, `totalRoads`, `narrowRoads`, `highways`, `factoryBurnouts`, `buildingsDemolished`, `narrowRoadRatio`.
+`finalScore`, `peakCars`, `peakProductivity`, `housesPlaced`, `factoriesPlaced`, `storagesPlaced`, `totalBuildings`, `totalRoads`, `narrowRoads`, `highways`, `factoryBurnouts`, `buildingsDemolished`, `narrowRoadRatio`.
 
 ### Milestones
 
 Milestones use consistent `first-building-*` and `first-road-*` prefixes for easy PostHog filtering.
 
-`first-building-house`, `first-building-factory`, `first-building-storage`, `first-road-normal`, `first-road-narrow`, `first-road-highway`, `first-road-roundabout`, `first-burnout`, `5-buildings`, `10-buildings`, `20-buildings`, `10-roads`, `25-roads`, `50-roads`, `score-100`, `score-500`.
+`first-building-house`, `first-building-factory`, `first-building-storage`, `first-road-normal`, `first-road-narrow`, `first-road-highway`, `first-road-roundabout`, `first-burnout`, `5-buildings`, `10-buildings`, `20-buildings`, `10-roads`, `25-roads`, `50-roads`, `score-100`, `score-500`, `productivity-50`, `productivity-100`, `productivity-200`.
 
 ### Design Principles
 
@@ -449,6 +485,7 @@ PostHog is **not initialized on localhost or 127.0.0.1**. The `posthog.init()` c
 | Run duration distribution | Histogram | `durationSeconds` bucketed |
 | Average final score | Trend | `finalScore` (mean) over time |
 | Score distribution | Histogram | `finalScore` bucketed |
+| Peak productivity | Trend | `peakProductivity` (mean/p90) over time |
 | Peak cars per run | Trend | `peakCars` (mean/p90) |
 | Buildings per run | Stacked bar | `housesPlaced`, `factoriesPlaced`, `storagesPlaced` averages |
 | Narrow road ratio | Trend | `narrowRoadRatio` average |
@@ -459,7 +496,7 @@ PostHog is **not initialized on localhost or 127.0.0.1**. The `posthog.init()` c
 #### Player Progression (from `run-milestone`)
 | Widget | Type | Query |
 |---|---|---|
-| Milestone funnel | Funnel | `first-building-house` → `first-building-factory` → `first-building-storage` → `first-road-highway` → `score-100` → `score-500` |
+| Milestone funnel | Funnel | `first-building-house` → `first-building-factory` → `first-building-storage` → `first-road-highway` → `score-100` → `productivity-50` → `productivity-100` |
 | Milestone reach rates | Bar | % of runs hitting each milestone |
 | Road type discovery | Bar | % of runs hitting each `first-road-*` milestone |
 
