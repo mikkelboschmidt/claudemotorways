@@ -11,7 +11,7 @@ import { toggleMusic, ensureMusicStarted } from './music.ts';
 import { fetchCities, loadCity } from './cities.ts';
 import { startRun, endRun, updatePeaks } from './run.ts';
 import { track } from './analytics.ts';
-import { score, updateMetrics, toggleMetricsExpanded } from './score.ts';
+import { score, productivityScore, updateMetrics, toggleMetricsExpanded } from './score.ts';
 import { getBuildingColors, theme } from './theme.ts';
 import { updateTrafficLights } from './trafficLights.ts';
 
@@ -306,7 +306,7 @@ function simulationTick() {
   if (saveTimer >= 300) {
     saveTimer = 0;
     saveGame();
-    updatePeaks(score, cars.length);
+    updatePeaks(score, cars.length, productivityScore);
   }
 }
 

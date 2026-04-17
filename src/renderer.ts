@@ -7,7 +7,7 @@ import { hoverGx, hoverGy, pendingRemoveTiles, touchBurst } from './roads.ts';
 import { cars } from './cars.ts';
 import { Car, RoadPreview, ToolType } from './types.ts';
 import { activeTool, selectedColor, selectedBuildingType, gearMenuOpen, demoModalOpen, cityModalOpen } from './toolbar.ts';
-import { collected, collectedPerMinute, generatedPerMinute, stalledVehicles, vehicleCount, efficiencyScore, metricsExpanded } from './score.ts';
+import { collected, collectedPerMinute, generatedPerMinute, stalledVehicles, vehicleCount, productivityScore, peakProductivity, metricsExpanded } from './score.ts';
 import { gameSpeed, SPEED_OPTIONS, SPEED_LABELS } from './speed.ts';
 import { highways, highwayEdgeSet, highwayPhase, highwayStartGx, highwayStartGy, highwayPreviewEndPx, highwayPreviewEndPy, computeBezierControls, draggingHighwayId, draggingHandleIndex } from './highway.ts';
 import { musicEnabled } from './music.ts';
@@ -2048,10 +2048,10 @@ function drawMetricsPanel(ctx: CanvasRenderingContext2D, width: number) {
   const TOGGLE_W = 22;
   const CORNER_R = 7;
 
-  // Efficiency is always at the top; detail rows are behind the toggle
-  const alwaysRows: (string | null)[] = ['Efficiency', null /* divider */];
+  // Productivity is always at the top; detail rows are behind the toggle
+  const alwaysRows: (string | null)[] = ['Productivity', null /* divider */];
   const detailRows: (string | null)[] = metricsExpanded
-    ? ['Collected', '/min', 'Generated/min', 'Vehicles', 'Stalled']
+    ? ['Best', 'Collected', '/min', 'Generated/min', 'Vehicles', 'Stalled']
     : ['Collected', 'Vehicles'];
   const rows = [...alwaysRows, ...detailRows];
   const rowCount = rows.length;
@@ -2078,7 +2078,8 @@ function drawMetricsPanel(ctx: CanvasRenderingContext2D, width: number) {
     'Generated/min': generatedPerMinute,
     'Vehicles': vehicleCount,
     'Stalled': stalledVehicles,
-    'Efficiency': efficiencyScore,
+    'Productivity': productivityScore,
+    'Best': peakProductivity,
   };
 
   let rowY = py + PAD_Y;
@@ -2097,17 +2098,18 @@ function drawMetricsPanel(ctx: CanvasRenderingContext2D, width: number) {
     }
 
     const isStale = label === 'Stalled' && stalledVehicles > 0;
-    const isEfficiency = label === 'Efficiency';
+    const isProductivity = label === 'Productivity';
+    const isBest = label === 'Best';
 
     // Label
     ctx.textAlign = 'left';
-    ctx.fillStyle = isEfficiency ? 'rgba(255,220,100,0.85)' : 'rgba(255,255,255,0.6)';
+    ctx.fillStyle = isProductivity ? 'rgba(255,220,100,0.85)' : isBest ? 'rgba(255,180,80,0.7)' : 'rgba(255,255,255,0.6)';
     ctx.fillText(label, px + PAD_X, rowY);
 
     // Value
     ctx.textAlign = 'right';
     ctx.font = 'bold 13px sans-serif';
-    ctx.fillStyle = isStale ? '#ff6b6b' : isEfficiency ? '#ffd966' : '#fff';
+    ctx.fillStyle = isStale ? '#ff6b6b' : isProductivity ? '#ffd966' : isBest ? '#ffb450' : '#fff';
     ctx.fillText(String(values[label]), px + PANEL_W - PAD_X - TOGGLE_W, rowY);
     ctx.font = '13px sans-serif';
 
@@ -2125,7 +2127,7 @@ function drawMetricsPanel(ctx: CanvasRenderingContext2D, width: number) {
   ctx.fillStyle = 'rgba(255,255,255,0.45)';
   ctx.font = '11px sans-serif';
   // Place toggle arrow beside the "Collected" label (first detail row after divider)
-  const detailRowStartY = py + PAD_Y + ROW_H + 8; // after Efficiency + divider
+  const detailRowStartY = py + PAD_Y + ROW_H + 8; // after Productivity + divider
   ctx.fillText(metricsExpanded ? '▲' : '▼', toggleX + TOGGLE_W / 2, detailRowStartY + ROW_H / 2);
 
   ctx.restore();

@@ -1,5 +1,8 @@
 import { Car, Building } from './types.ts';
 import { gameSpeed } from './speed.ts';
+import { edges } from './graph.ts';
+import { highways } from './highway.ts';
+import { roundabouts } from './roundabout.ts';
 
 export let score = 0;
 export let collected = 0;
@@ -7,24 +10,40 @@ export let collectedPerMinute = 0;
 export let generatedPerMinute = 0;
 export let stalledVehicles = 0;
 export let vehicleCount = 0;
-export let efficiencyScore = 0;
+export let productivityScore = 0;
+export let peakProductivity = 0;
 export let metricsExpanded = false;
 
-// Real-time ms timestamps of each collection (for 15s rolling rate window)
+// Game clock: advances only while unpaused, so pausing doesn't age out data
+let gameClockMs = 0;
+let lastRealMs = performance.now();
+let wasPaused = false;
+
+function updateGameClock(): number {
+  const realNow = performance.now();
+  if (gameSpeed > 0 && !wasPaused) {
+    gameClockMs += realNow - lastRealMs;
+  }
+  lastRealMs = realNow;
+  wasPaused = gameSpeed === 0;
+  return gameClockMs;
+}
+
+// Game-clock timestamps of each collection (for 15s rolling rate window)
 const collectionTimes: number[] = [];
 const RATE_WINDOW_MS = 15_000;
 
-// Per-car stall tracking: id → {x, y, firstSlowMs}
+// Per-car stall tracking: id → {x, y, firstGameMs}
 // A car is stalled once it has been within STALL_RADIUS px for STALL_DURATION_MS
-const stallTracker = new Map<number, { x: number; y: number; firstSlowMs: number }>();
+const stallTracker = new Map<number, { x: number; y: number; firstGameMs: number }>();
 const STALL_RADIUS = 8;        // px — less than this counts as not moving
-const STALL_DURATION_MS = 6_000; // 6 real seconds
+const STALL_DURATION_MS = 6_000; // 6 real seconds (game-clock)
 
 export function addScore(points: number) {
   score += points;
   if (points > 0) {
     collected += points;
-    collectionTimes.push(performance.now());
+    collectionTimes.push(updateGameClock());
   }
 }
 
@@ -45,7 +64,11 @@ const PINS_PER_FACTORY_PER_SIM_MIN = 4;
 
 // Called every 1s from main.ts
 export function updateMetrics(cars: Car[], buildings: Building[]) {
-  const now = performance.now();
+  const now = updateGameClock();
+
+  // When paused, game clock doesn't advance — metrics stay frozen
+  if (gameSpeed === 0) return;
+
   const cutoff = now - RATE_WINDOW_MS;
 
   // Prune timestamps older than 15s
@@ -81,18 +104,44 @@ export function updateMetrics(cars: Car[], buildings: Building[]) {
       const dist = Math.hypot(car.x - entry.x, car.y - entry.y);
       if (dist > STALL_RADIUS) {
         // Car made meaningful progress — reset
-        stallTracker.set(car.id, { x: car.x, y: car.y, firstSlowMs: now });
+        stallTracker.set(car.id, { x: car.x, y: car.y, firstGameMs: now });
       }
-      // else: still within radius, keep firstSlowMs
+      // else: still within radius, keep firstGameMs
     } else {
-      stallTracker.set(car.id, { x: car.x, y: car.y, firstSlowMs: now });
+      stallTracker.set(car.id, { x: car.x, y: car.y, firstGameMs: now });
     }
   }
 
-  stalledVehicles = [...stallTracker.values()].filter(e => now - e.firstSlowMs >= STALL_DURATION_MS).length;
+  stalledVehicles = [...stallTracker.values()].filter(e => now - e.firstGameMs >= STALL_DURATION_MS).length;
 
-  // Efficiency: blend of collection rate, staleness, and flow
+  // --- Productivity score ---
+  // Base throughput: how many pins are being collected per minute
+  const baseThroughput = collectedPerMinute;
+
+  // Flow quality: penalize stalled vehicles and idle vehicles
   const staleRatio = driving.length > 0 ? 1 - stalledVehicles / driving.length : 1;
   const flowFactor = cars.length > 0 ? cars.filter(c => c.speed > 0).length / cars.length : 1;
-  efficiencyScore = Math.round(collectedPerMinute * staleRatio * (0.4 + 0.6 * flowFactor));
+  const flowQuality = staleRatio * (0.4 + 0.6 * flowFactor);
+
+  // Scale multiplier: reward larger, more complex cities
+  // Count active buildings and infrastructure
+  const activeFactoryCount = activeFactories;
+  const houseCount = buildings.filter(b => b.type === 'house').length;
+  const storageCount = buildings.filter(b => b.type === 'storage').length;
+  const totalBuildings = houseCount + activeFactoryCount + storageCount;
+  const roadCount = edges.size;
+  const highwayCount = highways.length;
+  const roundaboutCount = roundabouts.length;
+
+  // Scale grows logarithmically: a 20-building city with highways and roundabouts
+  // gets ~2× multiplier vs a 3-building starter city
+  const infraScore = totalBuildings + roadCount * 0.1 + highwayCount * 0.5 + roundaboutCount * 0.3;
+  const scaleMultiplier = 1 + Math.log2(Math.max(1, infraScore)) * 0.15;
+
+  // Burnout penalty: each burned factory drags productivity down
+  const burnedFactories = buildings.filter(b => b.type === 'factory' && b.disabled).length;
+  const burnoutPenalty = Math.max(0, 1 - burnedFactories * 0.1);
+
+  productivityScore = Math.round(baseThroughput * flowQuality * scaleMultiplier * burnoutPenalty);
+  if (productivityScore > peakProductivity) peakProductivity = productivityScore;
 }

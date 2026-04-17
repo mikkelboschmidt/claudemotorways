@@ -52,7 +52,7 @@ Avoid opening `src/renderer.ts` and `src/cars.ts` unless your task specifically 
 | `sprites.ts` | SVG sprite rendering with programmatic color replacement | `drawBuilding()` |
 | `toolbar.ts` | Floating toolbar layout and hit-testing | `drawToolbar()` |
 | `camera.ts` | Pan/zoom, screen↔world coordinate transforms | `camera` |
-| `score.ts` | Score tracking | `score` |
+| `score.ts` | Score tracking, productivity metric, metrics panel data | `score`, `productivityScore`, `peakProductivity` |
 | `speed.ts` | Game speed multiplier (pause/1×/2×/3×) | `speed` |
 | `analytics.ts` | PostHog event tracking (run lifecycle, milestones) | `trackMilestone()` |
 | `run.ts` | Run session management (start/end/summary) | `startRun()`, `endRun()` |
