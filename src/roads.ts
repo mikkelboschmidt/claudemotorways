@@ -37,6 +37,9 @@ let lastPanSy = 0;
 // Pending tap action (deferred to pointerup to avoid pinch-zoom false triggers)
 let pendingTap: (() => void) | null = null;
 
+// Pending highway handle drag (touch: deferred to hold timer, like road drawing)
+let pendingHighwayHandle: { highwayId: number; handleIndex: 1 | 2 } | null = null;
+
 // Callback to get active touch count (set from main.ts to avoid circular import)
 let getActiveTouchCount: () => number = () => 0;
 export function setTouchCountGetter(fn: () => number) { getActiveTouchCount = fn; }
@@ -65,6 +68,7 @@ function clearTouchRoadHoldTimer() {
 
 function beginTouchPan(sx: number, sy: number) {
   clearTouchRoadHoldTimer();
+  pendingHighwayHandle = null;
   touchPanActive = true;
   dragging = false;
   removeRoadDragging = false;
@@ -106,6 +110,7 @@ function scheduleTouchRoadGesture(start: () => void) {
 
 export function cancelRoadDrag() {
   clearTouchRoadHoldTimer();
+  pendingHighwayHandle = null;
   dragging = false;
   dragConfirmed = false;
   removeRoadDragging = false;
@@ -349,8 +354,20 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
       // Check for handle drag first
       const handle = findHighwayHandleAtPixel(px, py);
       if (handle && highwayPhase === 'idle') {
-        setDraggingHighwayId(handle.highway.id);
-        setDraggingHandleIndex(handle.handleIndex);
+        if (isTouch) {
+          // Same hold-then-drag pattern as road drawing — prevents accidental handle drags during pan
+          pendingHighwayHandle = { highwayId: handle.highway.id, handleIndex: handle.handleIndex };
+          scheduleTouchRoadGesture(() => {
+            if (pendingHighwayHandle) {
+              setDraggingHighwayId(pendingHighwayHandle.highwayId);
+              setDraggingHandleIndex(pendingHighwayHandle.handleIndex);
+              pendingHighwayHandle = null;
+            }
+          });
+        } else {
+          setDraggingHighwayId(handle.highway.id);
+          setDraggingHandleIndex(handle.handleIndex);
+        }
         return;
       }
 
@@ -387,7 +404,7 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
     const sy = e.clientY - rect.top;
     const [px, py] = screenToWorld(sx, sy);
 
-    if (isTouch && !touchPanActive && !dragging && !removeRoadDragging && getActiveTouchCount() < 2) {
+    if (isTouch && !touchPanActive && !dragging && !removeRoadDragging && draggingHighwayId < 0 && getActiveTouchCount() < 2) {
       const dist = Math.hypot(sx - dragStartSx, sy - dragStartSy);
       if (dist >= TOUCH_PAN_THRESHOLD) {
         beginTouchPan(sx, sy);
