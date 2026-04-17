@@ -49,6 +49,9 @@ const PINS_PER_FACTORY_PER_SIM_MIN = 4;
 
 // Called every 1s from main.ts
 export function updateMetrics(cars: Car[], buildings: Building[]) {
+  // When paused, freeze all metrics — don't let the rolling window decay
+  if (gameSpeed === 0) return;
+
   const now = performance.now();
   const cutoff = now - RATE_WINDOW_MS;
 
