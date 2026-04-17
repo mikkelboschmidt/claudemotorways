@@ -1,6 +1,6 @@
 {
   "scripts": {
     "setup": "npm install",
-    "run": "npm run dev"
+    "run": "npm run dev -- --host"
   }
 }

@@ -7,6 +7,7 @@ const basePort = process.env.CONDUCTOR_PORT
   ? Number(process.env.CONDUCTOR_PORT)
   : 5173;
 const port = basePort + 1;
+const host = process.env.HOST;
 
 const citiesDir = join(import.meta.dirname, "cities");
 
@@ -48,6 +49,7 @@ app.get("/api/cities/:slug", async (req, res) => {
   }
 });
 
-app.listen(port, () => {
-  console.log(`Server listening on http://localhost:${port}`);
+app.listen(port, host, () => {
+  const displayHost = host || 'localhost';
+  console.log(`Server listening on http://${displayHost}:${port}`);
 });

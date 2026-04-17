@@ -1,5 +1,5 @@
 import { GRID, ROAD_W } from './constants.ts';
-import { screenToWorld } from './camera.ts';
+import { screenToWorld, pan } from './camera.ts';
 import { addEdge, bumpGraphVersion, removeEdge, nodeKey, nodes, getNodeEdges } from './graph.ts';
 import { segmentCutsBuilding, findBuildingAtPixel, addBuilding, removeBuilding, getBuildingEdgeAt, connectBuildingOnSide } from './buildings.ts';
 import { RoadPreview } from './types.ts';
@@ -24,9 +24,15 @@ let dragStartSx = 0;
 let dragStartSy = 0;
 let dragConfirmed = false; // true once movement exceeds threshold
 const DRAG_THRESHOLD = 8; // pixels of screen movement before drag activates
+const TOUCH_PAN_THRESHOLD = 10;
+const TOUCH_ROAD_HOLD_MS = 140;
 
 // Whether input is from touch (disables hover ghost)
 let isTouch = false;
+let touchPanActive = false;
+let touchRoadHoldTimer: number | null = null;
+let lastPanSx = 0;
+let lastPanSy = 0;
 
 // Pending tap action (deferred to pointerup to avoid pinch-zoom false triggers)
 let pendingTap: (() => void) | null = null;
@@ -36,6 +42,9 @@ let getActiveTouchCount: () => number = () => 0;
 export function setTouchCountGetter(fn: () => number) { getActiveTouchCount = fn; }
 
 export let roadPreview: RoadPreview | null = null;
+
+// Touch burst: screen-space position + timestamp, cleared when drag ends
+export let touchBurst: { sx: number; sy: number; startedAt: number } | null = null;
 
 // Hover position in grid coords (null when not over game area)
 export let hoverGx: number | null = null;
@@ -47,10 +56,61 @@ let removeStartGx = 0;
 let removeStartGy = 0;
 export const pendingRemoveTiles = new Set<string>();
 
+function clearTouchRoadHoldTimer() {
+  if (touchRoadHoldTimer !== null) {
+    window.clearTimeout(touchRoadHoldTimer);
+    touchRoadHoldTimer = null;
+  }
+}
+
+function beginTouchPan(sx: number, sy: number) {
+  clearTouchRoadHoldTimer();
+  touchPanActive = true;
+  dragging = false;
+  removeRoadDragging = false;
+  dragConfirmed = false;
+  pendingTap = null;
+  roadPreview = null;
+  pendingRemoveTiles.clear();
+  lastPanSx = sx;
+  lastPanSy = sy;
+}
+
+function startRoadDragAt(px: number, py: number) {
+  dragStartGx = snapToGrid(px);
+  dragStartGy = snapToGrid(py);
+  currentGx = dragStartGx;
+  currentGy = dragStartGy;
+  dragging = true;
+  roadPreview = null;
+}
+
+function startRemoveRoadDragAt(px: number, py: number) {
+  removeRoadDragging = true;
+  removeStartGx = snapToGrid(px);
+  removeStartGy = snapToGrid(py);
+  pendingRemoveTiles.clear();
+  const key = nodeKey(removeStartGx, removeStartGy);
+  if (nodes.has(key)) pendingRemoveTiles.add(key);
+}
+
+function scheduleTouchRoadGesture(start: () => void) {
+  clearTouchRoadHoldTimer();
+  touchRoadHoldTimer = window.setTimeout(() => {
+    touchRoadHoldTimer = null;
+    if (getActiveTouchCount() >= 2 || touchPanActive) return;
+    touchBurst = { sx: lastPanSx, sy: lastPanSy, startedAt: performance.now() };
+    start();
+  }, TOUCH_ROAD_HOLD_MS);
+}
+
 export function cancelRoadDrag() {
+  clearTouchRoadHoldTimer();
   dragging = false;
   dragConfirmed = false;
   removeRoadDragging = false;
+  touchPanActive = false;
+  touchBurst = null;
   pendingTap = null;
   pendingRemoveTiles.clear();
   roadPreview = null;
@@ -136,14 +196,16 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
     dragStartSx = sx;
     dragStartSy = sy;
     dragConfirmed = false;
+    touchPanActive = false;
+    lastPanSx = sx;
+    lastPanSy = sy;
 
     if (activeTool === 'addRoad' || activeTool === 'addNarrow') {
-      dragStartGx = snapToGrid(px);
-      dragStartGy = snapToGrid(py);
-      currentGx = dragStartGx;
-      currentGy = dragStartGy;
-      dragging = true;
-      roadPreview = null;
+      if (isTouch) {
+        scheduleTouchRoadGesture(() => startRoadDragAt(px, py));
+      } else {
+        startRoadDragAt(px, py);
+      }
     } else if (activeTool === 'removeRoad' || activeTool === 'demolish') {
       // Demolish: try building first, then fall back to road/highway removal
       if (activeTool === 'demolish') {
@@ -190,24 +252,29 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
       // Check if clicking on a highway
       const hw = findHighwayAtPixel(px, py);
       if (hw) {
-        removeHighway(hw.id);
-        saveGame();
+        const hwId = hw.id;
+        pendingTap = () => {
+          removeHighway(hwId);
+          saveGame();
+        };
         return;
       }
       // Check if clicking on a tunnel
       const tn = findTunnelAtPixel(px, py);
       if (tn) {
-        removeTunnel(tn.id);
-        playSfx('demolish');
-        saveGame();
+        const tnId = tn.id;
+        pendingTap = () => {
+          removeTunnel(tnId);
+          playSfx('demolish');
+          saveGame();
+        };
         return;
       }
-      removeRoadDragging = true;
-      removeStartGx = snapToGrid(px);
-      removeStartGy = snapToGrid(py);
-      pendingRemoveTiles.clear();
-      const key = nodeKey(removeStartGx, removeStartGy);
-      if (nodes.has(key)) pendingRemoveTiles.add(key);
+      if (isTouch) {
+        scheduleTouchRoadGesture(() => startRemoveRoadDragAt(px, py));
+      } else {
+        startRemoveRoadDragAt(px, py);
+      }
     } else if (activeTool === 'addBuilding') {
       const gridX = Math.floor(px / GRID);
       const gridY = Math.floor(py / GRID);
@@ -257,25 +324,27 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
     } else if (activeTool === 'addTunnel') {
       const gx = snapToGrid(px);
       const gy = snapToGrid(py);
-      if (tunnelPhase === 'idle') {
-        // Start: must be on an existing road node
-        if (nodes.has(nodeKey(gx, gy))) {
-          setTunnelStart(gx, gy);
-          setTunnelPhase('pickEnd');
-        }
-      } else if (tunnelPhase === 'pickEnd') {
-        // End: must be on an existing road node, at least 2 tiles apart
-        const key = nodeKey(gx, gy);
-        if (nodes.has(key)) {
-          const dist = Math.hypot(gx - tunnelStartGx, gy - tunnelStartGy);
-          if (dist >= 2) {
-            createTunnel(tunnelStartGx, tunnelStartGy, gx, gy);
-            playSfx('road');
-            saveGame();
+      pendingTap = () => {
+        if (tunnelPhase === 'idle') {
+          // Start: must be on an existing road node
+          if (nodes.has(nodeKey(gx, gy))) {
+            setTunnelStart(gx, gy);
+            setTunnelPhase('pickEnd');
           }
-          setTunnelPhase('idle');
+        } else if (tunnelPhase === 'pickEnd') {
+          // End: must be on an existing road node, at least 2 tiles apart
+          const key = nodeKey(gx, gy);
+          if (nodes.has(key)) {
+            const dist = Math.hypot(gx - tunnelStartGx, gy - tunnelStartGy);
+            if (dist >= 2) {
+              createTunnel(tunnelStartGx, tunnelStartGy, gx, gy);
+              playSfx('road');
+              saveGame();
+            }
+            setTunnelPhase('idle');
+          }
         }
-      }
+      };
     } else if (activeTool === 'addHighway') {
       // Check for handle drag first
       const handle = findHighwayHandleAtPixel(px, py);
@@ -287,26 +356,28 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
 
       const gx = snapToGrid(px);
       const gy = snapToGrid(py);
-      if (highwayPhase === 'idle') {
-        // Start: must be on an existing road node
-        if (nodes.has(nodeKey(gx, gy))) {
-          setHighwayStart(gx, gy);
-          setHighwayPhase('pickEnd');
-        }
-      } else if (highwayPhase === 'pickEnd') {
-        // End: must be on an existing road node, different from start, at least 3 tiles apart
-        const key = nodeKey(gx, gy);
-        if (nodes.has(key)) {
-          const dist = Math.hypot(gx - highwayStartGx, gy - highwayStartGy);
-          if (dist >= 3) {
-            createHighway(highwayStartGx, highwayStartGy, gx, gy);
-            recordHighway();
-            playSfx('road');
-            saveGame();
+      pendingTap = () => {
+        if (highwayPhase === 'idle') {
+          // Start: must be on an existing road node
+          if (nodes.has(nodeKey(gx, gy))) {
+            setHighwayStart(gx, gy);
+            setHighwayPhase('pickEnd');
           }
-          setHighwayPhase('idle');
+        } else if (highwayPhase === 'pickEnd') {
+          // End: must be on an existing road node, different from start, at least 3 tiles apart
+          const key = nodeKey(gx, gy);
+          if (nodes.has(key)) {
+            const dist = Math.hypot(gx - highwayStartGx, gy - highwayStartGy);
+            if (dist >= 3) {
+              createHighway(highwayStartGx, highwayStartGy, gx, gy);
+              recordHighway();
+              playSfx('road');
+              saveGame();
+            }
+            setHighwayPhase('idle');
+          }
         }
-      }
+      };
     }
   });
 
@@ -315,6 +386,20 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
     const [px, py] = screenToWorld(sx, sy);
+
+    if (isTouch && !touchPanActive && !dragging && !removeRoadDragging && getActiveTouchCount() < 2) {
+      const dist = Math.hypot(sx - dragStartSx, sy - dragStartSy);
+      if (dist >= TOUCH_PAN_THRESHOLD) {
+        beginTouchPan(sx, sy);
+      }
+    }
+
+    if (touchPanActive) {
+      pan(sx - lastPanSx, sy - lastPanSy);
+      lastPanSx = sx;
+      lastPanSy = sy;
+      return;
+    }
 
     // Check drag threshold for touch — don't activate drag until finger moves enough
     if ((dragging || removeRoadDragging) && !dragConfirmed) {
@@ -388,6 +473,15 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
   });
 
   canvas.addEventListener('pointerup', () => {
+    clearTouchRoadHoldTimer();
+
+    if (touchPanActive) {
+      touchPanActive = false;
+      pendingTap = null;
+      dragConfirmed = false;
+      return;
+    }
+
     // Execute deferred tap action (building place/remove) if no drag/pinch occurred
     if (pendingTap && !dragConfirmed && getActiveTouchCount() < 2) {
       pendingTap();
@@ -456,11 +550,9 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
     }
   });
   canvas.addEventListener('contextmenu', (e) => {
-    if (highwayPhase === 'pickEnd' || tunnelPhase === 'pickEnd') {
-      e.preventDefault();
-      if (highwayPhase === 'pickEnd') setHighwayPhase('idle');
-      if (tunnelPhase === 'pickEnd') setTunnelPhase('idle');
-    }
+    e.preventDefault();
+    if (highwayPhase === 'pickEnd') setHighwayPhase('idle');
+    if (tunnelPhase === 'pickEnd') setTunnelPhase('idle');
   });
 }
 

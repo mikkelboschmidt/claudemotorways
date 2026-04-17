@@ -3,7 +3,7 @@ import { currentThemeId, theme, themeAssets } from './theme.ts';
 import { camX, camY, zoom } from './camera.ts';
 import { edges, graphVersion, nodes, parseKey } from './graph.ts';
 import { buildings, getBuildingPixelPos, getConnectionPixelPos, getConnectionPoint, HOUSE_W, HOUSE_H, FACTORY_W, FACTORY_H, STORAGE_W_TILES, STORAGE_H_TILES } from './buildings.ts';
-import { hoverGx, hoverGy, pendingRemoveTiles } from './roads.ts';
+import { hoverGx, hoverGy, pendingRemoveTiles, touchBurst } from './roads.ts';
 import { cars } from './cars.ts';
 import { Car, RoadPreview, ToolType } from './types.ts';
 import { activeTool, selectedColor, selectedBuildingType, gearMenuOpen, demoModalOpen, cityModalOpen } from './toolbar.ts';
@@ -358,6 +358,35 @@ export function render(
   if (currentThemeId === 'space') {
     ctx.fillStyle = ensureSpaceSurfaceGradient(ctx, height);
     ctx.fillRect(0, 0, width, height);
+  }
+
+  // Touch burst ring — expanding circle when long-hold activates road drawing
+  if (touchBurst) {
+    const BURST_DURATION = 420;
+    const t = Math.min(1, (performance.now() - touchBurst.startedAt) / BURST_DURATION);
+    if (t < 1) {
+      const eased = 1 - (1 - t) * (1 - t); // ease-out
+      // Outer ring
+      const r1 = 16 + eased * 70;
+      // Inner ring slightly behind
+      const r2 = 10 + eased * 44;
+      const alpha = (1 - t);
+      ctx.save();
+      ctx.strokeStyle = theme.road;
+      // Outer ring
+      ctx.globalAlpha = alpha * 0.9;
+      ctx.lineWidth = 3.5 - t * 2;
+      ctx.beginPath();
+      ctx.arc(touchBurst.sx, touchBurst.sy, r1, 0, Math.PI * 2);
+      ctx.stroke();
+      // Inner ring, slightly more opaque
+      ctx.globalAlpha = alpha * 0.5;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(touchBurst.sx, touchBurst.sy, r2, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   // Score and toolbar drawn in screen space
