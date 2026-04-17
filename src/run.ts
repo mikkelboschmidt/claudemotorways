@@ -17,6 +17,7 @@ interface RunState {
   factoryBurnouts: number;
   peakScore: number;
   peakCars: number;
+  peakProductivity: number;
   milestonesHit: Set<string>;
 }
 
@@ -38,6 +39,7 @@ function createRun(startType: StartType, cityName?: string): RunState {
     factoryBurnouts: 0,
     peakScore: 0,
     peakCars: 0,
+    peakProductivity: 0,
     milestonesHit: new Set(),
   };
 }
@@ -68,6 +70,7 @@ export function endRun(reason: string) {
     ...(run.cityName ? { cityName: run.cityName } : {}),
     finalScore: run.peakScore,
     peakCars: run.peakCars,
+    peakProductivity: run.peakProductivity,
     housesPlaced: run.housesPlaced,
     factoriesPlaced: run.factoriesPlaced,
     storagesPlaced: run.storagesPlaced,
@@ -141,11 +144,15 @@ export function recordBurnout() {
   if (run.factoryBurnouts === 1) checkMilestone('first-burnout');
 }
 
-export function updatePeaks(score: number, carCount: number) {
+export function updatePeaks(score: number, carCount: number, productivity: number) {
   if (!run) return;
   if (score > run.peakScore) run.peakScore = score;
   if (carCount > run.peakCars) run.peakCars = carCount;
+  if (productivity > run.peakProductivity) run.peakProductivity = productivity;
 
   if (run.peakScore >= 100) checkMilestone('score-100');
   if (run.peakScore >= 500) checkMilestone('score-500');
+  if (run.peakProductivity >= 50) checkMilestone('productivity-50');
+  if (run.peakProductivity >= 100) checkMilestone('productivity-100');
+  if (run.peakProductivity >= 200) checkMilestone('productivity-200');
 }

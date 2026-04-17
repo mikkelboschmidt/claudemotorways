@@ -1,5 +1,8 @@
 import { Car, Building } from './types.ts';
 import { gameSpeed } from './speed.ts';
+import { edges } from './graph.ts';
+import { highways } from './highway.ts';
+import { roundabouts } from './roundabout.ts';
 
 export let score = 0;
 export let collected = 0;
@@ -7,7 +10,8 @@ export let collectedPerMinute = 0;
 export let generatedPerMinute = 0;
 export let stalledVehicles = 0;
 export let vehicleCount = 0;
-export let efficiencyScore = 0;
+export let productivityScore = 0;
+export let peakProductivity = 0;
 export let metricsExpanded = false;
 
 // Real-time ms timestamps of each collection (for 15s rolling rate window)
@@ -91,8 +95,34 @@ export function updateMetrics(cars: Car[], buildings: Building[]) {
 
   stalledVehicles = [...stallTracker.values()].filter(e => now - e.firstSlowMs >= STALL_DURATION_MS).length;
 
-  // Efficiency: blend of collection rate, staleness, and flow
+  // --- Productivity score ---
+  // Base throughput: how many pins are being collected per minute
+  const baseThroughput = collectedPerMinute;
+
+  // Flow quality: penalize stalled vehicles and idle vehicles
   const staleRatio = driving.length > 0 ? 1 - stalledVehicles / driving.length : 1;
   const flowFactor = cars.length > 0 ? cars.filter(c => c.speed > 0).length / cars.length : 1;
-  efficiencyScore = Math.round(collectedPerMinute * staleRatio * (0.4 + 0.6 * flowFactor));
+  const flowQuality = staleRatio * (0.4 + 0.6 * flowFactor);
+
+  // Scale multiplier: reward larger, more complex cities
+  // Count active buildings and infrastructure
+  const activeFactoryCount = activeFactories;
+  const houseCount = buildings.filter(b => b.type === 'house').length;
+  const storageCount = buildings.filter(b => b.type === 'storage').length;
+  const totalBuildings = houseCount + activeFactoryCount + storageCount;
+  const roadCount = edges.size;
+  const highwayCount = highways.length;
+  const roundaboutCount = roundabouts.length;
+
+  // Scale grows logarithmically: a 20-building city with highways and roundabouts
+  // gets ~2× multiplier vs a 3-building starter city
+  const infraScore = totalBuildings + roadCount * 0.1 + highwayCount * 0.5 + roundaboutCount * 0.3;
+  const scaleMultiplier = 1 + Math.log2(Math.max(1, infraScore)) * 0.15;
+
+  // Burnout penalty: each burned factory drags productivity down
+  const burnedFactories = buildings.filter(b => b.type === 'factory' && b.disabled).length;
+  const burnoutPenalty = Math.max(0, 1 - burnedFactories * 0.1);
+
+  productivityScore = Math.round(baseThroughput * flowQuality * scaleMultiplier * burnoutPenalty);
+  if (productivityScore > peakProductivity) peakProductivity = productivityScore;
 }
