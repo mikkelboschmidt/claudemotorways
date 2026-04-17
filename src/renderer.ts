@@ -7,7 +7,7 @@ import { hoverGx, hoverGy, pendingRemoveTiles, touchBurst } from './roads.ts';
 import { cars } from './cars.ts';
 import { Car, RoadPreview, ToolType } from './types.ts';
 import { activeTool, selectedColor, selectedBuildingType, gearMenuOpen, demoModalOpen, cityModalOpen } from './toolbar.ts';
-import { score } from './score.ts';
+import { collected, collectedPerMinute, generatedPerMinute, stalledVehicles, vehicleCount, efficiencyScore, metricsExpanded } from './score.ts';
 import { gameSpeed, SPEED_OPTIONS, SPEED_LABELS } from './speed.ts';
 import { highways, highwayEdgeSet, highwayPhase, highwayStartGx, highwayStartGy, highwayPreviewEndPx, highwayPreviewEndPy, computeBezierControls, draggingHighwayId, draggingHandleIndex } from './highway.ts';
 import { musicEnabled } from './music.ts';
@@ -389,8 +389,8 @@ export function render(
     }
   }
 
-  // Score and toolbar drawn in screen space
-  drawScore(ctx, width);
+  // Metrics panel and toolbar drawn in screen space
+  drawMetricsPanel(ctx, width);
   drawToolbar(ctx, width, height, fps, simStepsLastFrame, accumulatorMs);
   if (cityModalOpen) drawCityModal(ctx, width, height);
   if (demoModalOpen) drawDemoModal(ctx, width, height);
@@ -2030,15 +2030,100 @@ function drawTunnelPreview(ctx: CanvasRenderingContext2D) {
   ctx.restore();
 }
 
-function drawScore(ctx: CanvasRenderingContext2D, width: number) {
-  const text = `Points: ${score}  Cars: ${cars.length}`;
-  ctx.font = 'bold 14px sans-serif';
-  ctx.textAlign = 'right';
+// Toggle button rect — updated each frame, read by main.ts for hit testing
+let _metricsToggleRect = { x: 0, y: 0, w: 0, h: 0 };
+export function getMetricsPanelToggleRect() { return _metricsToggleRect; }
+
+function drawMetricsPanel(ctx: CanvasRenderingContext2D, width: number) {
+  const PANEL_W = 200;
+  const PAD_X = 12;
+  const PAD_Y = 9;
+  const ROW_H = 18;
+  const MARGIN = 12;
+  const TOGGLE_W = 22;
+  const CORNER_R = 7;
+
+  // Efficiency is always at the top; detail rows are behind the toggle
+  const alwaysRows: (string | null)[] = ['Efficiency', null /* divider */];
+  const detailRows: (string | null)[] = metricsExpanded
+    ? ['Collected', '/min', 'Generated/min', 'Vehicles', 'Stalled']
+    : ['Collected', 'Vehicles'];
+  const rows = [...alwaysRows, ...detailRows];
+  const rowCount = rows.length;
+  const dividerCount = rows.filter(r => r === null).length;
+  const visibleRows = rows.filter(r => r !== null).length;
+  const panelH = PAD_Y * 2 + visibleRows * ROW_H + dividerCount * 8;
+
+  const px = width - MARGIN - PANEL_W;
+  const py = MARGIN;
+
+  // Background
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(px, py, PANEL_W, panelH, CORNER_R);
+  ctx.fillStyle = 'rgba(0,0,0,0.52)';
+  ctx.fill();
+
+  // Rows
+  ctx.font = '13px sans-serif';
   ctx.textBaseline = 'top';
-  ctx.fillStyle = theme.scoreShadow;
-  ctx.fillText(text, width - 14, 16);
-  ctx.fillStyle = theme.scoreText;
-  ctx.fillText(text, width - 15, 15);
+  const values: Record<string, string | number> = {
+    'Collected': collected,
+    '/min': collectedPerMinute,
+    'Generated/min': generatedPerMinute,
+    'Vehicles': vehicleCount,
+    'Stalled': stalledVehicles,
+    'Efficiency': efficiencyScore,
+  };
+
+  let rowY = py + PAD_Y;
+  for (let i = 0; i < rowCount; i++) {
+    const label = rows[i];
+    if (label === null) {
+      // Divider
+      ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(px + PAD_X, rowY + 3);
+      ctx.lineTo(px + PANEL_W - PAD_X, rowY + 3);
+      ctx.stroke();
+      rowY += 8;
+      continue;
+    }
+
+    const isStale = label === 'Stalled' && stalledVehicles > 0;
+    const isEfficiency = label === 'Efficiency';
+
+    // Label
+    ctx.textAlign = 'left';
+    ctx.fillStyle = isEfficiency ? 'rgba(255,220,100,0.85)' : 'rgba(255,255,255,0.6)';
+    ctx.fillText(label, px + PAD_X, rowY);
+
+    // Value
+    ctx.textAlign = 'right';
+    ctx.font = 'bold 13px sans-serif';
+    ctx.fillStyle = isStale ? '#ff6b6b' : isEfficiency ? '#ffd966' : '#fff';
+    ctx.fillText(String(values[label]), px + PANEL_W - PAD_X - TOGGLE_W, rowY);
+    ctx.font = '13px sans-serif';
+
+    rowY += ROW_H;
+  }
+
+  // Toggle button (▼ or ▲) — right edge
+  const toggleX = px + PANEL_W - TOGGLE_W;
+  const toggleY = py;
+  const toggleH = PAD_Y * 2 + ROW_H; // height of one row area
+  _metricsToggleRect = { x: toggleX, y: toggleY, w: TOGGLE_W, h: panelH };
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(255,255,255,0.45)';
+  ctx.font = '11px sans-serif';
+  // Place toggle arrow beside the "Collected" label (first detail row after divider)
+  const detailRowStartY = py + PAD_Y + ROW_H + 8; // after Efficiency + divider
+  ctx.fillText(metricsExpanded ? '▲' : '▼', toggleX + TOGGLE_W / 2, detailRowStartY + ROW_H / 2);
+
+  ctx.restore();
 }
 
 // ============ FLOATING TOOLBAR ============

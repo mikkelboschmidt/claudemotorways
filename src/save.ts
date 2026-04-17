@@ -1,6 +1,6 @@
 import { buildings, buildingById, initBuildingNodes, setNextBuildingId } from './buildings.ts';
 import { nodes, edges, addEdge, parseKey, bumpGraphVersion } from './graph.ts';
-import { score, setScore } from './score.ts';
+import { score, collected, setScore, setCollected } from './score.ts';
 import { Building } from './types.ts';
 import { highways, highwayEdgeSet, createHighway, resetHighways } from './highway.ts';
 import { cars } from './cars.ts';
@@ -22,6 +22,7 @@ export interface SaveData {
   trafficLights?: { gx: number; gy: number }[];
   tunnels?: { startGx: number; startGy: number; endGx: number; endGy: number }[];
   score: number;
+  collected?: number;
   nextBuildingId: number;
 }
 
@@ -67,6 +68,7 @@ export function serializeState(): SaveData {
     trafficLights: tlList.length > 0 ? tlList : undefined,
     tunnels: tnList.length > 0 ? tnList : undefined,
     score,
+    collected,
     nextBuildingId: Math.max(...buildings.map(b => b.id), 0) + 1,
   };
 }
@@ -144,6 +146,7 @@ export function loadFromData(data: SaveData): boolean {
   }
 
   setScore(data.score ?? 0);
+  setCollected(data.collected ?? 0);
   initBuildingNodes();
   bumpGraphVersion();
 
@@ -202,6 +205,7 @@ export function uploadSave(): Promise<boolean> {
         try {
           const data: SaveData = JSON.parse(reader.result as string);
           data.score = 0;
+          data.collected = 0;
           if (loadFromData(data)) {
             saveGame();
             resolve(true);

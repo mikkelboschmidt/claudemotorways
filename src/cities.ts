@@ -23,6 +23,7 @@ export async function loadCity(slug: string) {
     if (!res.ok) return;
     const data: SaveData = await res.json();
     data.score = 0;
+    data.collected = 0;
     if (loadFromData(data)) {
       saveGame();
     }
