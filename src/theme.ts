@@ -139,6 +139,9 @@ interface ThemeConfig {
 
 const LEGACY_SPACE_COLORS = ['#e06040', '#4aa8d8', '#50d890', '#d4a030', '#b060d0'];
 const PREVIOUS_SPACE_COLORS = ['#FF009D', '#FFD428', '#2A7BFF', '#A1FF00', '#FFE7D3'];
+// Classic (pre-SVG) earth building colors — kept as a legacy set so saves from
+// before the SVG-derived palette was introduced can still be remapped correctly.
+const LEGACY_EARTH_COLORS = ['#FF009D', '#3498db', '#2ecc71', '#f39c12', '#9b59b6'];
 
 function hexToRgb(hex: string): [number, number, number] | null {
   const normalized = hex.trim();
@@ -407,7 +410,7 @@ const themeConfigs: Record<ThemeId, ThemeConfig> = {
 
 export const THEME_OPTIONS = [themeConfigs.earth, themeConfigs.space] as const;
 const THEME_COLOR_SETS: Record<ThemeId, string[][]> = {
-  earth: [themeConfigs.earth.palette.buildingColors],
+  earth: [themeConfigs.earth.palette.buildingColors, LEGACY_EARTH_COLORS],
   space: [themeConfigs.space.palette.buildingColors, PREVIOUS_SPACE_COLORS, LEGACY_SPACE_COLORS],
 };
 
