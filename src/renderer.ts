@@ -30,9 +30,8 @@ import spaceTerrainUrl from '../assets/SpaceTheme/terrain.png';
 // - drawCars()/drawCollectingPins()
 // - drawToolbar()/drawDemoModal()/drawCityModal()/getToolbarLayout()
 
-// SVG icon image cache — keyed by (rawSvg + colorOverride)
+// SVG icon image cache — keyed by (rawSvg + colorOverride + carryingPin)
 const iconCache = new Map<string, HTMLImageElement>();
-const pinGlowCache = new Map<string, HTMLCanvasElement>();
 // Truck SVG images with Pin_n hidden (drawn programmatically) — keyed by (rawSvg + color)
 const truckImgCache = new Map<string, HTMLImageElement>();
 // Truck pin rect data — keyed by rawSvg (theme-specific)
@@ -75,8 +74,8 @@ spaceTerrainImg.onload = () => {
 };
 spaceTerrainImg.src = spaceTerrainUrl;
 
-function getIconImage(rawSvg: string, colorOverride?: string): HTMLImageElement {
-  const key = rawSvg + (colorOverride ?? '');
+function getIconImage(rawSvg: string, colorOverride?: string, carryingPin?: boolean): HTMLImageElement {
+  const key = rawSvg + (colorOverride ?? '') + (carryingPin ? '1' : '0');
   let img = iconCache.get(key);
   if (img) return img;
   let svg = rawSvg;
@@ -85,6 +84,8 @@ function getIconImage(rawSvg: string, colorOverride?: string): HTMLImageElement 
     svg = svg.replace(/(id="RoofMain(?:_\d+)?"[^>]*fill=")([^"]*)(")/g, `$1${colorOverride}$3`);
     svg = svg.replace(/(id="RoofShadow(?:_\d+)?"[^>]*fill=")([^"]*)(")/g, `$1${darkenHex(colorOverride, 0.7)}$3`);
     svg = svg.replace(/(id="RoofDarkest(?:_\d+)?"[^>]*fill=")([^"]*)(")/g, `$1${darkenHex(colorOverride, 0.55)}$3`);
+    const pinColor = carryingPin ? '#FFFFFF' : darkenHex(colorOverride, 0.55);
+    svg = svg.replace(/(id="Pin"[^>]*fill=")([^"]*)(")/g, `$1${pinColor}$3`);
   }
   img = new Image();
   img.src = 'data:image/svg+xml,' + encodeURIComponent(svg);
@@ -194,39 +195,6 @@ function drawTruckPins(
   }
 }
 
-function getPinGlowSprite(color: string): HTMLCanvasElement {
-  let sprite = pinGlowCache.get(color);
-  if (sprite) return sprite;
-
-  const size = 20;
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return canvas;
-
-  const cx = size / 2;
-  const cy = size / 2;
-  const outer = size * 0.45;
-  const inner = size * 0.14;
-  const glow = ctx.createRadialGradient(cx, cy, inner, cx, cy, outer);
-  glow.addColorStop(0, 'rgba(255,255,255,0.95)');
-  glow.addColorStop(0.2, 'rgba(255,255,255,0.75)');
-  glow.addColorStop(0.45, colorToRgba(color, 0.7));
-  glow.addColorStop(1, colorToRgba(color, 0));
-  ctx.fillStyle = glow;
-  ctx.beginPath();
-  ctx.arc(cx, cy, outer, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.fillStyle = '#fff';
-  ctx.beginPath();
-  ctx.arc(cx, cy, 1.6, 0, Math.PI * 2);
-  ctx.fill();
-
-  pinGlowCache.set(color, canvas);
-  return canvas;
-}
 
 function ensureSpaceSurfacePattern(ctx: CanvasRenderingContext2D): CanvasPattern | null {
   if (spaceSurfacePattern && spaceSurfacePatternCtx === ctx) return spaceSurfacePattern;
@@ -1799,12 +1767,6 @@ function drawStoragePinGrid(
   ctx.globalAlpha = 1;
 }
 
-function drawCarriedPinGlow(ctx: CanvasRenderingContext2D, glowColor: string) {
-  const sprite = getPinGlowSprite(glowColor);
-  const size = sprite.width;
-  ctx.drawImage(sprite, -size / 2, -size / 2, size, size);
-}
-
 function drawCars(ctx: CanvasRenderingContext2D, filter?: 'road' | 'highway' | Set<string>) {
   for (const car of cars) {
     if (filter === 'road') {
@@ -1820,7 +1782,7 @@ function drawCars(ctx: CanvasRenderingContext2D, filter?: 'road' | 'highway' | S
     const renderPos = getVehicleRenderOrigin(car, carLen);
     if (!circleVisible(renderPos.x, renderPos.y, carLen * 0.8, 10)) continue;
     const vehicleSvg = car.isTruck ? themeAssets.sprites.truck : themeAssets.sprites.car;
-    const vehicleImg = car.isTruck ? getTruckImage(vehicleSvg, car.color) : getIconImage(vehicleSvg, car.color);
+    const vehicleImg = car.isTruck ? getTruckImage(vehicleSvg, car.color) : getIconImage(vehicleSvg, car.color, car.carryingPin);
 
     ctx.save();
     ctx.translate(renderPos.x, renderPos.y);
@@ -1831,7 +1793,6 @@ function drawCars(ctx: CanvasRenderingContext2D, filter?: 'road' | 'highway' | S
     if (vehicleImg.complete && vehicleImg.naturalWidth > 0) {
       ctx.drawImage(vehicleImg, -carLen / 2, -carWid / 2, carLen, carWid);
       if (car.isTruck) drawTruckPins(ctx, vehicleSvg, carLen, carWid, car.pinsCarried, car.color);
-      else if (car.carryingPin) drawCarriedPinGlow(ctx, car.color);
       ctx.restore();
       continue;
     }
@@ -1864,7 +1825,6 @@ function drawCars(ctx: CanvasRenderingContext2D, filter?: 'road' | 'highway' | S
     }
 
     if (car.isTruck) drawTruckPins(ctx, vehicleSvg, carLen, carWid, car.pinsCarried, car.color);
-    else if (car.carryingPin) drawCarriedPinGlow(ctx, car.color);
 
     ctx.globalAlpha = 1;
     ctx.restore();
