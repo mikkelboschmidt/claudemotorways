@@ -2,7 +2,7 @@ import { Car } from './types.ts';
 import { CAR_SPEED, CAR_ACCEL, CAR_DECEL, CAR_LEN, MIN_GAP, LANE_W, SPAWN_INTERVAL, MAX_CARS_PER_HOUSE, PARK_DURATION, PARK_ANIM_SPEED, TURN_LERP, CORNER_BRAKE_DIST, CORNER_MIN_SPEED, CORNER_MED_SPEED, HIGHWAY_SPEED, TRUCK_SPEED, TRUCK_CAPACITY, MAX_TRUCKS_PER_STORAGE, TRUCK_SPAWN_INTERVAL, UTURN_STUCK_THRESHOLD, UTURN_COOLDOWN } from './constants.ts';
 import { edges, getEdgeBetween, graphVersion, nodes } from './graph.ts';
 import { isRedLight, isAmberLight, trafficLightByNode } from './trafficLights.ts';
-import { buildings, buildingById, getPinPixelPos } from './buildings.ts';
+import { buildings, buildingById, getBuildingCenter, getPinPixelPos } from './buildings.ts';
 import { findPath } from './pathfinding.ts';
 import { addScore } from './score.ts';
 import { getHighwayPose, highwayEdgeSet } from './highway.ts';
@@ -63,10 +63,50 @@ export function resetSpawnTimer() {
   spawnTimer = SPAWN_INTERVAL - 30;
 }
 
+// Teleport a driving car back to its home building (house for cars, storage for
+// trucks). Used when the road under a car is removed so it reappears at home
+// instead of vanishing. Returns false if home is gone and caller should delete.
+function teleportCarHome(car: Car): boolean {
+  const homeId = car.isTruck ? car.storageBuildingId : car.homeBuildingId;
+  const home = buildingById.get(homeId);
+  if (!home) return false;
+
+  const center = getBuildingCenter(home);
+  car.x = center.x;
+  car.y = center.y;
+  car.state = 'parked';
+  car.parkProgress = 1;
+  car.parkedAt = frameCount;
+  car.parkTimer = PARK_DURATION;
+  car.parkSlot = 0;
+  car.parkStartX = center.x;
+  car.parkStartY = center.y;
+  car.parkTargetX = center.x;
+  car.parkTargetY = center.y;
+  car.parkCx1 = center.x;
+  car.parkCy1 = center.y;
+  car.parkCx2 = center.x;
+  car.parkCy2 = center.y;
+  car.parkEndAngle = 0;
+  car.angle = 0;
+  car.targetAngle = 0;
+  car.speed = 0;
+  car.stuckFrames = 0;
+  car.uTurnCooldown = 0;
+  car.lastUTurnEdgeId = '';
+  car.carryingPin = false;
+  car.offloading = false;
+  car.collectProgress = 0;
+  car.nextState = car.isTruck ? 'toFactory' : 'toWork';
+  if (car.isTruck) car.pinsCarried = 0;
+  return true;
+}
+
 export function removeCarsForEdge(edgeId: string) {
   for (let i = cars.length - 1; i >= 0; i--) {
-    if (cars[i].edgeId === edgeId && isDriving(cars[i].state)) {
-      cars.splice(i, 1);
+    const c = cars[i];
+    if (c.edgeId === edgeId && isDriving(c.state)) {
+      if (!teleportCarHome(c)) cars.splice(i, 1);
     }
   }
 }
@@ -791,14 +831,18 @@ export function updateCars() {
   frameCount++;
   chainFrameLock.clear();
 
-  // Remove cars whose edge was deleted
+  // Graph changed: teleport stranded cars home, and replan remaining driving
+  // cars so they immediately take advantage of new roads (or route around gaps).
   if (graphVersion !== lastGraphVersion) {
     lastGraphVersion = graphVersion;
     for (let i = cars.length - 1; i >= 0; i--) {
       const c = cars[i];
-      if ((isDriving(c.state)) && !edges.has(c.edgeId)) {
-        cars.splice(i, 1);
+      if (isDriving(c.state) && !edges.has(c.edgeId)) {
+        if (!teleportCarHome(c)) cars.splice(i, 1);
       }
+    }
+    for (const c of cars) {
+      if (isDriving(c.state)) rerouteCarInPlace(c);
     }
   }
 
