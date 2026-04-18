@@ -8,7 +8,7 @@ import { removeCarsForEdge, removeCarsForBuilding } from './cars.ts';
 import { saveGame } from './save.ts';
 import { playSfx } from './sfx.ts';
 import { highwayPhase, highwayStartGx, highwayStartGy, draggingHighwayId, draggingHandleIndex, setHighwayPhase, setHighwayStart, setHighwayPreviewEnd, setDraggingHighwayId, setDraggingHandleIndex, createHighway, findHighwayAtPixel, findHighwayHandleAtPixel, removeHighway, updateHighwayMid, rebuildHighway, highways } from './highway.ts';
-import { createRoundabout, removeRoundabout, findRoundaboutAtPixel, segmentCutsRoundabout, roundaboutEdgeSet, roundaboutConnectionEdgeSet, findRoundaboutAtTile, findBestRoundaboutEntry, addRoundaboutConnectionEdge, Roundabout } from './roundabout.ts';
+import { createRoundabout, removeRoundabout, findRoundaboutAtPixel, segmentCutsRoundabout, roundaboutEdgeSet, roundaboutConnectionEdgeSet, findRoundaboutAtTile, findBestRoundaboutEntry, addRoundaboutConnectionEdge, autoConnectRoadsToRoundabout, Roundabout } from './roundabout.ts';
 import { recordRoad, recordHighway, recordRoundabout } from './run.ts';
 import { createTrafficLight, findTrafficLightAtTile, removeTrafficLight } from './trafficLights.ts';
 import { tunnelPhase, tunnelStartGx, tunnelStartGy, setTunnelPhase, setTunnelStart, setTunnelPreviewEnd, createTunnel, findTunnelAtPixel, removeTunnel } from './tunnel.ts';
@@ -306,7 +306,9 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
       const gridX = Math.floor(px / GRID) - 1; // center the 3x3 on the clicked tile
       const gridY = Math.floor(py / GRID) - 1;
       pendingTap = () => {
-        if (createRoundabout(gridX, gridY)) {
+        const ra = createRoundabout(gridX, gridY);
+        if (ra) {
+          autoConnectRoadsToRoundabout(ra);
           recordRoundabout();
           playSfx('build');
           saveGame();

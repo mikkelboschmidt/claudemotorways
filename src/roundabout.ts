@@ -1,6 +1,8 @@
 import { addEdgeRaw, ensureNodeRaw, removeEdge, nodeKey, nodes, edges, parseKey, bumpGraphVersion } from './graph.ts';
 import { GRID, HALF, ROAD_W } from './constants.ts';
 import { isInsideBuilding } from './buildings.ts';
+import { highwayEdgeSet } from './highway.ts';
+import { tunnelEdgeSet } from './tunnel.ts';
 
 export interface Roundabout {
   id: number;
@@ -52,13 +54,27 @@ export function isRoundaboutInterior(gx: number, gy: number): boolean {
   return false;
 }
 
+function isCardinalRingNode(gx: number, gy: number): boolean {
+  for (const ra of roundabouts) {
+    if ((gx === ra.gx + 1 && gy === ra.gy) ||
+        (gx === ra.gx + 2 && gy === ra.gy + 1) ||
+        (gx === ra.gx + 1 && gy === ra.gy + 2) ||
+        (gx === ra.gx     && gy === ra.gy + 1)) return true;
+  }
+  return false;
+}
+
 // Check if a road segment cuts through a roundabout's interior
 export function segmentCutsRoundabout(gx1: number, gy1: number, gx2: number, gy2: number): boolean {
   const dx = gx2 - gx1;
   const dy = gy2 - gy1;
   if (dx !== 0 && dy !== 0) {
-    if (isRoundaboutInterior(gx1 + dx, gy1) || isRoundaboutInterior(gx1, gy1 + dy)) {
-      return true;
+    // Diagonal segments to/from a cardinal ring node are valid connections —
+    // skip the intermediate-tile check so they aren't falsely blocked.
+    if (!isCardinalRingNode(gx1, gy1) && !isCardinalRingNode(gx2, gy2)) {
+      if (isRoundaboutInterior(gx1 + dx, gy1) || isRoundaboutInterior(gx1, gy1 + dy)) {
+        return true;
+      }
     }
   }
   if (isRoundaboutInterior(gx1, gy1) || isRoundaboutInterior(gx2, gy2)) {
@@ -72,16 +88,6 @@ export function canPlaceRoundabout(gx: number, gy: number): boolean {
     for (let ty = gy; ty < gy + 3; ty++) {
       if (isInsideBuilding(tx, ty)) return false;
       if (isInsideRoundaboutTile(tx, ty)) return false;
-      // Non-ring tiles must not have road edges
-      const isRingNode =
-        (tx === gx + 1 && ty === gy) ||
-        (tx === gx + 2 && ty === gy + 1) ||
-        (tx === gx + 1 && ty === gy + 2) ||
-        (tx === gx && ty === gy + 1);
-      if (!isRingNode) {
-        const node = nodes.get(nodeKey(tx, ty));
-        if (node && node.edges.size > 0) return false;
-      }
     }
   }
   return true;
@@ -282,6 +288,123 @@ export function addRoundaboutConnectionEdge(ra: Roundabout, outerGx: number, out
   const edge = addEdgeRaw(outerKey, nk, outerPx, outerPy, ringPx, ringPy);
   if (edge) {
     roundaboutConnectionEdgeSet.add(edge.id);
+  }
+}
+
+// When a roundabout is placed on top of existing roads, remove interior segments
+// and auto-connect the dangling road ends to the nearest ring node.
+export function autoConnectRoadsToRoundabout(ra: Roundabout): void {
+  const { gx, gy } = ra;
+
+  function isInsideBox(ngx: number, ngy: number): boolean {
+    return ngx >= gx && ngx <= gx + 2 && ngy >= gy && ngy <= gy + 2;
+  }
+
+  function isCardinalRing(ngx: number, ngy: number): boolean {
+    return (ngx === gx + 1 && ngy === gy) ||
+           (ngx === gx + 2 && ngy === gy + 1) ||
+           (ngx === gx + 1 && ngy === gy + 2) ||
+           (ngx === gx     && ngy === gy + 1);
+  }
+
+  const edgesToRemove: string[] = [];
+  const approachNodes: Array<[number, number]> = [];
+
+  for (const [eid, edge] of edges) {
+    if (roundaboutEdgeSet.has(eid)) continue;
+    if (roundaboutConnectionEdgeSet.has(eid)) continue;
+    if (highwayEdgeSet.has(eid)) continue;
+    if (tunnelEdgeSet.has(eid)) continue;
+    // Skip edges involving synthetic (non-integer-grid) nodes
+    if (edge.fromKey.startsWith('ra') || edge.toKey.startsWith('ra')) continue;
+
+    const fromNode = nodes.get(edge.fromKey);
+    const toNode = nodes.get(edge.toKey);
+    if (!fromNode || !toNode) continue;
+
+    const fgx = Math.round(fromNode.gx);
+    const fgy = Math.round(fromNode.gy);
+    const tgx = Math.round(toNode.gx);
+    const tgy = Math.round(toNode.gy);
+
+    const fromIn = isInsideBox(fgx, fgy);
+    const toIn = isInsideBox(tgx, tgy);
+    if (!fromIn && !toIn) continue;
+
+    if (fromIn && toIn) {
+      edgesToRemove.push(eid);
+    } else if (fromIn && !toIn) {
+      if (isCardinalRing(fgx, fgy)) {
+        // Existing road from ring node outward — promote to connection edge
+        roundaboutConnectionEdgeSet.add(eid);
+      } else {
+        edgesToRemove.push(eid);
+        approachNodes.push([tgx, tgy]);
+      }
+    } else {
+      // !fromIn && toIn
+      if (isCardinalRing(tgx, tgy)) {
+        roundaboutConnectionEdgeSet.add(eid);
+      } else {
+        edgesToRemove.push(eid);
+        approachNodes.push([fgx, fgy]);
+      }
+    }
+  }
+
+  for (const eid of edgesToRemove) {
+    removeEdge(eid);
+  }
+
+  const seen = new Set<string>();
+
+  function connectIfNew(ogx: number, ogy: number) {
+    const k = `${ogx},${ogy}`;
+    if (seen.has(k)) return;
+    seen.add(k);
+    const entry = findBestRoundaboutEntry(ra, ogx, ogy);
+    if (!entry) return;
+    addRoundaboutConnectionEdge(ra, ogx, ogy, entry.ringIndex);
+  }
+
+  for (const [ogx, ogy] of approachNodes) {
+    connectIfNew(ogx, ogy);
+  }
+
+  // Second pass: scan the one-tile rim just outside the 3x3 for road nodes whose
+  // road was drawn right up to the boundary without crossing inside.
+  // Only connect a rim node if ALL of its road-edge neighbors are outside the
+  // extended zone (rim + box) — meaning it's genuinely a terminal approach, not
+  // a road passing tangentially along the outside.
+  for (let tx = gx - 1; tx <= gx + 3; tx++) {
+    for (let ty = gy - 1; ty <= gy + 3; ty++) {
+      if (isInsideBox(tx, ty)) continue;
+      const node = nodes.get(nodeKey(tx, ty));
+      if (!node) continue;
+
+      let hasRoad = false;
+      let hasZoneNeighbor = false;
+      for (const eid of node.edges) {
+        if (roundaboutEdgeSet.has(eid) || roundaboutConnectionEdgeSet.has(eid) ||
+            highwayEdgeSet.has(eid) || tunnelEdgeSet.has(eid)) continue;
+        hasRoad = true;
+        const edge = edges.get(eid);
+        if (!edge) continue;
+        const neighborKey = edge.fromKey === nodeKey(tx, ty) ? edge.toKey : edge.fromKey;
+        const nNode = nodes.get(neighborKey);
+        if (!nNode) continue;
+        const ngx = Math.round(nNode.gx);
+        const ngy = Math.round(nNode.gy);
+        // Is the neighbor inside the 5×5 extended zone (box ∪ rim)?
+        if (ngx >= gx - 1 && ngx <= gx + 3 && ngy >= gy - 1 && ngy <= gy + 3) {
+          hasZoneNeighbor = true;
+          break;
+        }
+      }
+
+      if (!hasRoad || hasZoneNeighbor) continue;
+      connectIfNew(tx, ty);
+    }
   }
 }
 

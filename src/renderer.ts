@@ -1304,7 +1304,8 @@ let terrainFlatOriginX = 0;
 let terrainFlatOriginY = 0;
 
 function isGroundEdge(eid: string): boolean {
-  return !highwayEdgeSet.has(eid) && !tunnelEdgeSet.has(eid) && !roundaboutEdgeSet.has(eid);
+  return !highwayEdgeSet.has(eid) && !tunnelEdgeSet.has(eid) &&
+         !roundaboutEdgeSet.has(eid) && !roundaboutConnectionEdgeSet.has(eid);
 }
 
 function rebuildTerrainFlatCache() {
@@ -1348,6 +1349,12 @@ function rebuildTerrainFlatCache() {
   terrainFlatOriginY = minY - TERRAIN_FLAT_PAD;
   const w = maxX - minX + TERRAIN_FLAT_PAD * 2;
   const h = maxY - minY + TERRAIN_FLAT_PAD * 2;
+
+  if (!(w > 0) || !(h > 0)) {
+    terrainFlatCache = null;
+    terrainFlatCacheVersion = graphVersion;
+    return;
+  }
 
   if (!terrainFlatCache) terrainFlatCache = document.createElement('canvas');
   terrainFlatCache.width = w;
@@ -2449,30 +2456,76 @@ function drawToolbar(
 
   // Current selection label — bottom left
   let label = '';
+  let hint = '';
   switch (activeTool) {
-    case 'addRoad': label = currentThemeId === 'space' ? 'Dual Rail' : 'Road'; break;
-    case 'addNarrow': label = currentThemeId === 'space' ? 'Single Rail' : 'Narrow Road'; break;
-    case 'addHighway': label = currentThemeId === 'space' ? 'High-Speed Rail' : 'Highway'; break;
-    case 'addRoundabout': label = currentThemeId === 'space' ? 'Rail Junction' : 'Roundabout'; break;
-    case 'addTrafficLight': label = currentThemeId === 'space' ? 'Signal Node' : 'Traffic Light'; break;
-    case 'addTunnel': label = currentThemeId === 'space' ? 'Sub-terrain Rail' : 'Tunnel'; break;
-    case 'demolish': label = 'Demolish'; break;
+    case 'addRoad':
+      label = currentThemeId === 'space' ? 'Dual Rail' : 'Road';
+      hint = 'Click and drag to draw';
+      break;
+    case 'addNarrow':
+      label = currentThemeId === 'space' ? 'Single Rail' : 'Narrow Road';
+      hint = 'Click and drag to draw';
+      break;
+    case 'addHighway':
+      label = currentThemeId === 'space' ? 'High-Speed Rail' : 'Highway';
+      hint = 'Tap start, then end on existing roads';
+      break;
+    case 'addRoundabout':
+      label = currentThemeId === 'space' ? 'Rail Junction' : 'Roundabout';
+      hint = 'Tap anywhere to place — roads auto-connect';
+      break;
+    case 'addTrafficLight':
+      label = currentThemeId === 'space' ? 'Signal Node' : 'Traffic Light';
+      hint = 'Tap to place at a road intersection';
+      break;
+    case 'addTunnel':
+      label = currentThemeId === 'space' ? 'Sub-terrain Rail' : 'Tunnel';
+      hint = 'Tap start, then end on existing roads';
+      break;
+    case 'demolish':
+      label = 'Demolish';
+      hint = 'Tap any road or building to remove';
+      break;
     case 'addBuilding':
       switch (selectedBuildingType) {
-        case 'house': label = currentThemeId === 'space' ? 'Processing Unit' : 'Residential'; break;
-        case 'factory': label = currentThemeId === 'space' ? 'Mine' : 'Factory'; break;
-        case 'storage': label = 'Storage'; break;
+        case 'house':
+          label = currentThemeId === 'space' ? 'Processing Unit' : 'Residential';
+          hint = 'Tap empty terrain to place';
+          break;
+        case 'factory':
+          label = currentThemeId === 'space' ? 'Mine' : 'Factory';
+          hint = 'Tap empty terrain to place';
+          break;
+        case 'storage':
+          label = 'Storage';
+          hint = 'Tap empty terrain to place';
+          break;
       }
       break;
   }
   if (label) {
-    ctx.font = 'bold 13px sans-serif';
+    const LABEL_SIZE = 13;
+    const HINT_SIZE = 10;
+    const hintGap = 3;
+    const baseY = height - BTN_MARGIN;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'bottom';
+    // Bold name
+    ctx.font = `bold ${LABEL_SIZE}px sans-serif`;
     ctx.fillStyle = theme.labelShadow;
-    ctx.fillText(label, BTN_MARGIN + 1, height - BTN_MARGIN + 1);
+    ctx.fillText(label, BTN_MARGIN + 1, baseY - HINT_SIZE - hintGap + 1);
     ctx.fillStyle = theme.labelText;
-    ctx.fillText(label, BTN_MARGIN, height - BTN_MARGIN);
+    ctx.fillText(label, BTN_MARGIN, baseY - HINT_SIZE - hintGap);
+    // Hint line
+    if (hint) {
+      ctx.font = `${HINT_SIZE}px sans-serif`;
+      ctx.fillStyle = theme.labelShadow;
+      ctx.fillText(hint, BTN_MARGIN + 1, baseY + 1);
+      ctx.fillStyle = theme.labelText;
+      ctx.globalAlpha = 0.75;
+      ctx.fillText(hint, BTN_MARGIN, baseY);
+      ctx.globalAlpha = 1;
+    }
   }
 }
 
