@@ -2,8 +2,7 @@ import { Building, ConnectionSide } from './types.ts';
 import { nodeKey, nodes, addEdge, bumpGraphVersion } from './graph.ts';
 import { GRID, HALF, PIN_SPAWN_INTERVAL, PIN_COOLDOWN, FACTORY_MAX_PINS, FACTORY_MAX_PARKED, STORAGE_W, STORAGE_H, STORAGE_MAX_PINS, STORAGE_MAX_PARKED } from './constants.ts';
 import { resetSpawnTimer, evictCarsFromFactory, removeCarsForBuilding } from './cars.ts';
-import { addScore } from './score.ts';
-import { recordBuilding, recordBurnout, recordDemolish } from './run.ts';
+import { recordBuilding, recordDemolish } from './run.ts';
 import { getFactorySprite, getStorageSprite } from './sprites.ts';
 import { isInsideRoundaboutTile } from './roundabout.ts';
 
@@ -35,14 +34,8 @@ export function updatePins() {
     if (b.pins < b.maxPins) {
       b.pins++;
       b.pinCooldown = PIN_COOLDOWN;
-    } else {
-      // Pins overflowed — shut down the factory
-      b.disabled = true;
-      b.pins = 0;
-      addScore(-20);
-      recordBurnout();
-      evictCarsFromFactory(b.id);
     }
+    // When full, factory stalls in warning state — pins pulse until cars collect
   }
 }
 

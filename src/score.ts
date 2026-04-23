@@ -138,10 +138,15 @@ export function updateMetrics(cars: Car[], buildings: Building[]) {
   const infraScore = totalBuildings + roadCount * 0.1 + highwayCount * 0.5 + roundaboutCount * 0.3;
   const scaleMultiplier = 1 + Math.log2(Math.max(1, infraScore)) * 0.15;
 
-  // Burnout penalty: each burned factory drags productivity down
-  const burnedFactories = buildings.filter(b => b.type === 'factory' && b.disabled).length;
-  const burnoutPenalty = Math.max(0, 1 - burnedFactories * 0.1);
+  // Overload penalty: factories stalled at max pins drag productivity down
+  const factories = buildings.filter(b => b.type === 'factory');
+  const overloadWeight = factories.reduce((sum, b) => {
+    if (b.maxPins === 0) return sum;
+    const fillRatio = b.pins / b.maxPins;
+    return sum + Math.max(0, (fillRatio - 0.67) / 0.33); // 0 below 67%, ramps to 1 at 100%
+  }, 0);
+  const overloadPenalty = Math.max(0, 1 - overloadWeight * 0.12);
 
-  productivityScore = Math.round(baseThroughput * flowQuality * scaleMultiplier * burnoutPenalty);
+  productivityScore = Math.round(baseThroughput * flowQuality * scaleMultiplier * overloadPenalty);
   if (productivityScore > peakProductivity) peakProductivity = productivityScore;
 }

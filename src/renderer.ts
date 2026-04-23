@@ -1505,7 +1505,10 @@ function drawBuildingBodies(ctx: CanvasRenderingContext2D) {
     } else if (b.type === 'factory') {
       if (sprite) {
         drawSpriteLayer(ctx, sprite.building, sprite, pos.x, pos.y);
-        drawFactoryPins(ctx, pos.x, pos.y, sprite.pinRects, b.pins, b.pinCooldown, b.disabled, color);
+        const warnPulse = b.maxPins > 0 && b.pins >= b.maxPins
+          ? 0.4 + 0.6 * Math.sin(Date.now() * (Math.PI * 2 * 1.2) / 1000)
+          : 0;
+        drawFactoryPins(ctx, pos.x, pos.y, sprite.pinRects, b.pins, b.pinCooldown, b.disabled, color, warnPulse);
       } else {
         drawFactory(ctx, b, pos);
       }
@@ -1524,6 +1527,8 @@ function drawBuildingBodies(ctx: CanvasRenderingContext2D) {
     }
   }
 }
+
+
 
 function drawFactory(ctx: CanvasRenderingContext2D, b: typeof buildings[0], pos: { x: number; y: number; w: number; h: number }) {
   const m = 2; // outer margin
@@ -1590,13 +1595,15 @@ function drawFactoryPins(
   pinCooldown: number,
   disabled: boolean,
   color: string,
+  warningPulse = 0,
 ) {
   if (pinRects.length === 0) return;
 
   const activePins = Math.max(0, Math.min(pinRects.length, pins));
   const spawnT = activePins > 0 && pinCooldown > 0 ? 1 - pinCooldown / PIN_COOLDOWN : 1;
   const darkestColor = darkenColor(color, 0.55);
-  const activeColor = disabled ? color : '#FFFFFF';
+  const baseActive = disabled ? color : '#FFFFFF';
+  const activeColor = warningPulse > 0 ? lerpColor(baseActive, '#FF6B6B', warningPulse) : baseActive;
 
   for (let i = 0; i < pinRects.length; i++) {
     const rect = pinRects[i];
