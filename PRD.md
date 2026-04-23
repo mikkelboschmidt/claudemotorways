@@ -218,11 +218,23 @@ Target speeds are applied via smooth acceleration/deceleration each frame.
 
 Weighted Dijkstra shortest path on the road graph.
 
-- **Edge weight** = `length × highwayFactor × (1 + congestionPenalty)`
+- **Edge weight** = `length × highwayFactor × tunnelFactor × narrowFactor × jitter × (1 + congestionPenalty)`
 - **Highway factor**: 0.65 (strongly preferred).
-- **Congestion**: Counts stopped cars (speed ≤ 0.1) and moving cars on each edge. Density = count / (length / 40). Penalty = 1.8^density - 1 (exponential).
-- **Car routing**: Regular cars use `pickBestPinSource()` which scores all reachable factories and storages by `need × 10 - pathLength`, where need = available pins minus cars already heading there.
+- **Tunnel factor**: 0.7.
+- **Narrow factor**: baseline 1.15 because narrow chains carry half capacity. Increases when the chain is contested: 1.3 if other cars are on it, 1.8 if a stopped car is present, 2.5 if the chain is direction-locked against us. This pushes pathfinding toward parallel double-rail routes when the single rail is a bottleneck.
+- **Jitter**: deterministic ≤1% per-edge multiplier so parallel equal-cost paths split traffic instead of stacking on the lexicographically-first edge.
+- **Congestion**: Counts stopped cars (speed ≤ 0.1, weighted 2×) and moving cars on each edge. Density = count / (length / 40). Penalty = 1.8^density − 1 (exponential).
+- **Car routing**: Regular cars use `pickBestPinSource()` which scores all reachable factories and storages by `need × 10 − pathLength`, where need = available pins minus cars already heading there.
 - **Truck routing**: Uses `pickBestFactory()` with the same scoring formula but only considers factories.
+- **Target hysteresis**: When a car reroutes mid-trip, its current target is preserved unless an alternative scores at least 5 points higher. Prevents oscillation between near-equal factories as congestion fluctuates.
+
+### Dynamic Replanning
+
+Cars re-evaluate their path during a trip in three ways:
+
+1. **Graph-change replan**: When roads are added or removed, every driving car replans. If a newly-built shortcut lies *behind* the car and the u-turn destination is ≥15% cheaper, the car u-turns (subject to the normal u-turn guards: no narrow/oneway/highway/roundabout/tunnel, cooldown, same-edge oscillation check).
+2. **Periodic stale-path check**: Every 120 frames (~2s) each driving car, staggered by `car.id`, compares its remaining path cost against a fresh Dijkstra result. If the fresh path is <80% of the current remaining cost and diverges at the very next hop, the car replans in place. Catches organic congestion shifts as well as shortcuts the graph-change pass couldn't reach.
+3. **Stuck-triggered replan**: After 90 frames stopped, a car reroutes in place. After 600 frames (10s), it attempts a u-turn (falling back to in-place replan).
 
 ---
 

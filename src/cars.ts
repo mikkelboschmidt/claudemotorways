@@ -3,7 +3,7 @@ import { CAR_SPEED, CAR_ACCEL, CAR_DECEL, CAR_LEN, MIN_GAP, LANE_W, SPAWN_INTERV
 import { edges, getEdgeBetween, graphVersion, nodes } from './graph.ts';
 import { isRedLight, isAmberLight, trafficLightByNode } from './trafficLights.ts';
 import { buildings, buildingById, getBuildingCenter, getPinPixelPos } from './buildings.ts';
-import { findPath } from './pathfinding.ts';
+import { findPath, findPathWithCost, pathCost } from './pathfinding.ts';
 import { addScore } from './score.ts';
 import { getHighwayPose, highwayEdgeSet } from './highway.ts';
 import { roundaboutEdgeSet } from './roundabout.ts';
@@ -438,6 +438,55 @@ function lockNarrowChain(edgeId: string, dir: 1 | -1) {
   if (chain) chainFrameLock.set(chain, entryNode);
 }
 
+// Pathfinding-facing helper: describe how contested a narrow chain is for a car
+// entering `edgeId` from `entryNodeKey`. Cached per simulation tick.
+export type NarrowChainPressure = 'clear' | 'occupied' | 'stopped' | 'blocked';
+const narrowPressureCache = new Map<string, NarrowChainPressure>();
+
+function clearNarrowPressureCache() { narrowPressureCache.clear(); }
+
+export function getNarrowChainPressure(edgeId: string, entryNodeKey: string): NarrowChainPressure {
+  const edge = edges.get(edgeId);
+  if (!edge || !edge.narrow) return 'clear';
+  ensureNarrowChains();
+  const chain = narrowChainMap.get(edgeId);
+  if (!chain) return 'clear';
+
+  const cacheKey = `${edgeId}|${entryNodeKey}`;
+  const cached = narrowPressureCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
+  const dir: 1 | -1 = edge.fromKey === entryNodeKey ? 1 : -1;
+  const entryNode = dir === 1 ? edge.fromKey : edge.toKey;
+
+  let result: NarrowChainPressure = 'clear';
+  const frameLock = chainFrameLock.get(chain);
+  if (frameLock !== undefined && frameLock !== entryNode) {
+    result = 'blocked';
+  } else {
+    let anyOccupant = false;
+    let anyStopped = false;
+    for (const c of cars) {
+      if (!isDriving(c.state)) continue;
+      if (!chain.has(c.edgeId)) continue;
+      anyOccupant = true;
+      const cEdge = edges.get(c.edgeId)!;
+      const carExitNode = c.edgeDir === 1 ? cEdge.toKey : cEdge.fromKey;
+      const headsToEntry = carExitNode === entryNode ||
+        reachableThroughNarrow(carExitNode, entryNode, chain, c.edgeId);
+      if (headsToEntry) { result = 'blocked'; break; }
+      if (c.speed <= 0.1) anyStopped = true;
+    }
+    if (result !== 'blocked') {
+      if (anyStopped) result = 'stopped';
+      else if (anyOccupant) result = 'occupied';
+    }
+  }
+
+  narrowPressureCache.set(cacheKey, result);
+  return result;
+}
+
 function isEdgeEntryClear(edgeId: string, fromKey: string, _toKey: string, currentEdgeId?: string): boolean {
   const edge = edges.get(edgeId)!;
   const dir: 1 | -1 = edge.fromKey === fromKey ? 1 : -1;
@@ -830,6 +879,7 @@ function setupDepartPath(car: Car) {
 export function updateCars() {
   frameCount++;
   chainFrameLock.clear();
+  clearNarrowPressureCache();
 
   // Graph changed: teleport stranded cars home, and replan remaining driving
   // cars so they immediately take advantage of new roads (or route around gaps).
@@ -842,8 +892,17 @@ export function updateCars() {
       }
     }
     for (const c of cars) {
-      if (isDriving(c.state)) rerouteCarInPlace(c);
+      if (!isDriving(c.state)) continue;
+      if (tryBackwardReroute(c)) continue;
+      rerouteCarInPlace(c);
     }
+  }
+
+  // Periodic stale-path check — staggered so each car is checked ~every STALE_CHECK_PERIOD frames
+  for (const c of cars) {
+    if (!isDriving(c.state)) continue;
+    if ((frameCount + c.id) % STALE_CHECK_PERIOD !== 0) continue;
+    considerStalePath(c);
   }
 
   const buildingCarIndex = buildBuildingCarIndex();
@@ -1509,6 +1568,39 @@ export function updateCars() {
   }
 }
 
+// Periodic stale-path check: every STALE_CHECK_PERIOD frames (staggered by car.id),
+// see if a materially cheaper path to the same destination exists. Lets cars
+// pick up newly-built shortcuts or congestion easing without waiting to get stuck.
+const STALE_CHECK_PERIOD = 120;
+const STALE_CHECK_THRESHOLD = 0.8; // fresh must be <80% of current remaining cost
+
+function considerStalePath(car: Car) {
+  if (!isDriving(car.state)) return;
+  if (car.pathIndex >= car.path.length) return;
+  // Don't replan mid-maneuver on structured road types
+  if (highwayEdgeSet.has(car.edgeId)) return;
+  if (roundaboutEdgeSet.has(car.edgeId)) return;
+  if (tunnelEdgeSet.has(car.edgeId)) return;
+
+  const targetNode = car.path[car.pathIndex];
+  const destNode = car.path[car.path.length - 1];
+  if (!targetNode || !destNode || targetNode === destNode) return;
+
+  const currentRemaining = car.path.slice(car.pathIndex);
+  const currentCost = pathCost(currentRemaining);
+  const fresh = findPathWithCost(targetNode, destNode);
+  if (!fresh || fresh.path.length < 2) return;
+
+  // If the first hop is identical, the prefix of the route is unchanged — skip
+  if (currentRemaining.length >= 2 && fresh.path[1] === currentRemaining[1]) return;
+
+  if (fresh.cost < currentCost * STALE_CHECK_THRESHOLD) {
+    const behindNode = car.path[car.pathIndex - 1] ?? car.path[0];
+    car.path = [behindNode, ...fresh.path];
+    car.pathIndex = 1;
+  }
+}
+
 // Reroute a driving car in place — keeps the car on its current edge, only changes path ahead
 function rerouteCarInPlace(car: Car) {
   if (car.pathIndex >= car.path.length) return;
@@ -1525,14 +1617,14 @@ function rerouteCarInPlace(car: Car) {
   if (car.state === 'toWork') {
     const sameColorSources = buildings.filter(b =>
       (b.type === 'factory' || b.type === 'storage') && b.color === car.color && !b.disabled);
-    const result = pickBestPinSource(targetNode, sameColorSources, cars, findPath);
+    const result = pickBestPinSource(targetNode, sameColorSources, cars, findPath, car.workBuildingId);
     if (result) {
       car.workBuildingId = result.building.id;
       destKey = result.building.nodeKey;
     }
   } else if (car.state === 'toFactory') {
     const sameColorFactories = buildings.filter(b => b.type === 'factory' && b.color === car.color && !b.disabled);
-    const result = pickBestFactory(targetNode, sameColorFactories, cars, findPath);
+    const result = pickBestFactory(targetNode, sameColorFactories, cars, findPath, car.workBuildingId);
     if (result) {
       car.workBuildingId = result.factory.id;
       destKey = result.factory.nodeKey;
@@ -1621,6 +1713,69 @@ function performUTurn(car: Car): boolean {
   car.uTurnCooldown = UTURN_COOLDOWN;
   car.lastUTurnEdgeId = car.edgeId;
 
+  updateCarPosition(car);
+  return true;
+}
+
+// Backward-aware graph-change reroute: if the node behind the car starts a
+// materially cheaper path (e.g. user built a shortcut behind the car), u-turn
+// into it. Shares u-turn legality checks with performUTurn.
+const BACKWARD_REROUTE_THRESHOLD = 0.85;
+
+function tryBackwardReroute(car: Car): boolean {
+  if (car.pathIndex >= car.path.length) return false;
+  const edge = edges.get(car.edgeId);
+  if (!edge) return false;
+  if (edge.narrow || edge.oneway) return false;
+  if (highwayEdgeSet.has(car.edgeId)) return false;
+  if (roundaboutEdgeSet.has(car.edgeId)) return false;
+  if (tunnelEdgeSet.has(car.edgeId)) return false;
+  if (car.uTurnCooldown > 0) return false;
+  if (car.lastUTurnEdgeId === car.edgeId) return false;
+
+  const targetNode = car.path[car.pathIndex];
+  const behindNode = car.path[car.pathIndex - 1] ?? car.path[0];
+  if (!targetNode || !behindNode || targetNode === behindNode) return false;
+
+  let destKey: string | null = null;
+  if (car.state === 'toWork' || car.state === 'toFactory') {
+    const work = buildingById.get(car.workBuildingId);
+    if (work) destKey = work.nodeKey;
+  } else if (car.state === 'toHome') {
+    const home = buildingById.get(car.homeBuildingId);
+    if (home) destKey = home.nodeKey;
+  } else if (car.state === 'toStorage') {
+    const storage = buildingById.get(car.storageBuildingId);
+    if (storage) destKey = storage.nodeKey;
+  }
+  if (!destKey) return false;
+
+  const fwd = findPathWithCost(targetNode, destKey);
+  const bwd = findPathWithCost(behindNode, destKey);
+  if (!bwd || bwd.path.length < 2) return false;
+  const fwdCost = fwd ? fwd.cost : Infinity;
+  if (bwd.cost >= fwdCost * BACKWARD_REROUTE_THRESHOLD) return false;
+
+  // Opposite-lane clearance check (same as performUTurn)
+  const newDir: 1 | -1 = car.edgeDir === 1 ? -1 : 1;
+  const clearance = (MIN_GAP + CAR_LEN) * 2;
+  for (const c of cars) {
+    if (c.id === car.id) continue;
+    if (c.edgeId !== car.edgeId) continue;
+    if (!isDriving(c.state)) continue;
+    if (c.edgeDir === newDir) {
+      const dist = Math.abs(c.t - car.t) * edge.length;
+      if (dist < clearance) return false;
+    }
+  }
+
+  car.edgeDir = newDir;
+  car.path = [targetNode, ...bwd.path];
+  car.pathIndex = 1;
+  car.speed = 0;
+  car.stuckFrames = 0;
+  car.uTurnCooldown = UTURN_COOLDOWN;
+  car.lastUTurnEdgeId = car.edgeId;
   updateCarPosition(car);
   return true;
 }
