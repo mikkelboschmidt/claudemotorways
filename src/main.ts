@@ -349,8 +349,8 @@ function gameLoop() {
   const deltaMs = Math.min(rawDelta, MAX_FRAME_DELTA_MS);
   let steps = 0;
 
-  // Run simulation ticks based on speed and real elapsed time (paused while modal is open)
-  if (!demoModalOpen && !cityModalOpen && !productivityInfoModalOpen) {
+  // Only blocking modals should pause simulation; the productivity explainer stays live.
+  if (!demoModalOpen && !cityModalOpen) {
     accumulatorMs += deltaMs * gameSpeed;
     while (accumulatorMs >= FIXED_DT_MS && steps < MAX_STEPS_PER_FRAME) {
       simulationTick();
