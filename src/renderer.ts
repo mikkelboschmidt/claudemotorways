@@ -6,8 +6,8 @@ import { buildings, getBuildingPixelPos, getConnectionPixelPos, getConnectionPoi
 import { hoverGx, hoverGy, pendingRemoveTiles, touchBurst } from './roads.ts';
 import { cars } from './cars.ts';
 import { Car, RoadPreview, ToolType } from './types.ts';
-import { activeTool, selectedColor, selectedBuildingType, gearMenuOpen, demoModalOpen, cityModalOpen } from './toolbar.ts';
-import { collected, collectedPerMinute, generatedPerMinute, stalledVehicles, vehicleCount, productivityScore, peakProductivity, metricsExpanded } from './score.ts';
+import { activeTool, selectedColor, selectedBuildingType, gearMenuOpen, demoModalOpen, cityModalOpen, productivityInfoModalOpen } from './toolbar.ts';
+import { collected, collectedPerMinute, generatedPerMinute, stalledVehicles, vehicleCount, productivityScore, displayProductivityScore, peakProductivity, metricsExpanded, productivityHistory, PRODUCTIVITY_CHART_WINDOW_MS } from './score.ts';
 import { gameSpeed, SPEED_OPTIONS, SPEED_LABELS } from './speed.ts';
 import { highways, highwayEdgeSet, highwayPhase, highwayStartGx, highwayStartGy, highwayPreviewEndPx, highwayPreviewEndPy, computeBezierControls, draggingHighwayId, draggingHandleIndex } from './highway.ts';
 import { musicEnabled } from './music.ts';
@@ -18,7 +18,8 @@ import { trafficLights } from './trafficLights.ts';
 import { tunnels, tunnelEdgeSet, tunnelPhase, tunnelStartGx, tunnelStartGy, tunnelPreviewEndPx, tunnelPreviewEndPy } from './tunnel.ts';
 import { setCullBounds, rectVisible, circleVisible, segmentVisible } from './rendererCulling.ts';
 import { darkenHex, lightenColor, darkenColor, colorToRgba, lerpColor } from './rendererColor.ts';
-import { MODAL_BTN_W, MODAL_BTN_H, CITY_MODAL_W, CITY_MODAL_PAD, CITY_ROW_H, CITY_ROW_GAP, getModalMetrics, getCityModalMetrics, drawDemoModal, drawCityModal } from './rendererModals.ts';
+import { MODAL_BTN_W, MODAL_BTN_H, CITY_MODAL_W, CITY_MODAL_PAD, CITY_ROW_H, CITY_ROW_GAP, PRODUCTIVITY_MODAL_W, getModalMetrics, getCityModalMetrics, getProductivityModalMetrics, drawDemoModal, drawCityModal, drawProductivityInfoModal } from './rendererModals.ts';
+import { getGameClockMs } from './gameClock.ts';
 import spaceTerrainUrl from '../assets/SpaceTheme/terrain.png';
 
 // Section Index (jump by search)
@@ -362,6 +363,7 @@ export function render(
   drawToolbar(ctx, width, height, fps, simStepsLastFrame, accumulatorMs);
   if (cityModalOpen) drawCityModal(ctx, width, height);
   if (demoModalOpen) drawDemoModal(ctx, width, height);
+  if (productivityInfoModalOpen) drawProductivityInfoModal(ctx, width, height);
 }
 
 /** Offset a line segment perpendicular by `d` pixels (positive = left of direction) */
@@ -2012,26 +2014,26 @@ function drawTunnelPreview(ctx: CanvasRenderingContext2D) {
 // Toggle button rect — updated each frame, read by main.ts for hit testing
 let _metricsToggleRect = { x: 0, y: 0, w: 0, h: 0 };
 export function getMetricsPanelToggleRect() { return _metricsToggleRect; }
+let _metricsInfoRect = { x: 0, y: 0, w: 0, h: 0 };
+export function getMetricsPanelInfoRect() { return _metricsInfoRect; }
 
 function drawMetricsPanel(ctx: CanvasRenderingContext2D, width: number) {
   const PANEL_W = 200;
   const PAD_X = 12;
   const PAD_Y = 9;
   const ROW_H = 18;
+  const CHART_H = 30;
+  const CHART_GAP = 6;
   const MARGIN = 12;
   const TOGGLE_W = 22;
+  const TOP_RIGHT_PAD = 8;
+  const INFO_SIZE = 18;
   const CORNER_R = 7;
 
-  // Productivity is always at the top; detail rows are behind the toggle
-  const alwaysRows: (string | null)[] = ['Productivity', null /* divider */];
-  const detailRows: (string | null)[] = metricsExpanded
-    ? ['Best', 'Collected', '/min', 'Generated/min', 'Vehicles', 'Stalled']
+  const detailRows: string[] = metricsExpanded
+    ? ['Collected', '/min', 'Generated/min', 'Vehicles', 'Stalled']
     : ['Collected', 'Vehicles'];
-  const rows = [...alwaysRows, ...detailRows];
-  const rowCount = rows.length;
-  const dividerCount = rows.filter(r => r === null).length;
-  const visibleRows = rows.filter(r => r !== null).length;
-  const panelH = PAD_Y * 2 + visibleRows * ROW_H + dividerCount * 8;
+  const panelH = PAD_Y * 2 + ROW_H + CHART_GAP + CHART_H + ROW_H + 8 + detailRows.length * ROW_H;
 
   const px = width - MARGIN - PANEL_W;
   const py = MARGIN;
@@ -2052,42 +2054,97 @@ function drawMetricsPanel(ctx: CanvasRenderingContext2D, width: number) {
     'Generated/min': generatedPerMinute,
     'Vehicles': vehicleCount,
     'Stalled': stalledVehicles,
-    'Productivity': productivityScore,
+    'Productivity': Math.round(displayProductivityScore),
     'Best': peakProductivity,
   };
 
-  let rowY = py + PAD_Y;
-  for (let i = 0; i < rowCount; i++) {
-    const label = rows[i];
-    if (label === null) {
-      // Divider
-      ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(px + PAD_X, rowY + 3);
-      ctx.lineTo(px + PANEL_W - PAD_X, rowY + 3);
-      ctx.stroke();
-      rowY += 8;
-      continue;
+  const productivityRowY = py + PAD_Y;
+  ctx.textAlign = 'left';
+  ctx.fillStyle = 'rgba(255,220,100,0.85)';
+  ctx.fillText('Productivity', px + PAD_X + INFO_SIZE + 8, productivityRowY);
+  ctx.textAlign = 'right';
+  ctx.font = 'bold 13px sans-serif';
+  ctx.fillStyle = '#ffd966';
+  ctx.fillText(String(values['Productivity']), px + PANEL_W - TOP_RIGHT_PAD, productivityRowY);
+  ctx.font = '13px sans-serif';
+
+  const chartX = px + PAD_X;
+  const chartY = productivityRowY + ROW_H + 2;
+  const chartW = PANEL_W - PAD_X - TOP_RIGHT_PAD - chartX + px;
+  ctx.fillStyle = 'rgba(255,255,255,0.05)';
+  ctx.beginPath();
+  ctx.roundRect(chartX, chartY, chartW, CHART_H, 5);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(chartX, chartY, chartW, CHART_H, 5);
+  ctx.stroke();
+
+  if (productivityHistory.length > 0) {
+    const valueSpan = Math.max(1, peakProductivity);
+    const maxTime = getGameClockMs();
+    const minTime = maxTime - PRODUCTIVITY_CHART_WINDOW_MS;
+    const timeSpan = PRODUCTIVITY_CHART_WINDOW_MS;
+
+    ctx.strokeStyle = 'rgba(255,217,102,0.95)';
+    ctx.lineWidth = 1.75;
+    ctx.beginPath();
+    const stride = Math.max(1, Math.ceil(productivityHistory.length / Math.max(1, Math.floor(chartW))));
+    let firstPoint = true;
+    for (let i = 0; i < productivityHistory.length; i += stride) {
+      const point = productivityHistory[i];
+      const x = chartX + (Math.max(0, point.time - minTime) / timeSpan) * chartW;
+      const y = chartY + CHART_H - 4 - (point.value / valueSpan) * (CHART_H - 8);
+      if (firstPoint) {
+        ctx.moveTo(x, y);
+        firstPoint = false;
+      } else {
+        ctx.lineTo(x, y);
+      }
     }
+    const lastPoint = productivityHistory[productivityHistory.length - 1];
+    if (lastPoint) {
+      const x = chartX + (Math.max(0, lastPoint.time - minTime) / timeSpan) * chartW;
+      const y = chartY + CHART_H - 4 - (lastPoint.value / valueSpan) * (CHART_H - 8);
+      if (firstPoint) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
 
+  const bestRowY = chartY + CHART_H + CHART_GAP;
+  ctx.textAlign = 'left';
+  ctx.fillStyle = 'rgba(255,180,80,0.7)';
+  ctx.fillText('Best:', px + PAD_X, bestRowY);
+  ctx.font = 'bold 13px sans-serif';
+  ctx.fillStyle = '#ffb450';
+  ctx.fillText(String(values['Best']), px + PAD_X + 34, bestRowY);
+  ctx.font = '13px sans-serif';
+
+  const dividerY = bestRowY + ROW_H;
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(px + PAD_X, dividerY + 3);
+  ctx.lineTo(px + PANEL_W - PAD_X, dividerY + 3);
+  ctx.stroke();
+
+  let detailRowY = dividerY + 8;
+  for (const label of detailRows) {
     const isStale = label === 'Stalled' && stalledVehicles > 0;
-    const isProductivity = label === 'Productivity';
-    const isBest = label === 'Best';
 
-    // Label
     ctx.textAlign = 'left';
-    ctx.fillStyle = isProductivity ? 'rgba(255,220,100,0.85)' : isBest ? 'rgba(255,180,80,0.7)' : 'rgba(255,255,255,0.6)';
-    ctx.fillText(label, px + PAD_X, rowY);
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.fillText(label, px + PAD_X, detailRowY);
 
-    // Value
     ctx.textAlign = 'right';
     ctx.font = 'bold 13px sans-serif';
-    ctx.fillStyle = isStale ? '#ff6b6b' : isProductivity ? '#ffd966' : isBest ? '#ffb450' : '#fff';
-    ctx.fillText(String(values[label]), px + PANEL_W - PAD_X - TOGGLE_W, rowY);
+    ctx.fillStyle = isStale ? '#ff6b6b' : '#fff';
+    ctx.fillText(String(values[label]), px + PANEL_W - PAD_X - TOGGLE_W, detailRowY);
     ctx.font = '13px sans-serif';
 
-    rowY += ROW_H;
+    detailRowY += ROW_H;
   }
 
   // Toggle button (▼ or ▲) — right edge
@@ -2101,8 +2158,20 @@ function drawMetricsPanel(ctx: CanvasRenderingContext2D, width: number) {
   ctx.fillStyle = 'rgba(255,255,255,0.45)';
   ctx.font = '11px sans-serif';
   // Place toggle arrow beside the "Collected" label (first detail row after divider)
-  const detailRowStartY = py + PAD_Y + ROW_H + 8; // after Productivity + divider
+  const detailRowStartY = dividerY + 8;
   ctx.fillText(metricsExpanded ? '▲' : '▼', toggleX + TOGGLE_W / 2, detailRowStartY + ROW_H / 2);
+
+  const infoCx = px + PAD_X + INFO_SIZE / 2;
+  const infoCy = py + PAD_Y + ROW_H / 2 - 2;
+  _metricsInfoRect = { x: infoCx - INFO_SIZE / 2, y: infoCy - INFO_SIZE / 2, w: INFO_SIZE, h: INFO_SIZE };
+  ctx.strokeStyle = 'rgba(255,220,100,0.75)';
+  ctx.lineWidth = 1.25;
+  ctx.beginPath();
+  ctx.arc(infoCx, infoCy, INFO_SIZE / 2, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = '#ffd966';
+  ctx.font = 'bold 12px sans-serif';
+  ctx.fillText('i', infoCx, infoCy);
 
   ctx.restore();
 }
@@ -2601,5 +2670,15 @@ export function getToolbarLayout(_ctx: CanvasRenderingContext2D, width: number, 
     cityRowY += CITY_ROW_H + CITY_ROW_GAP;
   }
 
-  return { buttons, colorButton, resetButton, musicButton, speedButtons, gearButton, saveButton, loadButton, citiesButton, cityCloseButton, cityRowButtons, demoOpenButton, demoDismissButton, demoCloseButton };
+  const { modalW: productivityModalW, mx: productivityModalX, my: productivityModalY } = getProductivityModalMetrics(width, height);
+  const productivityCloseSize = 28;
+  const productivityClosePad = 10;
+  const productivityCloseButton = {
+    x: productivityModalX + productivityModalW - productivityCloseSize - productivityClosePad,
+    y: productivityModalY + productivityClosePad,
+    w: productivityCloseSize,
+    h: productivityCloseSize,
+  };
+
+  return { buttons, colorButton, resetButton, musicButton, speedButtons, gearButton, saveButton, loadButton, citiesButton, cityCloseButton, cityRowButtons, demoOpenButton, demoDismissButton, demoCloseButton, productivityCloseButton };
 }
