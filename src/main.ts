@@ -1,8 +1,8 @@
 import { buildings, updatePins } from './buildings.ts';
 import { initRoadInput, roadPreview, cancelRoadDrag, setTouchCountGetter } from './roads.ts';
 import { spawnCars, updateCars, cars } from './cars.ts';
-import { render, getToolbarLayout, getMetricsPanelToggleRect } from './renderer.ts';
-import { setActiveTool, setSelectedColor, selectedColor, setSelectedBuildingType, toggleGearMenu, closeGearMenu, gearMenuOpen, demoModalOpen, showDemoModal, closeDemoModal, cityModalOpen, showCityModal, closeCityModal } from './toolbar.ts';
+import { render, getToolbarLayout, getMetricsPanelToggleRect, getMetricsPanelInfoRect } from './renderer.ts';
+import { setActiveTool, setSelectedColor, selectedColor, setSelectedBuildingType, toggleGearMenu, closeGearMenu, gearMenuOpen, demoModalOpen, showDemoModal, closeDemoModal, cityModalOpen, showCityModal, closeCityModal, productivityInfoModalOpen, showProductivityInfoModal, closeProductivityInfoModal, scrollProductivityInfoModal } from './toolbar.ts';
 import { saveGame, loadGame, loadFromData, downloadSave, uploadSave } from './save.ts';
 import { tickPathfindingFrame } from './pathfinding.ts';
 import { gameSpeed, setGameSpeed } from './speed.ts';
@@ -14,6 +14,8 @@ import { track } from './analytics.ts';
 import { score, productivityScore, updateMetrics, toggleMetricsExpanded } from './score.ts';
 import { getBuildingColors, theme } from './theme.ts';
 import { updateTrafficLights } from './trafficLights.ts';
+import { getProductivityModalMaxScroll } from './rendererModals.ts';
+import { updateGameClock } from './gameClock.ts';
 
 // Apply theme's page background at startup
 document.body.style.background = theme.pageBg;
@@ -53,9 +55,9 @@ document.addEventListener('visibilitychange', () => {
 // Auto-save every 5 seconds (counted in sim ticks)
 let saveTimer = 0;
 
-// Metrics update every 15 real seconds
+// Metrics update every simulated second
 const METRICS_UPDATE_MS = 1_000;
-let lastMetricsUpdateMs = 0;
+let lastMetricsUpdateGameMs = 0;
 
 // FPS tracking
 let fps = 0;
@@ -103,6 +105,13 @@ canvas.addEventListener('pointerdown', (e) => {
     e.stopImmediatePropagation();
     return;
   }
+  const metricsInfo = getMetricsPanelInfoRect();
+  if (hitRect(px, py, metricsInfo)) {
+    if (productivityInfoModalOpen) closeProductivityInfoModal();
+    else showProductivityInfoModal();
+    e.stopImmediatePropagation();
+    return;
+  }
 
   // Demo modal — blocks all other interaction
   if (demoModalOpen) {
@@ -137,6 +146,16 @@ canvas.addEventListener('pointerdown', (e) => {
           break;
         }
       }
+    }
+    e.stopImmediatePropagation();
+    return;
+  }
+
+  if (productivityInfoModalOpen) {
+    if (hitRect(px, py, layout.productivityCloseButton)) {
+      closeProductivityInfoModal();
+    } else {
+      closeProductivityInfoModal();
     }
     e.stopImmediatePropagation();
     return;
@@ -220,6 +239,11 @@ canvas.addEventListener('pointerdown', (e) => {
 
 // Pan & zoom: trackpad two-finger scroll → pan, pinch → zoom
 canvas.addEventListener('wheel', (e) => {
+  if (productivityInfoModalOpen) {
+    e.preventDefault();
+    scrollProductivityInfoModal(e.deltaY, getProductivityModalMaxScroll());
+    return;
+  }
   e.preventDefault();
   if (e.ctrlKey) {
     // Pinch-zoom gesture (trackpad reports ctrlKey + deltaY)
@@ -326,7 +350,7 @@ function gameLoop() {
   let steps = 0;
 
   // Run simulation ticks based on speed and real elapsed time (paused while modal is open)
-  if (!demoModalOpen && !cityModalOpen) {
+  if (!demoModalOpen && !cityModalOpen && !productivityInfoModalOpen) {
     accumulatorMs += deltaMs * gameSpeed;
     while (accumulatorMs >= FIXED_DT_MS && steps < MAX_STEPS_PER_FRAME) {
       simulationTick();
@@ -345,9 +369,10 @@ function gameLoop() {
     simHudLastUpdate = now;
   }
 
-  if (now - lastMetricsUpdateMs >= METRICS_UPDATE_MS) {
+  const simNow = updateGameClock();
+  if (simNow - lastMetricsUpdateGameMs >= METRICS_UPDATE_MS) {
     updateMetrics(cars, buildings);
-    lastMetricsUpdateMs = now;
+    lastMetricsUpdateGameMs = simNow;
   }
 
   render(ctx, canvas.width, canvas.height, roadPreview, fps, simDisplaySteps, simDisplayAccumulatorMs);

@@ -1,7 +1,42 @@
 import { cities } from './cities.ts';
+import { productivityBreakdown } from './score.ts';
 import { theme, themeAssets } from './theme.ts';
+import { productivityInfoScroll } from './toolbar.ts';
 
 const splashCache = new Map<string, HTMLImageElement>();
+
+function wrapLines(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+  const words = text.split(' ');
+  const lines: string[] = [];
+  let current = '';
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (current && ctx.measureText(next).width > maxWidth) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = next;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+function drawWrappedText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  lineHeight: number,
+): number {
+  const lines = wrapLines(ctx, text, maxWidth);
+  for (const line of lines) {
+    ctx.fillText(line, x, y);
+    y += lineHeight;
+  }
+  return y;
+}
 
 function getSplashImage(): HTMLImageElement {
   const url = themeAssets.splashUrl;
@@ -147,6 +182,13 @@ export const CITY_MODAL_W = 320;
 export const CITY_MODAL_PAD = 16;
 export const CITY_ROW_H = 44;
 export const CITY_ROW_GAP = 8;
+export const PRODUCTIVITY_MODAL_W = 420;
+const PRODUCTIVITY_MODAL_RADIUS = 14;
+let productivityModalMaxScroll = 0;
+
+export function getProductivityModalMaxScroll() {
+  return productivityModalMaxScroll;
+}
 
 export function getCityModalMetrics(width: number, height: number) {
   const cityCount = cities.length;
@@ -233,3 +275,147 @@ export function drawCityModal(ctx: CanvasRenderingContext2D, width: number, heig
   }
 }
 
+export function getProductivityModalMetrics(width: number, height: number) {
+  const modalW = Math.min(PRODUCTIVITY_MODAL_W, width - 32);
+  const modalH = Math.min(540, height - 32);
+  const mx = (width - modalW) / 2;
+  const my = (height - modalH) / 2;
+  return { modalW, modalH, mx, my };
+}
+
+export function drawProductivityInfoModal(ctx: CanvasRenderingContext2D, width: number, height: number) {
+  ctx.fillStyle = theme.overlayDim;
+  ctx.fillRect(0, 0, width, height);
+
+  const { modalW, modalH, mx, my } = getProductivityModalMetrics(width, height);
+
+  ctx.save();
+  ctx.shadowColor = theme.modalShadow;
+  ctx.shadowBlur = 32;
+  ctx.shadowOffsetY = 8;
+  ctx.fillStyle = 'rgba(12, 12, 12, 0.96)';
+  ctx.beginPath();
+  ctx.roundRect(mx, my, modalW, modalH, PRODUCTIVITY_MODAL_RADIUS);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.strokeStyle = theme.modalOutline;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(mx, my, modalW, modalH, PRODUCTIVITY_MODAL_RADIUS);
+  ctx.stroke();
+
+  const closeSize = 28;
+  const closePad = 10;
+  const closeX = mx + modalW - closeSize - closePad;
+  const closeY = my + closePad;
+  ctx.fillStyle = theme.closeButtonBg;
+  ctx.beginPath();
+  ctx.arc(closeX + closeSize / 2, closeY + closeSize / 2, closeSize / 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = theme.btnBorder;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(closeX + 8, closeY + 8);
+  ctx.lineTo(closeX + closeSize - 8, closeY + closeSize - 8);
+  ctx.moveTo(closeX + closeSize - 8, closeY + 8);
+  ctx.lineTo(closeX + 8, closeY + closeSize - 8);
+  ctx.stroke();
+
+  const left = mx + 20;
+  const right = mx + modalW - 20;
+  const contentWidth = right - left - 12;
+  const headerTop = my + 22;
+  const viewportTop = my + 64;
+  const viewportBottom = my + modalH - 20;
+  const viewportHeight = viewportBottom - viewportTop;
+  let y = headerTop;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+
+  ctx.fillStyle = '#ffd966';
+  ctx.font = 'bold 22px sans-serif';
+  ctx.fillText('How Productivity Works', left, y);
+  y = viewportTop - productivityInfoScroll;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(left - 4, viewportTop, modalW - 40, viewportHeight);
+  ctx.clip();
+
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.font = '14px sans-serif';
+  for (const line of [
+    'Productivity measures how well your whole city keeps pins moving.',
+    'Handle pins steadily, avoid jams, protect factories, and build a bigger, smarter city.'
+  ]) {
+    y = drawWrappedText(ctx, line, left, y, contentWidth, 18);
+    y += 2;
+  }
+
+  y += 8;
+  const sections: [string, string][] = [
+    ['Throughput', 'Pins handled each minute are the base of the score. Cars and trucks both count.'],
+    ['Flow', 'Traffic that keeps moving scores better. Traffic jams and stale vehicles reduce it.'],
+    ['Logistics', 'Storage should be useful as a working buffer, not empty forever and not full forever.'],
+    ['Stability', 'Factories lose value when they fill up and sit near overflow.'],
+    ['City Bonus', 'Expansion, road network depth, diversity, and longer useful travel all raise the ceiling.'],
+  ];
+
+  for (const [title, body] of sections) {
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 14px sans-serif';
+    ctx.fillText(title, left, y);
+    y += 18;
+    ctx.fillStyle = 'rgba(255,255,255,0.78)';
+    ctx.font = '13px sans-serif';
+    y = drawWrappedText(ctx, body, left, y, contentWidth, 17);
+    y += 14;
+  }
+
+  ctx.fillStyle = '#ffd966';
+  ctx.font = 'bold 15px sans-serif';
+  ctx.fillText('Right now', left, y);
+  y += 22;
+
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.font = '13px sans-serif';
+  for (const line of [
+    `Throughput: ${productivityBreakdown.throughput}/min`,
+    `Flow: ${productivityBreakdown.flow}%`,
+    `Logistics: ${productivityBreakdown.logistics}%`,
+    `Stability: ${productivityBreakdown.stability}%`,
+    `City bonus: +${productivityBreakdown.cityBonus}%`,
+  ]) {
+    ctx.fillText(line, left, y);
+    y += 18;
+  }
+
+  y += 10;
+  ctx.fillStyle = 'rgba(255,255,255,0.72)';
+  ctx.font = '13px sans-serif';
+  y = drawWrappedText(ctx, 'City planning tip: keep routes active, use storage to absorb busy periods, and spread the city so travel has real value.', left, y, contentWidth, 17);
+  ctx.restore();
+
+  const contentHeight = Math.max(0, y - (viewportTop - productivityInfoScroll));
+  productivityModalMaxScroll = Math.max(0, contentHeight - viewportHeight);
+
+  if (productivityModalMaxScroll > 0) {
+    const trackX = mx + modalW - 10;
+    const trackY = viewportTop;
+    const trackH = viewportHeight;
+    const thumbH = Math.max(28, trackH * (viewportHeight / contentHeight));
+    const travel = Math.max(0, trackH - thumbH);
+    const thumbY = trackY + (productivityModalMaxScroll > 0 ? (productivityInfoScroll / productivityModalMaxScroll) * travel : 0);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.10)';
+    ctx.beginPath();
+    ctx.roundRect(trackX, trackY, 4, trackH, 2);
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(255,217,102,0.75)';
+    ctx.beginPath();
+    ctx.roundRect(trackX, thumbY, 4, thumbH, 2);
+    ctx.fill();
+  }
+}

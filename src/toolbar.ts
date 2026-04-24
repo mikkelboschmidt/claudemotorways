@@ -7,6 +7,8 @@ export let selectedBuildingType: 'house' | 'factory' | 'storage' = 'house';
 export let gearMenuOpen = false;
 export let demoModalOpen = false;
 export let cityModalOpen = false;
+export let productivityInfoModalOpen = false;
+export let productivityInfoScroll = 0;
 
 export function setActiveTool(tool: ToolType) {
   activeTool = tool;
@@ -49,4 +51,17 @@ export function showCityModal() {
 
 export function closeCityModal() {
   cityModalOpen = false;
+}
+
+export function showProductivityInfoModal() {
+  productivityInfoModalOpen = true;
+  productivityInfoScroll = 0;
+}
+
+export function closeProductivityInfoModal() {
+  productivityInfoModalOpen = false;
+}
+
+export function scrollProductivityInfoModal(delta: number, maxScroll: number) {
+  productivityInfoScroll = Math.max(0, Math.min(maxScroll, productivityInfoScroll + delta));
 }

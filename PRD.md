@@ -249,39 +249,55 @@ Truck pin transfers (factory → storage) do not score.
 
 ### Productivity Score
 
-The **Productivity** score is the primary performance metric, displayed prominently in the metrics panel. It measures how well the player's logistics network is running, rewarding throughput and scale while penalizing inefficiency and burnouts.
+The **Productivity** score is the primary performance metric, displayed prominently in the metrics panel. It measures how well the player's logistics network is running, rewarding handled pins, smooth movement, storage/factory balance, and city complexity.
 
-**Formula**: `baseThroughput × flowQuality × scaleMultiplier × burnoutPenalty`
+**Formula**: `throughput × quality × cityBonus`
 
 | Component | Definition |
 |---|---|
-| **Base throughput** | `collectedPerMinute` — pins collected in the last 15s, extrapolated to per-minute, normalized to 1× speed |
-| **Flow quality** | `staleRatio × (0.4 + 0.6 × flowFactor)` — penalizes stalled and idle vehicles. `staleRatio` = fraction of driving vehicles not stalled (stalled = within 8px for 6s). `flowFactor` = fraction of all vehicles with speed > 0. |
-| **Scale multiplier** | `1 + log₂(infraScore) × 0.15` — rewards city complexity. `infraScore` = buildings + roads×0.1 + highways×0.5 + roundabouts×0.3. A 20-building city with infrastructure gets ~2× vs a starter city. |
-| **Burnout penalty** | `max(0, 1 - burnedFactories × 0.1)` — each disabled factory reduces score by 10%, stacking. |
+| **Throughput** | `collectedPerMinute` — pins handled in the last 30 simulated seconds, extrapolated to per-minute. Cars and trucks both count. |
+| **Flow** | Rewards moving traffic and penalizes stale vehicles. Based on the share of moving vehicles and the share of driving vehicles that are not stalled. |
+| **Logistics** | Rewards useful storage/truck buffering. Storage scores best when used as a live buffer rather than staying empty or full; trucks score better when actively hauling. |
+| **Stability** | Penalizes factories sitting near max pin capacity. Overflow pressure and stale traffic both reduce stability. |
+| **Activity** | Rewards steady handling across the rolling window instead of brief spikes. |
+| **City bonus** | Rewards city diversity, expansion footprint, infrastructure depth, and meaningful travel distance. Houses, factories, storages, roads, highways, roundabouts, and longer useful trips all contribute. |
 
-The session-best Productivity ("Best") is tracked and displayed in the expanded metrics panel.
+`quality = 0.35 × flow + 0.25 × logistics + 0.25 × stability + 0.15 × activity`
+
+`cityBonus = 1 + diversityBonus + infrastructureBonus + expansionBonus + distanceBonus`
+
+The HUD displays a smoothed Productivity value that eases toward the raw score over time, to reduce visible spikes without changing the underlying logic.
+
+The session-best Productivity ("Best") is tracked and displayed directly beneath the productivity chart as inline text: `Best: [score]`.
 
 ### Metrics Panel
 
-A translucent panel in the top-right corner of the screen. Always shows **Productivity** (gold text, `#ffd966`). A toggle (▼/▲) expands/collapses detail rows.
+A translucent panel in the top-right corner of the screen. The always-visible section shows **Productivity** (gold text, `#ffd966`), a small info icon, a compact sparkline chart, and `Best: [score]`. A toggle (▼/▲) expands/collapses the lower detail rows only.
 
 | Row | Collapsed | Expanded | Color |
 |---|---|---|---|
 | Productivity | ✓ | ✓ | Gold `#ffd966` |
-| Best | — | ✓ | Orange `#ffb450` |
+| Productivity chart | ✓ | ✓ | Gold line in compact ~30px-tall chart |
+| Best | ✓ | ✓ | Orange `#ffb450` |
 | Collected | ✓ | ✓ | White |
 | /min | — | ✓ | White |
 | Generated/min | — | ✓ | White |
 | Vehicles | ✓ | ✓ | White |
 | Stalled | — | ✓ | Red `#ff6b6b` when > 0 |
 
+The productivity chart shows the trailing **3 minutes** of productivity history. It uses:
+- A fixed trailing 3-minute simulation-time window on the x-axis
+- A zero baseline on the y-axis
+- `Best` productivity as the top of the y-scale
+- Lightweight downsampling so the chart remains cheap to draw at small sizes
+
 ### Game Clock
 
-All metrics (collection rate window, stall tracking) use a **game clock** that only advances while the game is unpaused. This ensures:
+All metrics (collection rate window, stall tracking) use a shared **simulation game clock** that only advances while the game is unpaused. This ensures:
 
 - **Pause → resume**: metrics pick up where they left off; no zero-drop from the rolling window aging out.
-- **Speed changes**: the game clock ticks in real-time (not sim-time). `collectedPerMinute` divides by `effectiveSpeed` to normalize the displayed rate to 1× regardless of speed setting.
+- **Speed changes**: the game clock ticks in simulation time, not wall-clock time. Changing playback speed alone should not raise or lower productivity.
+- **Smoother score**: the rolling productivity window uses 30 simulated seconds, and the displayed HUD value is eased toward the raw score once per simulated-second metrics update.
 
 ---
 
