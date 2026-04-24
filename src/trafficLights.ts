@@ -125,15 +125,13 @@ export function updateTrafficLights() {
     tl.timer--;
     if (tl.phase === 'green') {
       if (tl.timer <= 0) {
-        // Green expired — only switch if there are cars waiting on the blocked axis
+        // Green expired — switch on demand OR after holding for a full extra interval
         const blockedAxis = tl.greenAxis === 'ns' ? 'ew' : 'ns';
-        if (hasWaitingCarsOnAxis(tl, blockedAxis)) {
+        if (hasWaitingCarsOnAxis(tl, blockedAxis) || tl.timer <= -tl.interval) {
           tl.phase = 'amber';
           tl.timer = AMBER_DURATION;
-        } else {
-          // No one waiting — hold current green, re-check next frame
-          tl.timer = 0;
         }
+        // timer keeps decrementing as a hold-duration counter — no reset to 0
       }
     } else {
       // Amber phase — wait out the duration, then flip the axis to green
