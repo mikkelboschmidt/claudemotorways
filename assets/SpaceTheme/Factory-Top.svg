@@ -15,7 +15,7 @@
 <path id="Subtract_4" d="M137.777 59L140 61.2227L142.223 59L143.189 59.9668L140 63.1562L136.811 59.9668L137.777 59Z" fill="#4CFFF9"/>
 </g>
 <g id="Shadows">
-<path id="Shadow" d="M165 45V125H160V136H64L53 125H45L40 120H48L44 116V73H140L160 93V40L165 45Z" fill="black" fill-opacity="0.1"/>
+<path id="Shadow" d="M165 45V125H160V136H64L53 125H45L40 120H48L44 116V73H119L134 88H142L160 106V40L165 45Z" fill="black" fill-opacity="0.1"/>
 </g>
 <g id="Building">
 <rect id="RoofMain" x="44" y="73" width="76" height="43" rx="4" fill="#FF0000"/>

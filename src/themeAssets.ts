@@ -10,6 +10,7 @@ import earthIconStorage from '../assets/EarthTheme/Icon-Storage.svg?raw';
 import earthIconDemolish from '../assets/EarthTheme/Icon-Demolish.svg?raw';
 import earthIconTrafficlight from '../assets/EarthTheme/Icon-Trafficlight.svg?raw';
 import earthIconTunnel from '../assets/EarthTheme/Icon-Tunnel.svg?raw';
+import earthIconSettings from '../assets/EarthTheme/Icon-Settings.svg?raw';
 import earthHouseRight from '../assets/EarthTheme/House-Right.svg?raw';
 import earthHouseLeft from '../assets/EarthTheme/House-Left.svg?raw';
 import earthHouseTop from '../assets/EarthTheme/House-Top.svg?raw';
@@ -38,6 +39,7 @@ import spaceIconStorage from '../assets/SpaceTheme/Icon-Storage.svg?raw';
 import spaceIconDemolish from '../assets/SpaceTheme/Icon-Demolish.svg?raw';
 import spaceIconTrafficlight from '../assets/SpaceTheme/Icon-Trafficlight.svg?raw';
 import spaceIconTunnel from '../assets/SpaceTheme/Icon-Tunnel.svg?raw';
+import spaceIconSettings from '../assets/SpaceTheme/Icon-Settings.svg?raw';
 import spaceHouseRight from '../assets/SpaceTheme/House-Right.svg?raw';
 import spaceHouseLeft from '../assets/SpaceTheme/House-Left.svg?raw';
 import spaceHouseTop from '../assets/SpaceTheme/House-Top.svg?raw';
@@ -70,6 +72,7 @@ export interface ThemeAssetBundle {
     demolish: string;
     trafficLight: string;
     tunnel: string;
+    settings: string;
   };
   sprites: {
     house: Record<Side, string>;
@@ -122,6 +125,7 @@ export const earthAssets: ThemeAssetBundle = {
     demolish: earthIconDemolish,
     trafficLight: earthIconTrafficlight,
     tunnel: earthIconTunnel,
+    settings: earthIconSettings,
   },
   sprites: {
     house: {
@@ -163,6 +167,7 @@ export const spaceAssets: ThemeAssetBundle = {
     demolish: spaceIconDemolish,
     trafficLight: spaceIconTrafficlight,
     tunnel: spaceIconTunnel,
+    settings: spaceIconSettings,
   },
   sprites: {
     house: {
