@@ -152,7 +152,17 @@ export function updatePeaks(score: number, carCount: number, productivity: numbe
 
   if (run.peakScore >= 100) checkMilestone('score-100');
   if (run.peakScore >= 500) checkMilestone('score-500');
+  if (run.peakProductivity >= 5) checkMilestone('productivity-5');
+  if (run.peakProductivity >= 10) checkMilestone('productivity-10');
+  if (run.peakProductivity >= 20) checkMilestone('productivity-20');
+  if (run.peakProductivity >= 30) checkMilestone('productivity-30');
   if (run.peakProductivity >= 50) checkMilestone('productivity-50');
+  if (run.peakProductivity >= 75) checkMilestone('productivity-75');
   if (run.peakProductivity >= 100) checkMilestone('productivity-100');
+  if (run.peakProductivity >= 125) checkMilestone('productivity-125');
+  if (run.peakProductivity >= 150) checkMilestone('productivity-150');
   if (run.peakProductivity >= 200) checkMilestone('productivity-200');
+  if (run.peakProductivity >= 300) checkMilestone('productivity-300');
+  if (run.peakProductivity >= 500) checkMilestone('productivity-500');
+  if (run.peakProductivity >= 1000) checkMilestone('productivity-1000');
 }
