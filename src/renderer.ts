@@ -2258,29 +2258,8 @@ function iconTunnel(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: nu
   drawSvgIcon(ctx, cx, cy, r, themeAssets.icons.tunnel);
 }
 
-// Gear icon
 function iconGear(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
-  const ir = r * 0.35;
-  const or = r * 0.6;
-  const teeth = 6;
-  ctx.fillStyle = theme.gearIcon;
-  ctx.beginPath();
-  for (let i = 0; i < teeth; i++) {
-    const a1 = (i / teeth) * Math.PI * 2 - Math.PI / teeth / 2;
-    const a2 = a1 + Math.PI / teeth * 0.6;
-    const a3 = a1 + Math.PI / teeth;
-    ctx.lineTo(cx + Math.cos(a1) * or, cy + Math.sin(a1) * or);
-    ctx.lineTo(cx + Math.cos(a2) * or, cy + Math.sin(a2) * or);
-    ctx.lineTo(cx + Math.cos(a2) * ir * 1.3, cy + Math.sin(a2) * ir * 1.3);
-    ctx.lineTo(cx + Math.cos(a3) * ir * 1.3, cy + Math.sin(a3) * ir * 1.3);
-  }
-  ctx.closePath();
-  ctx.fill();
-  // Center hole
-  ctx.fillStyle = gearMenuOpen ? theme.gearHoleOpen : theme.gearHoleClosed;
-  ctx.beginPath();
-  ctx.arc(cx, cy, ir * 0.6, 0, Math.PI * 2);
-  ctx.fill();
+  drawSvgIcon(ctx, cx, cy, r, themeAssets.icons.settings);
 }
 
 interface ToolIconDef {

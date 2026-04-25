@@ -1,7 +1,7 @@
 import { GRID, ROAD_W } from './constants.ts';
 import { screenToWorld, pan } from './camera.ts';
 import { addEdge, bumpGraphVersion, removeEdge, nodeKey, nodes, getNodeEdges } from './graph.ts';
-import { segmentCutsBuilding, findBuildingAtPixel, addBuilding, removeBuilding, getBuildingEdgeAt, connectBuildingOnSide } from './buildings.ts';
+import { segmentCutsBuilding, findBuildingAtPixel, addBuilding, removeBuilding, getBuildingEdgeAt, connectBuildingOnSide, HOUSE_W, HOUSE_H, FACTORY_W, FACTORY_H, STORAGE_W_TILES, STORAGE_H_TILES } from './buildings.ts';
 import { RoadPreview } from './types.ts';
 import { activeTool, selectedColor, selectedBuildingType } from './toolbar.ts';
 import { removeCarsForEdge, removeCarsForBuilding } from './cars.ts';
@@ -182,6 +182,16 @@ function snapTo8Dir(startGx: number, startGy: number, rawGx: number, rawGy: numb
   return [startGx + dirX * steps, startGy + dirY * steps];
 }
 
+function buildingCenterOffsetX(type: 'house' | 'factory' | 'storage'): number {
+  const w = type === 'house' ? HOUSE_W : type === 'storage' ? STORAGE_W_TILES : FACTORY_W;
+  return Math.floor(w / 2);
+}
+
+function buildingCenterOffsetY(type: 'house' | 'factory' | 'storage'): number {
+  const h = type === 'house' ? HOUSE_H : type === 'storage' ? STORAGE_H_TILES : FACTORY_H;
+  return Math.floor(h / 2);
+}
+
 export function initRoadInput(canvas: HTMLCanvasElement) {
   canvas.addEventListener('pointerdown', (e) => {
     // Ignore multi-touch (handled by touch pan/zoom in main.ts)
@@ -281,8 +291,8 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
         startRemoveRoadDragAt(px, py);
       }
     } else if (activeTool === 'addBuilding') {
-      const gridX = Math.floor(px / GRID);
-      const gridY = Math.floor(py / GRID);
+      const gridX = Math.floor(px / GRID) - buildingCenterOffsetX(selectedBuildingType);
+      const gridY = Math.floor(py / GRID) - buildingCenterOffsetY(selectedBuildingType);
       const bType = selectedBuildingType;
       const bColor = selectedColor;
       pendingTap = () => {
@@ -447,8 +457,8 @@ export function initRoadInput(canvas: HTMLCanvasElement) {
     // Update hover position for ghost previews (skip for touch — no hover state)
     if (!isTouch) {
       if (activeTool === 'addBuilding') {
-        hoverGx = Math.floor(px / GRID);
-        hoverGy = Math.floor(py / GRID);
+        hoverGx = Math.floor(px / GRID) - buildingCenterOffsetX(selectedBuildingType);
+        hoverGy = Math.floor(py / GRID) - buildingCenterOffsetY(selectedBuildingType);
       } else if (activeTool === 'addRoundabout') {
         hoverGx = Math.floor(px / GRID) - 1;
         hoverGy = Math.floor(py / GRID) - 1;
